@@ -1,0 +1,41 @@
+# ============================================================================
+#  Packaging for the Product Manager Helper CLI.
+#
+#  This is what turns `python pm.py lint` into just `pm lint`.
+#
+#  Install (from inside the pm_helper folder):
+#      pip install -e .
+#
+#  The -e means "editable": pip links to these files in place, so any edit you
+#  make to the code or config takes effect immediately with no reinstall.
+#
+#  After installing, `pm` works from ANY directory. Uninstall with:
+#      pip uninstall pm-helper
+# ============================================================================
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pm-helper"
+version = "0.2.0"
+description = "Product Manager Helper CLI — report, lint, review, ready, standup"
+requires-python = ">=3.9"
+dependencies = [
+    "requests",
+    "pyyaml",
+]
+
+# This line is the magic: it creates a `pm` command that calls main() in pm.py.
+[project.scripts]
+pm = "pm:main"
+
+# Tell setuptools which files make up the package (the flat layout you have).
+[tool.setuptools]
+py-modules = ["pm"]
+packages = ["core", "commands"]
+
+# Ship the config.yaml template inside the package so `pm init` can copy it.
+[tool.setuptools.package-data]
+"*" = ["config.yaml"]

@@ -1,0 +1,205 @@
+# ============================================================================
+#  Product Manager Helper (pm) — Configuration
+# ----------------------------------------------------------------------------
+#  Fill in the placeholders marked <LIKE_THIS>. One config drives every command
+#  (pm report, pm lint, pm review, pm ready). Keep this file private — it holds
+#  API tokens.
+#
+#  New here? Run `pm init` to copy this template to ~/.pm/config.yaml, then edit
+#  that copy. Tip: instead of pasting tokens, set them as environment variables
+#  and reference them with ${ENV:VAR_NAME}. See the README.
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+#  1. The local model (llama.cpp or another OpenAI-compatible server)
+# ----------------------------------------------------------------------------
+#  The bundled Windows setup scripts expose both the small test model and the
+#  larger Qwen model using the same alias, so pm does not need to change when
+#  you swap models.
+model:
+  endpoint: "http://127.0.0.1:8080/v1/chat/completions"
+  name: "qwen-local"
+  temperature: 0.2
+  max_tokens: 4000
+  timeout: 600
+
+# ----------------------------------------------------------------------------
+#  2. Jira (Cloud)
+# ----------------------------------------------------------------------------
+jira:
+  base_url: "https://<YOUR_ORG>.atlassian.net"
+  email: "<YOUR_LOGIN_EMAIL>"
+  api_token: "<YOUR_JIRA_API_TOKEN>"   # id.atlassian.com > Security > API tokens
+  # Fields the light report fetch pulls. Usually no need to change this.
+  fields: "summary,status,assignee,updated,duedate,priority,issuetype,labels"
+  max_results: 100
+
+  # -- Custom field IDs (used by `pm lint`, `pm review`, `pm ready`) -------
+  #  These vary by Jira instance. Find them under Jira Settings > Issues >
+  #  Custom fields, or via /rest/api/3/field. Leave a value blank ("") to skip
+  #  that check. The defaults below are the most common Jira Cloud IDs.
+  story_points_field: "customfield_10016"
+  start_date_field: "customfield_10015"
+  acceptance_criteria_field: ""        # only if you store AC in its own field
+  # Jira Cloud now uses the Parent field for hierarchy in both team-managed and
+  # company-managed projects. Keep "parent" unless your site still exposes a
+  # legacy custom Epic Link field that you specifically need.
+  epic_link_field: "parent"
+
+# ----------------------------------------------------------------------------
+#  3. Confluence (Cloud)
+# ----------------------------------------------------------------------------
+confluence:
+  base_url: "https://<YOUR_ORG>.atlassian.net/wiki"
+  email: "<YOUR_LOGIN_EMAIL>"
+  api_token: "<YOUR_CONFLUENCE_API_TOKEN>"   # same token as Jira usually works
+  lookback_days: 7
+  max_results: 50
+
+# ----------------------------------------------------------------------------
+#  4. SharePoint (via Microsoft Graph) — set enabled: false to skip
+# ----------------------------------------------------------------------------
+sharepoint:
+  enabled: false
+  tenant_id: "<YOUR_TENANT_ID>"
+  client_id: "<YOUR_APP_CLIENT_ID>"
+  client_secret: "<YOUR_APP_CLIENT_SECRET>"
+  site_path: "sites/<YOUR_SITE>"
+  lookback_days: 7
+  max_results: 25
+
+# ----------------------------------------------------------------------------
+#  5. Lint rules (used by `pm lint` and `pm ready`) — tune to your standards
+# ----------------------------------------------------------------------------
+lint:
+  # A ticket "In Progress" but untouched longer than this is flagged stale.
+  stale_days: 14
+  # Which fields must be present. Options: component, epic.
+  # Component is intentionally NOT required on child work: workstream membership
+  # is inherited from the Epic's Component(s).
+  required_fields: [epic]
+  # Titles shorter than this many words are flagged for review.
+  min_title_words: 3
+  # Titles containing any of these words are flagged as vague.
+  vague_title_terms: [fix, update, change, stuff, misc, tbd, wip, test,
+                      various, temp, placeholder, todo, refactor]
+  # Which issue types are treated as "stories" for AC / estimate checks.
+  story_types: [story, bug]
+  # Require acceptance criteria on story-type issues?
+  require_acceptance_criteria: true
+  # Any of these phrases counts as "has acceptance criteria".
+  acceptance_criteria_markers: ["acceptance criteria", "given ", "when ",
+                                "then ", "ac:"]
+  # Require a story-point estimate on in-scope stories?
+  require_estimate: true
+
+# ----------------------------------------------------------------------------
+#  5b. Review (used by `pm review`) — model-based judgement checks
+# ----------------------------------------------------------------------------
+review:
+  # How many issues to send to the model per call. Smaller = more reliable on
+  # a modest laptop; larger = fewer calls. 10-15 is a good balance.
+  batch_size: 15
+
+# ----------------------------------------------------------------------------
+#  5c. Ready (used by `pm ready`) — the Definition of Ready gate
+# ----------------------------------------------------------------------------
+#  Which criteria must be met for a ticket to count as "Ready". Any criterion
+#  listed here BLOCKS readiness; remove one to make it advisory-only.
+#  Available: clear-title, has-acceptance-criteria, has-estimate,
+#             linked-to-epic, has-component, sane-dates
+ready:
+  blocking_criteria:
+    - clear-title
+    - has-acceptance-criteria
+    - has-estimate
+    - linked-to-epic
+    - sane-dates
+    # has-component is left out on purpose — advisory only by default.
+
+# ----------------------------------------------------------------------------
+#  5d. Standup (used by `pm standup`) — daily movement snapshot
+# ----------------------------------------------------------------------------
+standup:
+  # Default "moved since" window in days. Override at run time with --days.
+  lookback_days: 1
+
+# ----------------------------------------------------------------------------
+#  6. Workstreams — reported and checked separately, in this order
+# ----------------------------------------------------------------------------
+#  Jira model used here:
+#    * APS is the Jira project containing all three workstreams.
+#    * Epics represent features / work packages.
+#    * Component(s) on the Epic define the workstream.
+#    * Stories, Tasks, Bugs, and Sub-tasks inherit workstream membership from
+#      their Epic. They do NOT need the same Component copied onto them.
+#
+#  For an inherited workstream:
+#    jira_project      : Jira project containing the work.
+#    epic_components   : exact Jira Component name(s) that identify its Epics.
+#                        Change these values if your Jira Component names differ.
+#    jira_jql           : extra filter for child work in the report.
+#    roadmap_jql        : extra filter for the workstream Epics themselves.
+#    lint_jql           : extra filter for Epic + descendants checked by lint.
+#    review_jql         : optional; Epic + descendants. Falls back to lint_jql.
+#    ready_jql          : optional; child work only. Falls back to jira_jql.
+#    standup_moved_jql  : child work only; use {days}. Falls back to lint_jql.
+#    standup_wip_jql    : child work only. Falls back to jira_jql.
+#
+#  pm first resolves the matching Epic keys, then uses Jira's parentEpic JQL
+#  operator to include their Stories/Tasks and nested Sub-tasks. The resolved
+#  Epic list is cached for the duration of a command, so each workstream only
+#  needs one discovery query per run.
+#
+#  Legacy workstreams are still supported: omit jira_project/epic_components
+#  and write each *_jql value as a complete JQL query, as before.
+#
+#  Target a single stream on any command with:  --workstream SDX
+# ----------------------------------------------------------------------------
+workstreams:
+
+  - name: "Secure Data Exchange"
+    abbrev: "SDX"
+    jira_project: "APS"
+    epic_components: ["Secure Data Exchange"]
+    jira_jql: 'sprint in openSprints()'
+    roadmap_jql: 'statusCategory != Done'
+    confluence_cql: 'space = SDX AND label in ("decision","risk","dependency")'
+    sharepoint_query: "SDX"
+    lint_jql: 'statusCategory != Done'
+    standup_moved_jql: 'updated >= -{days}d'
+    standup_wip_jql: 'statusCategory = "In Progress"'
+
+  - name: "API Platform"
+    abbrev: "APS"
+    jira_project: "APS"
+    epic_components: ["API Platform"]
+    jira_jql: 'sprint in openSprints()'
+    roadmap_jql: 'statusCategory != Done'
+    confluence_cql: 'space = APS AND label in ("decision","risk","dependency")'
+    sharepoint_query: "API Platform"
+    lint_jql: 'statusCategory != Done'
+    standup_moved_jql: 'updated >= -{days}d'
+    standup_wip_jql: 'statusCategory = "In Progress"'
+
+  - name: "Integration Toolkit"
+    abbrev: "ITK"
+    jira_project: "APS"
+    epic_components: ["Integration Toolkit"]
+    jira_jql: 'sprint in openSprints()'
+    roadmap_jql: 'statusCategory != Done'
+    confluence_cql: 'space = ITK AND label in ("decision","risk","dependency")'
+    sharepoint_query: "Integration Toolkit"
+    lint_jql: 'statusCategory != Done'
+    standup_moved_jql: 'updated >= -{days}d'
+    standup_wip_jql: 'statusCategory = "In Progress"'
+
+# ----------------------------------------------------------------------------
+#  7. Output (used by `pm report`)
+# ----------------------------------------------------------------------------
+output:
+  file: "weekly_report_{date}.md"
+  audience: "directors"
+  # Remembers last week's items so the report can show what changed.
+  # Created automatically after the first run; keep it between runs.
+  state_file: "report_state.json"
