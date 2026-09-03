@@ -495,15 +495,22 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 
 ## Roadmap (ideas, not commitments)
 
-`docs/FEATURE_PROPOSALS.md` holds the current thinking, in priority order, with
-a config sketch for each. The short list:
+`docs/PORTFOLIO_PROPOSALS.md` is the current plan: the next ten features, chosen
+for a PM running several products and the BA who grooms with them.
 
-- `pm doctor` — one command that proves the whole setup works end to end.
-- `pm triage` — the daily "what needs a decision from me" queue.
-- `pm metrics` — throughput, cycle time and estimate accuracy per workstream.
-- `pm duplicates` — model-flagged likely duplicate tickets.
-- `pm release-notes` — draft notes from tickets marked Done since last release.
-- `pm publish` — post the weekly report to Confluence or Teams.
+- **Products above workstreams** — a portfolio layer, `--product` everywhere.
+- **`pm today`** — one bounded screen, with a numbered action list.
+- **`pm capture` / `pm inbox`** — three seconds to file an idea, decide later.
+- **`pm triage`** — what is waiting on a decision from you, with the action.
+- **`pm groom`** — the BA's queue, with drafted titles, criteria and estimates.
+- **Findings that remember your decision** — snooze, accept, or hand to the BA.
+- **`pm brief`** — meeting prep and debrief, with per-audience memory.
+- **`pm metrics`** — throughput, cycle time, aging work and a plain forecast.
+- **`pm publish` / `pm schedule`** — the weekly update goes out without you.
+- **`pm doctor`** — verify the whole setup, and a cache that makes it all fast.
+
+`docs/FEATURE_PROPOSALS.md` holds the earlier, code-first list of twenty; the
+last section of the portfolio document says what happened to each of them.
 
 ---
 

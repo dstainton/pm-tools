@@ -5,6 +5,11 @@ command end to end against a stand-in Jira. Part 1 describes the tool as it
 stands. Part 2 lists what a read of the code suggests is worth building, in
 priority order, with a config sketch for each.
 
+> **Superseded in part.** `docs/PORTFOLIO_PROPOSALS.md` is the current plan: ten
+> features chosen from the two people using the tool rather than from the code.
+> Its last section maps every proposal below to what happened to it. Part 1 here
+> is still the best description of how `pm` works today.
+
 Two constraints shape every proposal here:
 
 - **Workstreams stay easy to add and remove.** Anything new must work for a
