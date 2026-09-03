@@ -55,14 +55,27 @@ def build_markdown(cfg, results, days, group_by):
     # Summary line across workstreams.
     lines.append("## Summary")
     lines.append("")
-    lines.append("| Workstream | Moved | In progress |")
-    lines.append("|-----------|------:|------------:|")
+    from core import products as product_core
+    show_product = bool(product_core.listed_products(cfg))
+    if show_product:
+        lines.append("| Product | Workstream | Moved | In progress |")
+        lines.append("|---------|-----------|------:|------------:|")
+    else:
+        lines.append("| Workstream | Moved | In progress |")
+        lines.append("|-----------|------:|------------:|")
     tot_moved = tot_wip = 0
     for ws, moved, wip in results:
-        lines.append(f"| {ws['abbrev']} | {len(moved)} | {len(wip)} |")
+        if show_product:
+            lines.append(f"| {product_core.product_abbrev_of(ws)} | "
+                         f"{ws['abbrev']} | {len(moved)} | {len(wip)} |")
+        else:
+            lines.append(f"| {ws['abbrev']} | {len(moved)} | {len(wip)} |")
         tot_moved += len(moved)
         tot_wip += len(wip)
-    lines.append(f"| **Total** | **{tot_moved}** | **{tot_wip}** |")
+    if show_product:
+        lines.append(f"| | **Total** | **{tot_moved}** | **{tot_wip}** |")
+    else:
+        lines.append(f"| **Total** | **{tot_moved}** | **{tot_wip}** |")
     lines.append("")
 
     for ws, moved, wip in results:

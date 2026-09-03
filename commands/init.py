@@ -52,9 +52,9 @@ def run(args):
     print("Next steps:")
     print("  1. Open that file and fill in the <PLACEHOLDERS> "
           "(Jira URL, email, API token, project).")
-    print("  2. Name your workstreams and their Jira Component(s) — either in "
-          "that file or with:  pm workstreams add")
-    print("  3. Confirm Jira agrees with it:  pm workstreams check")
+    print("  2. Name your products and workstreams — either in that file or "
+          "with:  pm products add   /   pm workstreams add")
+    print("  3. Confirm Jira agrees with it:  pm doctor")
     print("  4. Start the local llama.cpp/Qwen server (for report/review).")
-    print("  5. Run a command from anywhere, e.g.:  pm lint --workstream SDX")
+    print("  5. The habit command:  pm today")
     print("\nTip: pm finds this file automatically — no --config needed.")

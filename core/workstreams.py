@@ -55,9 +55,25 @@ DEFAULT_MEMBERSHIP = {
 #  Reading the workstream definition
 # ---------------------------------------------------------------------------
 
+def _product_project(cfg, ws):
+    """The project named on the workstream's product, if any."""
+    abbrev = (ws.get("product") or "").strip()
+    if not abbrev:
+        return None
+    for product in cfg.get("products") or []:
+        if (product.get("abbrev") or "").lower() == abbrev.lower():
+            return product.get("project") or None
+    return None
+
+
 def project_of(cfg, ws):
-    """The Jira project holding this workstream's work."""
+    """The Jira project holding this workstream's work.
+
+    Precedence: the workstream's own `project` / `jira_project`, then the
+    product's `project`, then `jira.project`.
+    """
     return (ws.get("project") or ws.get("jira_project")
+            or _product_project(cfg, ws)
             or (cfg.get("jira") or {}).get("project"))
 
 

@@ -5,8 +5,12 @@ It speaks just enough of the real thing to run `pm` for real:
   POST /rest/api/3/search/jql               paged search, nextPageToken and all
   POST /rest/api/3/search/approximate-count
   GET  /rest/api/3/myself
+  GET  /rest/api/3/field
+  GET  /rest/api/3/project/<KEY>
   GET  /rest/api/3/project/<KEY>/components
   GET  /rest/api/3/issue/<KEY>/changelog
+  GET  /rest/agile/1.0/board
+  GET  /rest/agile/1.0/board/<ID>/sprint
   GET  /wiki/rest/api/content/search        Confluence pages, filtered by space
   POST /v1/chat/completions                 an OpenAI-compatible model reply
 
@@ -297,10 +301,23 @@ def render(issue, fields, expand=None):
 #  The server
 # ---------------------------------------------------------------------------
 
+DEFAULT_FIELDS = [
+    {"id": "summary", "name": "Summary", "schema": {"type": "string"}},
+    {"id": "customfield_10016", "name": "Story Points",
+     "schema": {"type": "number"}},
+    {"id": "customfield_10015", "name": "Start date",
+     "schema": {"type": "date"}},
+    {"id": "customfield_10014", "name": "Epic Link",
+     "schema": {"type": "any"}},
+]
+
+
 class _Handler(BaseHTTPRequestHandler):
     backlog = []
     components = {}
     pages = []
+    fields = DEFAULT_FIELDS
+    sprints = {}
     calls = []
 
     def log_message(self, *args):                    # keep test output readable
@@ -321,22 +338,50 @@ class _Handler(BaseHTTPRequestHandler):
     # -- GETs --------------------------------------------------------------
     def do_GET(self):                                # noqa: N802 — http.server API
         self.calls.append(("GET", self.path))
-        if self.path.startswith("/rest/api/3/myself"):
-            return self._send({"displayName": "Test PM",
-                               "emailAddress": "pm@example.com"})
+        parsed = urlparse(self.path)
+        path = parsed.path
 
-        match = re.match(r"/rest/api/3/project/([^/]+)/components", self.path)
+        if path.startswith("/rest/api/3/myself"):
+            return self._send({"displayName": "Test PM",
+                               "emailAddress": "pm@example.com",
+                               "accountId": "test-pm"})
+
+        if path.startswith("/rest/api/3/field"):
+            return self._send(self.fields)
+
+        match = re.match(r"/rest/agile/1.0/board/([^/]+)/sprint", path)
+        if match:
+            board_id = match.group(1)
+            values = self.sprints.get(str(board_id), self.sprints.get("default", []))
+            return self._send({"values": values})
+
+        if path.startswith("/rest/agile/1.0/board"):
+            query = parse_qs(parsed.query)
+            project = (query.get("projectKeyOrId") or [None])[0]
+            boards = []
+            if project and project in self.components:
+                boards.append({"id": 1, "name": f"{project} board"})
+            return self._send({"values": boards})
+
+        match = re.match(r"/rest/api/3/project/([^/]+)/components", path)
         if match:
             names = self.components.get(match.group(1), [])
             return self._send([{"name": n} for n in names])
 
-        match = re.match(r"/rest/api/3/issue/([^/]+)/changelog", self.path)
+        match = re.match(r"/rest/api/3/project/([^/]+)/?$", path)
+        if match:
+            key = match.group(1)
+            if key not in self.components:
+                return self._send({"errorMessages": [f"No project {key}"]}, 404)
+            return self._send({"key": key, "name": key, "id": "10000"})
+
+        match = re.match(r"/rest/api/3/issue/([^/]+)/changelog", path)
         if match:
             issue = next((i for i in self.backlog
                           if i["key"] == match.group(1)), None)
             return self._send({"values": (issue or {}).get("changelog") or []})
 
-        if self.path.startswith("/wiki/rest/api/content/search"):
+        if path.startswith("/wiki/rest/api/content/search"):
             return self._confluence()
 
         return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
@@ -411,10 +456,18 @@ class _Handler(BaseHTTPRequestHandler):
 class FakeJira:
     """Run the stand-in on a spare port for the length of a test."""
 
-    def __init__(self, backlog, components=None, pages=None):
+    def __init__(self, backlog, components=None, pages=None,
+                 fields=None, sprints=None):
         _Handler.backlog = link_parents(backlog)
         _Handler.components = components or {}
         _Handler.pages = pages or []
+        _Handler.fields = fields if fields is not None else DEFAULT_FIELDS
+        _Handler.sprints = sprints or {
+            "1": [{"id": 10, "name": "Sprint 42", "state": "active",
+                   "goal": "Ship certificate rotation"}],
+            "default": [{"id": 10, "name": "Sprint 42", "state": "active",
+                         "goal": "Ship certificate rotation"}],
+        }
         _Handler.calls = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         self.thread = threading.Thread(target=self.server.serve_forever,

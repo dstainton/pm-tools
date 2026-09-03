@@ -10,7 +10,7 @@ import sys
 
 import yaml
 
-from core import filters, workstreams as ws_core
+from core import filters, products as product_core, workstreams as ws_core
 
 
 def load_config(path):
@@ -43,12 +43,46 @@ def load_config(path):
 def validate(cfg):
     """Check the whole config before a single Jira call is made.
 
-    Everything a typo can break — workstream definitions, scope options,
-    membership settings — is caught here, with a message that names the fix.
+    Everything a typo can break — products, workstream definitions, scope
+    options, membership settings — is caught here, with a message that names
+    the fix.
     """
+    _validate_products(cfg)
     _validate_workstreams(cfg)
     _validate_membership(cfg)
     filters.validate_config_scopes(cfg)
+
+
+def _validate_products(cfg):
+    """Product abbreviations must be unique; `UNASSIGNED` is reserved."""
+    entries = cfg.get("products")
+    if entries is None:
+        return
+    if not isinstance(entries, list):
+        sys.exit("`products:` must be a YAML list of products.")
+
+    seen = {}
+    for product in entries:
+        if not isinstance(product, dict):
+            sys.exit("Each product must be a mapping with `name` and `abbrev`.")
+        label = product.get("abbrev") or product.get("name") or "(unnamed)"
+        if not product.get("abbrev"):
+            sys.exit(f"Product {label} needs an `abbrev` "
+                     f"(the short name you pass to --product).")
+        key = product["abbrev"].lower()
+        if key == product_core.UNASSIGNED_ABBREV.lower():
+            sys.exit(f"Product abbrev {product['abbrev']} is reserved for "
+                     f"workstreams that do not name a product.")
+        if key in seen:
+            sys.exit(f"Two products share the abbrev {product['abbrev']}. "
+                     f"Abbreviations must be unique.")
+        seen[key] = True
+        if not product.get("name"):
+            sys.exit(f"Product {label} needs a `name`.")
+        scopes = product.get("scopes")
+        if scopes is not None and not isinstance(scopes, dict):
+            sys.exit(f"Product {label}: `scopes:` must be a mapping of "
+                     f"scope name to options.")
 
 
 def _label(ws):
@@ -79,6 +113,21 @@ def _validate_workstreams(cfg):
         if components is not None and not isinstance(components, (list, str)):
             sys.exit(f"Workstream {name}: `components` must be a YAML list of "
                      f"Component names.")
+
+        product = (ws.get("product") or "").strip()
+        if product:
+            if product.lower() == product_core.UNASSIGNED_ABBREV.lower():
+                sys.exit(f"Workstream {name}: `product: {product}` is reserved. "
+                         f"Leave `product:` off to land in Unassigned.")
+            if product_core.resolve_product(cfg, product) is None:
+                available = ", ".join(p["abbrev"] for p in
+                                      product_core.listed_products(cfg))
+                if not available:
+                    sys.exit(f"Workstream {name} names product {product}, but "
+                             f"no products: are configured. Add it with:  "
+                             f"pm products add --name ... --abbrev ...")
+                sys.exit(f"Workstream {name} names unknown product {product}. "
+                         f"Available: {available}.")
 
         has_components = bool(ws_core.components_of(ws))
         has_legacy_jql = any(ws.get(f) for fields in

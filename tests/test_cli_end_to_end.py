@@ -198,8 +198,29 @@ ready:
 standup:
   lookback_days: 1
 
+cache:
+  enabled: true
+  path: "cache"
+  ttl_seconds: 300
+
+today:
+  state_file: "today.json"
+  max_needs_you: 5
+  max_moved: 8
+  max_aging: 3
+  untouched_days: 3
+
 membership:
 {membership}
+
+# ----------------------------------------------------------------------------
+#  Products — the section `pm products` edits
+# ----------------------------------------------------------------------------
+products:
+
+  - name: "Integration Platform"
+    abbrev: "IP"
+    project: "APS"
 
 # ----------------------------------------------------------------------------
 #  Workstreams — the section `pm workstreams` edits
@@ -208,16 +229,19 @@ workstreams:
 
   - name: "Secure Data Exchange"
     abbrev: "SDX"
+    product: "IP"
     components: [{sdx_component}]
     confluence_space: "SDX"
     confluence_labels: [decision, risk]
 
   - name: "API Platform"
     abbrev: "APS"
+    product: "IP"
     components: ["API Platform"]
 
   - name: "Integration Toolkit"
     abbrev: "ITK"
+    product: "IP"
     components: ["Integration Toolkit"]
 
 # ----------------------------------------------------------------------------
@@ -464,6 +488,156 @@ class ReviewTests(CliTestCase):
         self.assertIn("issues reviewed", out)
         report = self.read_output(r"review_titles_.*\.md")
         self.assertIn("Nothing flagged", report)     # the fake model returns []
+
+
+class ProductTests(CliTestCase):
+    def test_list_shows_the_product_and_its_workstreams(self):
+        out = self.run_pm("products")
+        self.assertIn("IP", out)
+        self.assertIn("Integration Platform", out)
+        self.assertIn("SDX", out)
+        self.assertIn("APS", out)
+        self.assertIn("ITK", out)
+
+    def test_product_filter_keeps_only_that_product(self):
+        out = self.run_pm("lint", "--json", "--product", "IP")
+        self.assertIn("(scope: product IP)", out)
+        import json
+        with open(os.path.join(self.dir, [f for f in os.listdir(self.dir)
+                                          if f.startswith("lint_report_")][0]),
+                  encoding="utf-8") as fh:
+            findings = json.load(fh)
+        self.assertTrue(findings)
+        self.assertTrue(all(f["workstream"] in {"SDX", "APS", "ITK"}
+                            for f in findings))
+
+    def test_unknown_product_fails_loudly(self):
+        out = self.run_pm("lint", "--product", "NOPE", expect=1)
+        self.assertIn("Unknown product", out)
+        self.assertIn("IP", out)
+
+    def test_product_and_workstream_compose(self):
+        out = self.run_pm("ready", "--product", "IP", "-w", "ITK")
+        self.assertIn("product IP", out)
+        report = self.read_output(r"ready_report_.*\.md")
+        self.assertIn("APS-40", report)
+        self.assertNotIn("APS-10", report)
+
+    def test_unassigned_workstream_is_isolated_by_product_filter(self):
+        self.run_pm("workstreams", "add", "--name", "Orphan Docs",
+                    "--abbrev", "DOC", "--components", "Documentation")
+        out = self.run_pm("workstreams", "--product", "UNASSIGNED")
+        self.assertIn("DOC", out)
+        self.assertNotIn("SDX", out.split("Abbrev", 1)[-1]
+                         if "Abbrev" in out else out)
+
+        isolated = self.run_pm("ready", "--product", "UNASSIGNED")
+        self.assertIn("DOC", isolated)
+        report = self.read_output(r"ready_report_.*\.md")
+        self.assertNotIn("APS-10", report)
+
+    def test_add_then_remove_a_product_without_touching_comments(self):
+        path = os.path.join(self.dir, "config.yaml")
+        with open(path, encoding="utf-8") as fh:
+            before = fh.read()
+        out = self.run_pm("products", "add", "--name", "Billing Platform",
+                          "--abbrev", "BILL", "--project", "BILL")
+        self.assertIn("Added BILL", out)
+        with open(path, encoding="utf-8") as fh:
+            after = fh.read()
+        self.assertIn("#  Products — the section `pm products` edits", after)
+        self.assertIn("BILL", self.run_pm("products"))
+        self.run_pm("products", "remove", "BILL")
+        with open(path, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), before)
+
+    def test_cannot_remove_a_product_workstreams_still_name(self):
+        out = self.run_pm("products", "remove", "IP", expect=1)
+        self.assertIn("still name it", out)
+
+    def test_workstreams_add_tags_a_product(self):
+        self.run_pm("products", "add", "--name", "Billing Platform",
+                    "--abbrev", "BILL", "--project", "BILL")
+        self.run_pm("workstreams", "add", "--name", "Invoicing",
+                    "--abbrev", "INV", "--components", "Billing Platform",
+                    "--product", "BILL")
+        listed = self.run_pm("workstreams", "--product", "BILL")
+        self.assertIn("INV", listed)
+        self.assertNotIn("SDX", listed)
+
+    def test_weekly_report_has_a_portfolio_section(self):
+        self.run_pm("report", "--product", "IP")
+        report = self.read_output(r"weekly_report_.*\.md")
+        self.assertIn("## Portfolio", report)
+        self.assertIn("Integration Platform (IP)", report)
+
+
+class DoctorTests(CliTestCase):
+    def test_doctor_reports_each_check(self):
+        out = self.run_pm("doctor")
+        for label in ("config", "jira", "projects", "custom fields",
+                      "membership", "model", "cache"):
+            self.assertIn(label, out)
+        self.assertIn("Setup looks good", out)
+        self.assertIn("Test PM", out)
+        self.assertIn("unclaimed", out)
+
+    def test_discover_fields_prints_a_snippet(self):
+        out = self.run_pm("doctor", "--discover-fields")
+        self.assertIn("customfield_10016", out)
+        self.assertIn("Story Points", out)
+        self.assertIn("Suggested snippet", out)
+
+
+class CacheTests(CliTestCase):
+    def test_second_lint_reuses_the_cache(self):
+        self.run_pm("lint", "--json", "-w", "ITK")
+        searches = [c for c in self.jira.calls
+                    if c[0] == "POST" and "search/jql" in c[1]]
+        first = len(searches)
+        self.assertGreater(first, 0)
+        self.run_pm("lint", "--json", "-w", "ITK")
+        searches = [c for c in self.jira.calls
+                    if c[0] == "POST" and "search/jql" in c[1]]
+        self.assertEqual(len(searches), first)
+
+    def test_refresh_hits_jira_again(self):
+        self.run_pm("lint", "--json", "-w", "ITK")
+        searches = [c for c in self.jira.calls
+                    if c[0] == "POST" and "search/jql" in c[1]]
+        first = len(searches)
+        self.run_pm("lint", "--json", "-w", "ITK", "--refresh")
+        searches = [c for c in self.jira.calls
+                    if c[0] == "POST" and "search/jql" in c[1]]
+        self.assertGreater(len(searches), first)
+
+
+class TodayTests(CliTestCase):
+    def test_today_numbers_actions_and_do_previews(self):
+        out = self.run_pm("today")
+        self.assertIn("NEEDS YOU", out)
+        self.assertIn("MOVED SINCE YESTERDAY", out)
+        self.assertIn("AGING", out)
+        self.assertIn("REFINEMENT GAPS", out)
+        self.assertIn("SPRINT GOAL", out)
+        self.assertIn("Ship certificate rotation", out)
+        self.assertIn("APS-30", out)                 # overdue
+        self.assertIn("pm do", out)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))
+
+        preview = self.run_pm("do", "1")
+        self.assertIn("Would update", preview)
+        self.assertIn("Jira writes are not enabled yet", preview)
+        self.assertIn("/rest/api/3/issue/", preview)
+
+    def test_do_without_today_explains_itself(self):
+        out = self.run_pm("do", "1", expect=1)
+        self.assertIn("pm today", out)
+
+    def test_today_respects_product_filter(self):
+        out = self.run_pm("today", "--product", "IP", "-w", "SDX")
+        self.assertIn("APS-30", out)
+        self.assertNotIn("APS-20", out)              # APS workstream
 
 
 if __name__ == "__main__":

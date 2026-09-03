@@ -93,19 +93,33 @@ def build_markdown(cfg, results, deep):
     # Summary across workstreams.
     lines.append("## Summary")
     lines.append("")
-    lines.append("| Workstream | Ready | Not ready | % ready |")
-    lines.append("|-----------|------:|----------:|--------:|")
+    from core import products as product_core
+    show_product = bool(product_core.listed_products(cfg))
+    if show_product:
+        lines.append("| Product | Workstream | Ready | Not ready | % ready |")
+        lines.append("|---------|-----------|------:|----------:|--------:|")
+    else:
+        lines.append("| Workstream | Ready | Not ready | % ready |")
+        lines.append("|-----------|------:|----------:|--------:|")
     g_ready = g_total = 0
     for ws, verdicts in results:
         ready = sum(1 for v in verdicts if v["ready"])
         total = len(verdicts)
         pct = f"{(100 * ready / total):.0f}%" if total else "—"
-        lines.append(f"| {ws['abbrev']} | {ready} | {total - ready} | {pct} |")
+        if show_product:
+            lines.append(f"| {product_core.product_abbrev_of(ws)} | "
+                         f"{ws['abbrev']} | {ready} | {total - ready} | {pct} |")
+        else:
+            lines.append(f"| {ws['abbrev']} | {ready} | {total - ready} | {pct} |")
         g_ready += ready
         g_total += total
     g_pct = f"{(100 * g_ready / g_total):.0f}%" if g_total else "—"
-    lines.append(f"| **Total** | **{g_ready}** | **{g_total - g_ready}** | "
-                 f"**{g_pct}** |")
+    if show_product:
+        lines.append(f"| | **Total** | **{g_ready}** | **{g_total - g_ready}** | "
+                     f"**{g_pct}** |")
+    else:
+        lines.append(f"| **Total** | **{g_ready}** | **{g_total - g_ready}** | "
+                     f"**{g_pct}** |")
     lines.append("")
 
     # Detail per workstream — not-ready items first, with reasons.

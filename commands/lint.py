@@ -170,18 +170,33 @@ def build_markdown(cfg, results):
     # Summary table across all workstreams.
     lines.append("## Summary")
     lines.append("")
-    lines.append("| Workstream | Errors | Warnings | Review |")
-    lines.append("|-----------|-------:|---------:|-------:|")
+    from core import products as product_core
+    show_product = bool(product_core.listed_products(cfg))
+    if show_product:
+        lines.append("| Product | Workstream | Errors | Warnings | Review |")
+        lines.append("|---------|-----------|-------:|---------:|-------:|")
+    else:
+        lines.append("| Workstream | Errors | Warnings | Review |")
+        lines.append("|-----------|-------:|---------:|-------:|")
     grand = {"error": 0, "warn": 0, "review": 0}
     for ws, findings in results:
         counts = {"error": 0, "warn": 0, "review": 0}
         for fnd in findings:
             counts[fnd["severity"]] += 1
             grand[fnd["severity"]] += 1
-        lines.append(f"| {ws['abbrev']} | {counts['error']} | "
-                     f"{counts['warn']} | {counts['review']} |")
-    lines.append(f"| **Total** | **{grand['error']}** | "
-                 f"**{grand['warn']}** | **{grand['review']}** |")
+        if show_product:
+            lines.append(f"| {product_core.product_abbrev_of(ws)} | "
+                         f"{ws['abbrev']} | {counts['error']} | "
+                         f"{counts['warn']} | {counts['review']} |")
+        else:
+            lines.append(f"| {ws['abbrev']} | {counts['error']} | "
+                         f"{counts['warn']} | {counts['review']} |")
+    if show_product:
+        lines.append(f"| | **Total** | **{grand['error']}** | "
+                     f"**{grand['warn']}** | **{grand['review']}** |")
+    else:
+        lines.append(f"| **Total** | **{grand['error']}** | "
+                     f"**{grand['warn']}** | **{grand['review']}** |")
     lines.append("")
 
     # Detail per workstream.

@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.4.0 - 2026-09-03
+
+### Products above workstreams
+
+- New `products:` block. A product is a name, an abbreviation, and optional
+  defaults (Jira project, scopes). Each workstream may set `product: <abbrev>`.
+  A workstream with no product lands in an implicit Unassigned product, so
+  existing configs keep working.
+- `pm products` — `list`, `add`, `remove`, `check`. Same comment-preserving
+  edit as `pm workstreams`. Removing a product that workstreams still name is
+  refused.
+- `--product` / `-p` on every config-driven command, and it composes with
+  `--workstream`. A typo fails with the list of valid names.
+- Workstream `project` now inherits from its product, then `jira.project`.
+  Product `scopes:` sit between the global block and the workstream override.
+- Weekly report gains a portfolio summary, then a section per product, then
+  per workstream. Lint / ready / standup summary tables gain a Product column.
+- Bundled template wraps SDX, APS and ITK in product "Integration Platform"
+  (`IP`). The product abbrev is not `APS` — that already names a workstream.
+
+### Fetch cache and `pm doctor`
+
+- Jira searches (and approximate counts) are cached under `cache.path`
+  (default `~/.pm/cache`) for `cache.ttl_seconds` (default 300). `--cached`
+  reuses a hit even if it is stale; `--refresh` ignores the cache. The two
+  flags cannot be combined.
+- `pm doctor` verifies config, Jira credentials, every project in play,
+  custom-field IDs, membership counts (including unclaimed open work), the
+  local model (thinking off), and the cache. `--discover-fields` lists
+  likely field IDs and prints a YAML snippet; it does not write the file.
+
+### `pm today` and `pm do`
+
+- `pm today` is the habit command: Sprint Goal (when the Agile API is there),
+  a capped NEEDS YOU list, movement since yesterday, aging in-progress work,
+  and refinement gaps against the team's ready agreement.
+- Numbered actions are written to `today.state_file` (default `~/.pm/today.json`).
+- `pm do N` prints the exact Jira payload that action would send, then stops.
+  Writes are not enabled in this release.
+
 ## 0.3.1 - 2026-09-03
 
 ### Prompts and sampling for Qwen3.8-27B Q3_K_M

@@ -18,12 +18,13 @@ not load.
 """
 
 import difflib
-import re
 import sys
 
 import yaml
 
 from core import config as config_core
+from core import config_edit
+from core import products as product_core
 from core import sources
 from core import workstreams as ws_core
 
@@ -48,12 +49,14 @@ def _components_text(ws):
 
 def _list(cfg):
     print(f"Config: {cfg.get('_config_path', '(unknown)')}\n")
-    rows = [("Abbrev", "Name", "Project", "Components")]
-    for ws in cfg["workstreams"]:
+    rows = [("Abbrev", "Name", "Product", "Project", "Components")]
+    streams = cfg.get("_workstreams") or cfg["workstreams"]
+    for ws in streams:
         rows.append((ws.get("abbrev", "?"), ws.get("name", ""),
+                     product_core.product_abbrev_of(ws),
                      ws_core.project_of(cfg, ws) or "-", _components_text(ws)))
 
-    widths = [max(len(r[i]) for r in rows) for i in range(4)]
+    widths = [max(len(r[i]) for r in rows) for i in range(5)]
     for n, row in enumerate(rows):
         print("  " + "  ".join(cell.ljust(widths[i])
                                for i, cell in enumerate(row)).rstrip())
@@ -72,56 +75,6 @@ def _list(cfg):
 #  Editing the config file in place, comments and all
 # ---------------------------------------------------------------------------
 
-TOP_LEVEL = re.compile(r"^[A-Za-z_][\w-]*:")
-
-
-def _read_lines(path):
-    with open(path, "r", encoding="utf-8") as fh:
-        return fh.read().splitlines()
-
-
-def _find_block(lines):
-    """Locate the `workstreams:` list: (header index, end index exclusive)."""
-    start = None
-    for n, line in enumerate(lines):
-        if re.match(r"^workstreams:\s*(#.*)?$", line):
-            start = n
-            break
-    if start is None:
-        return None, None
-
-    end = len(lines)
-    for n in range(start + 1, len(lines)):
-        if TOP_LEVEL.match(lines[n]):
-            end = n
-            break
-    return start, end
-
-
-def _items(lines, start, end):
-    """Split the list body into (abbrev, first line, last line) per entry."""
-    item_re = re.compile(r"^(\s*)-\s")
-    found, current, indent = [], None, None
-    for n in range(start + 1, end):
-        match = item_re.match(lines[n])
-        if match:
-            if current is not None:
-                found.append((current[0], current[1], n - 1))
-            current, indent = [None, n], match.group(1)
-        elif current is not None and lines[n].strip() and \
-                not lines[n].startswith((indent or "") + " "):
-            # Dedented back out of the list (a stray comment, say).
-            found.append((current[0], current[1], n - 1))
-            current = None
-        if current is not None:
-            abbrev = re.search(r"""abbrev:\s*["']?([\w-]+)""", lines[n])
-            if abbrev:
-                current[0] = abbrev.group(1)
-    if current is not None:
-        found.append((current[0], current[1], end - 1))
-    return found
-
-
 def _entry_lines(entry, indent="  "):
     """Render one workstream as YAML, in the same shape as the template."""
     def quoted(value):
@@ -129,6 +82,8 @@ def _entry_lines(entry, indent="  "):
 
     body = [f'{indent}- name: {quoted(entry["name"])}',
             f'{indent}  abbrev: {quoted(entry["abbrev"])}']
+    if entry.get("product"):
+        body.append(f'{indent}  product: {quoted(entry["product"])}')
     if entry.get("project"):
         body.append(f'{indent}  project: {quoted(entry["project"])}')
     components = ", ".join(quoted(c) for c in entry["components"])
@@ -147,49 +102,12 @@ def _entry_lines(entry, indent="  "):
 
 def add_entry_to_text(text, entry):
     """Return `text` with one workstream appended to its workstreams list."""
-    lines = text.splitlines()
-    start, end = _find_block(lines)
-    if start is None:
-        raise ValueError("no top-level `workstreams:` list found in the config")
-
-    existing = _items(lines, start, end)
-    for abbrev, _first, _last in existing:
-        if abbrev and abbrev.lower() == entry["abbrev"].lower():
-            raise ValueError(f"a workstream with abbrev {abbrev} already exists")
-
-    indent = "  "
-    if existing:
-        indent = re.match(r"^(\s*)-", lines[existing[0][1]]).group(1)
-
-    # Insert after the last real line of the list, so the comment banner that
-    # introduces the next section stays where the author put it.
-    insert_at = end
-    while insert_at - 1 > start and (not lines[insert_at - 1].strip()
-                                     or lines[insert_at - 1].lstrip()
-                                     .startswith("#")):
-        insert_at -= 1
-
-    block = [""] + _entry_lines(entry, indent) if existing else \
-        _entry_lines(entry, indent)
-    return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
+    return config_edit.add_list_entry(text, "workstreams", entry, _entry_lines)
 
 
 def remove_entry_from_text(text, abbrev):
     """Return `text` with the named workstream removed from the list."""
-    lines = text.splitlines()
-    start, end = _find_block(lines)
-    if start is None:
-        raise ValueError("no top-level `workstreams:` list found in the config")
-
-    for found, first, last in _items(lines, start, end):
-        if found and found.lower() == abbrev.lower():
-            # Swallow one trailing blank line so entries stay evenly spaced.
-            cut_to = last + 1
-            if cut_to < end and not lines[cut_to].strip():
-                cut_to += 1
-            return "\n".join(lines[:first] + lines[cut_to:]) + "\n"
-
-    raise ValueError(f"no workstream with abbrev {abbrev} in the config")
+    return config_edit.remove_list_entry(text, "workstreams", abbrev)
 
 
 def _write_checked(path, text):
@@ -213,9 +131,19 @@ def _add(cfg, args):
                  "e.g.\n  pm workstreams add --name \"Billing Platform\" "
                  "--abbrev BIL --components \"Billing Platform\"")
 
+    product = getattr(args, "product", None)
+    if product:
+        if product_core.resolve_product(cfg, product) is None:
+            available = ", ".join(p["abbrev"] for p in
+                                  product_core.listed_products(cfg)) or "(none)"
+            sys.exit(f"Unknown product {product}. Available: {available}. "
+                     f"Add it first with:  pm products add --name ... "
+                     f"--abbrev ...")
+
     entry = {
         "name": args.name,
         "abbrev": args.abbrev,
+        "product": product,
         "project": args.project,
         "components": [c.strip() for c in args.components.split(",")
                        if c.strip()],
@@ -274,62 +202,75 @@ def _check_components(cfg, ws, available):
     return problems
 
 
-def _check(cfg, args):
+def check_one(cfg, ws, args, indent="  "):
+    """Verify one workstream against Jira. Returns the number of problems."""
+    jira_cfg = cfg["jira"]
+    problems = 0
+    pad = indent
+
+    if not ws_core.uses_component_scope(cfg, ws):
+        print(f"{pad}legacy JQL workstream — no component membership to check.")
+        return 0
+
+    project = ws_core.project_of(cfg, ws)
+    print(f"{pad}project: {project}")
+    print(f"{pad}components: {', '.join(ws_core.components_of(ws))}")
+
+    try:
+        available = sources.fetch_project_components(jira_cfg, project)
+    except Exception as err:                       # noqa: BLE001
+        print(f"{pad}⚠ could not list components for {project}: {err}")
+        available = []
+        problems += 1
+
+    if available:
+        for problem in _check_components(cfg, ws, available):
+            print(f"{pad}⚠ {problem}")
+            problems += 1
+
+    epics = ws_core.get_epic_keys(cfg, ws)
+    tagged = ws_core.get_tagged_issue_keys(cfg, ws)
+    print(f"{pad}epics carrying the component: {len(epics)}")
+    print(f"{pad}issues tagged directly: {len(tagged)}")
+    if not epics and not tagged:
+        print(f"{pad}⚠ nothing in Jira carries these components yet.")
+        problems += 1
+
+    for scope, scope_label in SCOPE_LABELS.items():
+        jql = ws_core.scope_jql(cfg, ws, scope)
+        if not jql:
+            print(f"{pad}{scope_label}: nothing in scope")
+            continue
+        try:
+            count = sources.approximate_count(jira_cfg, jql)
+            print(f"{pad}{scope_label}: ~{count} issue(s)")
+        except Exception as err:                   # noqa: BLE001
+            print(f"{pad}{scope_label}: ⚠ query failed ({err})")
+            problems += 1
+        if getattr(args, "show_jql", False):
+            print(f"{pad}    {jql}")
+    return problems
+
+
+def connect_jira(cfg):
+    """Reach Jira once and print who we connected as. Exits on failure."""
     jira_cfg = cfg["jira"]
     try:
         me = sources.fetch_myself(jira_cfg)
         print(f"Jira: connected to {jira_cfg['base_url']} as "
               f"{me.get('displayName') or me.get('emailAddress')}\n")
+        return me
     except Exception as err:                       # noqa: BLE001 — report, don't crash
         sys.exit(f"Could not reach Jira at {jira_cfg.get('base_url')}: {err}\n"
                  f"Check jira.base_url, jira.email and jira.api_token.")
 
+
+def _check(cfg, args):
+    connect_jira(cfg)
     problems = 0
     for ws in cfg["_workstreams"]:
-        label = f"{ws.get('name')} ({ws.get('abbrev')})"
-        project = ws_core.project_of(cfg, ws)
-        print(f"{label}")
-
-        if not ws_core.uses_component_scope(cfg, ws):
-            print("  legacy JQL workstream — no component membership to check.\n")
-            continue
-
-        print(f"  project: {project}")
-        print(f"  components: {', '.join(ws_core.components_of(ws))}")
-
-        try:
-            available = sources.fetch_project_components(jira_cfg, project)
-        except Exception as err:                   # noqa: BLE001
-            print(f"  ⚠ could not list components for {project}: {err}")
-            available = []
-            problems += 1
-
-        if available:
-            for problem in _check_components(cfg, ws, available):
-                print(f"  ⚠ {problem}")
-                problems += 1
-
-        epics = ws_core.get_epic_keys(cfg, ws)
-        tagged = ws_core.get_tagged_issue_keys(cfg, ws)
-        print(f"  epics carrying the component: {len(epics)}")
-        print(f"  issues tagged directly: {len(tagged)}")
-        if not epics and not tagged:
-            print("  ⚠ nothing in Jira carries these components yet.")
-            problems += 1
-
-        for scope, scope_label in SCOPE_LABELS.items():
-            jql = ws_core.scope_jql(cfg, ws, scope)
-            if not jql:
-                print(f"  {scope_label}: nothing in scope")
-                continue
-            try:
-                count = sources.approximate_count(jira_cfg, jql)
-                print(f"  {scope_label}: ~{count} issue(s)")
-            except Exception as err:               # noqa: BLE001
-                print(f"  {scope_label}: ⚠ query failed ({err})")
-                problems += 1
-            if getattr(args, "show_jql", False):
-                print(f"      {jql}")
+        print(f"{ws.get('name')} ({ws.get('abbrev')})")
+        problems += check_one(cfg, ws, args)
         print("")
 
     if problems:

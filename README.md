@@ -7,16 +7,21 @@ laptop.
 
 ```
 pm init         Create a starter config at ~/.pm/config.yaml
+pm products     List, add, remove or check your products
 pm workstreams  List, add, remove or check your workstreams
+pm today        One bounded daily screen (the habit command)
+pm do N         Preview the numbered action from `pm today`
+pm doctor       Verify config, Jira, fields, model, cache
 pm report       Weekly state-of-product report (uses the local model)
-pm lint         Deterministic backlog quality checks (no model — pure rules)
+pm lint         Deterministic Product Backlog checks (no model — pure rules)
 pm review       Model-based judgement checks (title clarity, AC quality)
-pm ready        Definition-of-Ready gate: pass/fail per ticket
+pm ready        Team ready-agreement gate: pass/fail per ticket
 pm standup      Daily movement + work-in-progress snapshot (no model)
 ```
 
-Every command (except `init`) can be scoped to one or more workstreams with
-`--workstream`.
+Every command (except `init`) can be scoped to one or more products with
+`--product` and to one or more workstreams with `--workstream`. The two
+compose. `--cached` reuses a stale fetch cache; `--refresh` ignores it.
 
 ---
 
@@ -32,16 +37,16 @@ pm init
 #   Edit that file: Jira URL, email, API token, project, and your workstreams.
 
 # 3. Confirm Jira agrees with what you typed.
-pm workstreams check
+pm doctor
 
-# 4. Run from anywhere — no python, no file path.
-pm lint --workstream SDX
+# 4. The habit command, from anywhere — no python, no file path.
+pm today
 ```
 
 You also need **Python 3.9+** and, for the model-backed commands (`report`,
 `review`, `ready --deep`), a local OpenAI-compatible model server — see
-**The local model** below. `pm lint`, `pm standup`, and the fast `pm ready` need
-no model at all.
+**The local model** below. `pm today`, `pm lint`, `pm standup`, `pm doctor`,
+and the fast `pm ready` need no model at all.
 
 ---
 
@@ -184,20 +189,90 @@ Other OpenAI-compatible local servers can still be used by changing
 
 ---
 
-## Scoping to a workstream — `--workstream`
+## Scoping — `--product` and `--workstream`
 
-Every command runs all workstreams by default. To focus on one (or a few), add
-`--workstream` (short form `-w`) with comma-separated abbreviations,
-case-insensitive:
+Every command runs the whole portfolio by default. Narrow it with `--product`
+(`-p`) and/or `--workstream` (`-w`). Both take comma-separated abbreviations,
+case-insensitive, and a typo fails with the list of valid names.
 
 ```
+pm lint   --product IP              # every workstream in Integration Platform
 pm lint   --workstream SDX          # just Secure Data Exchange
-pm ready  -w sdx,itk                 # two of them
-pm report --workstream APS           # one director snapshot
+pm ready  -p IP -w sdx,itk          # two streams inside that product
+pm report --product IP              # one stakeholder snapshot
 ```
 
-A typo fails loudly with the list of valid names. Scoping `pm report` is safe:
-it updates only the selected workstream's "what changed" memory.
+Scoping `pm report` is safe: it updates only the selected workstream's
+"what changed" memory.
+
+---
+
+## Products — `pm products`
+
+A product sits above workstreams. The workstream list stays flat; each
+workstream points at a product with `product: <abbrev>`. A workstream with no
+product lands in Unassigned.
+
+```yaml
+products:
+  - name: "Integration Platform"
+    abbrev: "IP"
+    project: "APS"
+
+workstreams:
+  - name: "Secure Data Exchange"
+    abbrev: "SDX"
+    product: "IP"
+    components: ["Secure Data Exchange"]
+```
+
+```
+pm products
+pm products add --name "Billing Platform" --abbrev BILL --project BILL
+pm products remove BILL
+pm products check
+```
+
+`add` / `remove` edit the config in place, comments and all. You cannot remove
+a product that workstreams still name. A product may set its own `project:`
+and `scopes:`; workstreams inherit those unless they override.
+
+---
+
+## The daily habit — `pm today` and `pm do`
+
+```
+pm today                  # one bounded screen across the portfolio
+pm today --product IP
+pm do 1                   # preview the action numbered this morning
+```
+
+The screen is the same shape every day: Sprint Goal (when Jira's Agile API
+exposes one), NEEDS YOU, movement since yesterday, aging in-progress work, and
+refinement gaps against the team's ready agreement. Numbered actions are
+written to `~/.pm/today.json` so the numbers still mean what they meant when
+you walked away.
+
+`pm do N` prints the exact payload it would send to Jira, then stops. Writes
+are not enabled in this release.
+
+---
+
+## `pm doctor` and the fetch cache
+
+```
+pm doctor
+pm doctor --discover-fields
+```
+
+One command that names its own fix: config, Jira login, projects, custom-field
+IDs, membership (including unclaimed open work), the local model, and the
+cache. `--discover-fields` prints a YAML snippet to paste; it does not write
+the file.
+
+Repeated fetches are cached under `~/.pm/cache` for five minutes. `pm today`
+depends on this to stay fast. `--cached` reuses a hit even if it is stale
+(a plane / offline run); `--refresh` talks to Jira again.
 
 ---
 
@@ -428,12 +503,12 @@ The window and the definition of "in progress" come from the `standup_moved` and
 
 ## A suggested weekly rhythm
 
-- **Each morning:** `pm standup` — what moved yesterday, what's in flight today.
+- **Each morning:** `pm today` — what needs you, what moved, what is aging.
 - **Before sprint planning:** `pm ready` (or `--deep`) to see what's good to pull
   in and what needs work first. Fix the reds, re-run.
 - **Backlog refinement:** `pm lint` for the fast fact-based sweep, then
   `pm review` when you want the model's eyes on titles and acceptance criteria.
-- **End of week:** `pm report` for the director snapshot.
+- **End of week:** `pm report` for the stakeholder snapshot.
 
 ---
 
@@ -464,6 +539,8 @@ pm_helper/
 ├── pm.py                # entry point: routes subcommands, applies --workstream
 ├── core/                # shared plumbing (tested, reused by every command)
 │   ├── config.py        #   loads config, expands ${ENV:VAR}, validates it all
+│   ├── products.py      #   product lookup, Unassigned, --product filter
+│   ├── cache.py         #   local fetch cache (--cached / --refresh)
 │   ├── filters.py       #   plain scope options -> JQL
 │   ├── workstreams.py   #   Component + parent membership -> JQL
 │   ├── sources.py       #   Jira / Confluence / SharePoint fetchers
@@ -476,6 +553,9 @@ pm_helper/
 ├── tests/               # unit tests + an end-to-end run against a fake Jira
 └── commands/
     ├── init.py          # pm init
+    ├── products.py      # pm products
+    ├── doctor.py        # pm doctor
+    ├── today.py         # pm today / pm do
     ├── workstreams.py   # pm workstreams
     ├── report.py        # pm report
     ├── lint.py          # pm lint
@@ -498,8 +578,8 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 `docs/PORTFOLIO_PROPOSALS.md` is the current plan: the next ten features, chosen
 for a PM running several products and the BA who refines with them.
 
-- **Products above workstreams** — a portfolio layer, `--product` everywhere.
-- **`pm today`** — one bounded screen, with a numbered action list.
+- **Products above workstreams** — shipped in 0.4.0.
+- **`pm today`** — shipped in 0.4.0 (`pm do` is preview-only).
 - **`pm capture` / `pm inbox`** — three seconds to file an idea, decide later.
 - **`pm triage`** — what is waiting on a decision from you, with the action.
 - **`pm refine`** — the BA's queue, with drafted titles, criteria and estimates.
@@ -507,7 +587,7 @@ for a PM running several products and the BA who refines with them.
 - **`pm brief`** — meeting prep and debrief, with per-audience memory.
 - **`pm metrics`** — throughput, cycle time, aging work and a plain forecast.
 - **`pm publish` / `pm schedule`** — the weekly update goes out without you.
-- **`pm doctor`** — verify the whole setup, and a cache that makes it all fast.
+- **`pm doctor`** — shipped in 0.4.0, with the fetch cache.
 
 `docs/FEATURE_PROPOSALS.md` holds the earlier, code-first list of twenty; the
 last section of the portfolio document says what happened to each of them.
