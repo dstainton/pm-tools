@@ -30,9 +30,15 @@ jira:
   base_url: "https://<YOUR_ORG>.atlassian.net"
   email: "<YOUR_LOGIN_EMAIL>"
   api_token: "<YOUR_JIRA_API_TOKEN>"   # id.atlassian.com > Security > API tokens
+  # The project holding the work. Every workstream uses this unless it sets its
+  # own `project:`. One place to change if the backlog moves.
+  project: "APS"
   # Fields the light report fetch pulls. Usually no need to change this.
   fields: "summary,status,assignee,updated,duedate,priority,issuetype,labels"
-  max_results: 100
+  # Most issues pm will pull back for a single query, and how many per request.
+  # Results are paged, so raising this only costs time.
+  max_results: 500
+  page_size: 100
 
   # -- Custom field IDs (used by `pm lint`, `pm review`, `pm ready`) -------
   #  These vary by Jira instance. Find them under Jira Settings > Issues >
@@ -125,34 +131,79 @@ standup:
   lookback_days: 1
 
 # ----------------------------------------------------------------------------
+#  5e. Membership — how pm decides which issues belong to a workstream
+# ----------------------------------------------------------------------------
+#  The Jira model this assumes:
+#    * One project (jira.project) holds the work.
+#    * Epics carry the Component(s) that name the workstream.
+#    * Stories, Tasks, Bugs and Sub-tasks may carry a Component too, but often
+#      do not — in which case their parent decides.
+#
+#  So an issue is in a workstream when EITHER it carries one of the
+#  workstream's Components itself, OR it sits under something that does.
+membership:
+  # Issue type(s) that act as the workstream anchor.
+  epic_types: [Epic]
+  # Children with no Component of their own inherit their parent's workstream.
+  inherit_from_parent: true
+  # Set true if a child that names its own Component should be judged on that
+  # alone, instead of also counting under its parent's workstream. Left false so
+  # that mis-tagged work is visible somewhere rather than nowhere.
+  child_component_wins: false
+  # Safety valve for very large workstreams: how many directly tagged issues to
+  # expand sub-tasks for in one query.
+  max_parent_keys: 500
+
+# ----------------------------------------------------------------------------
+#  5f. Scopes — what each command looks at. No JQL required.
+# ----------------------------------------------------------------------------
+#  Each command narrows the workstream's membership with a handful of plain
+#  options. pm turns these into the Jira query for you.
+#
+#  Options:
+#    status              any | open | done | in-progress | todo
+#    sprint              any | open | future | none
+#    assignee            any | me | unassigned | assigned
+#    types               list of issue type names to include
+#    exclude_types       list of issue type names to leave out
+#    labels_any          include only issues with one of these labels
+#    labels_none         leave out issues with any of these labels
+#    updated_within_days / created_within_days / due_within_days   whole days
+#    extra_jql           escape hatch for a filter the options can't express
+#
+#  The values below are pm's defaults, spelled out so they are easy to change.
+#  A single workstream can override any of them with its own `scopes:` block.
+scopes:
+  report:        {sprint: open}                 # in-sprint child work
+  roadmap:       {status: open}                 # the workstream's epics
+  lint:          {status: open}                 # epics + everything beneath
+  review:        {status: open}
+  ready:         {sprint: open, status: open}
+  standup_moved: {updated_within_days: 1}       # --days overrides this
+  standup_wip:   {status: in-progress}
+
+# ----------------------------------------------------------------------------
 #  6. Workstreams — reported and checked separately, in this order
 # ----------------------------------------------------------------------------
-#  Jira model used here:
-#    * APS is the Jira project containing all three workstreams.
-#    * Epics represent features / work packages.
-#    * Component(s) on the Epic define the workstream.
-#    * Stories, Tasks, Bugs, and Sub-tasks inherit workstream membership from
-#      their Epic. They do NOT need the same Component copied onto them.
+#  A workstream needs only a name, an abbreviation, and the Jira Component(s)
+#  that identify it. Everything else is optional.
 #
-#  For an inherited workstream:
-#    jira_project      : Jira project containing the work.
-#    epic_components   : exact Jira Component name(s) that identify its Epics.
-#                        Change these values if your Jira Component names differ.
-#    jira_jql           : extra filter for child work in the report.
-#    roadmap_jql        : extra filter for the workstream Epics themselves.
-#    lint_jql           : extra filter for Epic + descendants checked by lint.
-#    review_jql         : optional; Epic + descendants. Falls back to lint_jql.
-#    ready_jql          : optional; child work only. Falls back to jira_jql.
-#    standup_moved_jql  : child work only; use {days}. Falls back to lint_jql.
-#    standup_wip_jql    : child work only. Falls back to jira_jql.
+#    name               how it appears in reports
+#    abbrev             what you pass to --workstream
+#    components         exact Jira Component name(s) — must match Jira
+#    project            only if this stream lives outside jira.project
+#    confluence_space   space key holding its decisions / risks
+#    confluence_labels  which labels to gather from that space
+#    sharepoint_query   search term for its documents
+#    scopes             per-workstream overrides of the section above
 #
-#  pm first resolves the matching Epic keys, then uses Jira's parentEpic JQL
-#  operator to include their Stories/Tasks and nested Sub-tasks. The resolved
-#  Epic list is cached for the duration of a command, so each workstream only
-#  needs one discovery query per run.
+#  Add or remove one without hand-editing this file:
+#    pm workstreams add --name "Billing Platform" --abbrev BIL \
+#                       --components "Billing Platform"
+#    pm workstreams remove BIL
 #
-#  Legacy workstreams are still supported: omit jira_project/epic_components
-#  and write each *_jql value as a complete JQL query, as before.
+#  Then confirm Jira agrees with what you typed:
+#    pm workstreams check --show-jql
 #
 #  Target a single stream on any command with:  --workstream SDX
 # ----------------------------------------------------------------------------
@@ -160,39 +211,24 @@ workstreams:
 
   - name: "Secure Data Exchange"
     abbrev: "SDX"
-    jira_project: "APS"
-    epic_components: ["Secure Data Exchange"]
-    jira_jql: 'sprint in openSprints()'
-    roadmap_jql: 'statusCategory != Done'
-    confluence_cql: 'space = SDX AND label in ("decision","risk","dependency")'
+    components: ["Secure Data Exchange"]
+    confluence_space: "SDX"
+    confluence_labels: [decision, risk, dependency]
     sharepoint_query: "SDX"
-    lint_jql: 'statusCategory != Done'
-    standup_moved_jql: 'updated >= -{days}d'
-    standup_wip_jql: 'statusCategory = "In Progress"'
 
   - name: "API Platform"
     abbrev: "APS"
-    jira_project: "APS"
-    epic_components: ["API Platform"]
-    jira_jql: 'sprint in openSprints()'
-    roadmap_jql: 'statusCategory != Done'
-    confluence_cql: 'space = APS AND label in ("decision","risk","dependency")'
+    components: ["API Platform"]
+    confluence_space: "APS"
+    confluence_labels: [decision, risk, dependency]
     sharepoint_query: "API Platform"
-    lint_jql: 'statusCategory != Done'
-    standup_moved_jql: 'updated >= -{days}d'
-    standup_wip_jql: 'statusCategory = "In Progress"'
 
   - name: "Integration Toolkit"
     abbrev: "ITK"
-    jira_project: "APS"
-    epic_components: ["Integration Toolkit"]
-    jira_jql: 'sprint in openSprints()'
-    roadmap_jql: 'statusCategory != Done'
-    confluence_cql: 'space = ITK AND label in ("decision","risk","dependency")'
+    components: ["Integration Toolkit"]
+    confluence_space: "ITK"
+    confluence_labels: [decision, risk, dependency]
     sharepoint_query: "Integration Toolkit"
-    lint_jql: 'statusCategory != Done'
-    standup_moved_jql: 'updated >= -{days}d'
-    standup_wip_jql: 'statusCategory = "In Progress"'
 
 # ----------------------------------------------------------------------------
 #  7. Output (used by `pm report`)

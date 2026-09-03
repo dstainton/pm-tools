@@ -202,10 +202,9 @@ def run(cfg, args):
     for asp in aspects:
         results = []
         for ws in cfg["_workstreams"]:
-            jql = workstreams.resolve_jql(
-                cfg["jira"], ws, "review_jql", fallback_field="lint_jql")
+            jql = workstreams.scope_jql(cfg, ws, "review")
             if not jql:
-                print(f"Skipping {ws['abbrev']}: no matching workstream epics/review scope.")
+                print(f"Skipping {ws['abbrev']}: nothing in its review scope.")
                 results.append((ws, [], {}))
                 continue
 

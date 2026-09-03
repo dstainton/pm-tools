@@ -50,7 +50,7 @@ def build_report(cfg, sections, all_items, scope_note):
 
 def run(cfg, args):
     """Entry point called by pm.py."""
-    workstreams = cfg["_workstreams"]
+    selected = cfg["_workstreams"]
 
     state_path = cfg["output"].get("state_file", "report_state.json")
     previous = state.load_state(state_path)
@@ -59,21 +59,22 @@ def run(cfg, args):
     sections = []
     all_items = []
 
-    for ws in workstreams:
+    for ws in selected:
         prefix = ws["abbrev"]
         print(f"Gathering: {ws['name']} ({prefix}) ...")
 
         items = []
         idx = 1
-        sprint_jql = workstreams.resolve_jql(cfg["jira"], ws, "jira_jql")
-        roadmap_jql = workstreams.resolve_jql(cfg["jira"], ws, "roadmap_jql")
+        sprint_jql = workstreams.scope_jql(cfg, ws, "report")
+        roadmap_jql = workstreams.scope_jql(cfg, ws, "roadmap")
         got, idx = sources.fetch_jira(cfg["jira"], sprint_jql, prefix, idx)
         items += got
         got, idx = sources.fetch_jira(cfg["jira"], roadmap_jql, prefix, idx)
         items += got
         idx = 1
         got, idx = sources.fetch_confluence(cfg["confluence"],
-                                            ws.get("confluence_cql"), prefix, idx)
+                                            workstreams.confluence_cql(ws),
+                                            prefix, idx)
         items += got
         idx = 1
         got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
@@ -99,9 +100,9 @@ def run(cfg, args):
     state.save_state(state_path, new_state)
 
     scope_note = ""
-    if len(workstreams) < len(cfg["workstreams"]):
+    if len(selected) < len(cfg["workstreams"]):
         scope_note = (" Scope: "
-                      + ", ".join(w["abbrev"] for w in workstreams) + ".")
+                      + ", ".join(w["abbrev"] for w in selected) + ".")
 
     report = build_report(cfg, sections, all_items, scope_note)
     out_path = cfg["output"]["file"].format(date=dt.date.today().isoformat())

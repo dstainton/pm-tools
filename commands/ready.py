@@ -170,16 +170,15 @@ def run(cfg, args):
 
     results = []
     for ws in cfg["_workstreams"]:
-        jql = workstreams.resolve_jql(
-            cfg["jira"], ws, "ready_jql", fallback_field="jira_jql")
+        jql = workstreams.scope_jql(cfg, ws, "ready")
         if not jql:
-            print(f"Skipping {ws['abbrev']}: no matching workstream epics/ready scope.")
+            print(f"Skipping {ws['abbrev']}: nothing in its ready scope.")
             results.append((ws, []))
             continue
 
         print(f"Checking readiness: {ws['name']} ({ws['abbrev']}) ...")
         issues = sources.fetch_jira_detailed(cfg["jira"], jql)
-        component_inherited = workstreams.uses_epic_component_scope(ws)
+        component_inherited = workstreams.uses_component_scope(cfg, ws)
 
         deep_map = _gather_deep(cfg, ws, issues) if deep else {}
 
