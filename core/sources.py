@@ -5,6 +5,11 @@ Two flavours of Jira fetch live here:
   * fetch_jira_detailed - richer records (components, epic, dates, estimate,
                           acceptance criteria) used by the lint command.
 
+All of them go through `search_issues`, which talks to Jira Cloud's current
+search endpoint (`/rest/api/3/search/jql`) and follows `nextPageToken` until the
+query is exhausted or the configured cap is reached. The endpoint this tool used
+to call, `/rest/api/3/search`, has been removed from Jira Cloud.
+
 Nothing here reaches the public internet except your own tenants.
 """
 
@@ -75,75 +80,129 @@ def make_item(ref, source, title, detail, url, meta="", uid=None, watch=""):
 
 
 # ---------------------------------------------------------------------------
-#  Jira — workstream discovery
+#  Jira — the search call every fetch is built on
 # ---------------------------------------------------------------------------
 
-def fetch_jira_keys(cfg, jql):
-    """Return all Jira issue keys matching JQL, paging until exhausted.
+def _auth(cfg):
+    return (cfg["email"], cfg["api_token"])
 
-    This is used to discover the Epics that define a workstream. It deliberately
-    fetches only keys, so resolving workstream membership stays cheap even when
-    the normal Jira max_results setting is conservative.
+
+def _api(cfg, path):
+    return f"{cfg['base_url'].rstrip('/')}/rest/api/3/{path.lstrip('/')}"
+
+
+def _field_list(fields):
+    """Accept a list or a comma-separated string; the API wants a list."""
+    if not fields:
+        return ["key"]
+    if isinstance(fields, str):
+        return [f.strip() for f in fields.split(",") if f.strip()]
+    return list(fields)
+
+
+def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
+                  page_size=None):
+    """Run a JQL search, following nextPageToken, and return the raw issues.
+
+    `max_items` caps how much we pull for one query (defaults to the config's
+    `max_results`); pass 0 or None-with-`unlimited` semantics via
+    `max_items=0` to fetch everything the query matches.
     """
     if not jql:
         return []
 
-    url = f"{cfg['base_url'].rstrip('/')}/rest/api/3/search"
-    start_at = 0
-    page_size = min(int(cfg.get("max_results", 100) or 100), 100)
-    keys = []
+    if max_items is None:
+        max_items = int(cfg.get("max_results", 100) or 100)
+    page_size = int(page_size or cfg.get("page_size", 100) or 100)
+    if max_items:
+        page_size = min(page_size, max_items)
 
+    url = _api(cfg, "search/jql")
+    issues, token = [], None
     while True:
-        resp = requests.get(
-            url,
-            params={
-                "jql": jql,
-                "fields": "key",
-                "startAt": start_at,
-                "maxResults": page_size,
-            },
-            auth=(cfg["email"], cfg["api_token"]),
-            headers={"Accept": "application/json"},
-            timeout=60,
-        )
+        # POST so a long JQL string (a list of epic keys, say) can't blow the
+        # URL length limit.
+        body = {"jql": jql, "fields": _field_list(fields),
+                "maxResults": page_size}
+        if expand:
+            body["expand"] = expand
+        if token:
+            body["nextPageToken"] = token
+
+        resp = requests.post(url, json=body, auth=_auth(cfg),
+                             headers={"Accept": "application/json"}, timeout=60)
         resp.raise_for_status()
         data = resp.json()
-        issues = data.get("issues", [])
-        keys.extend(iss["key"] for iss in issues if iss.get("key"))
 
-        if not issues:
+        page = data.get("issues") or []
+        issues.extend(page)
+        token = data.get("nextPageToken")
+        if not token or not page:
             break
-        start_at += len(issues)
-        total = data.get("total")
-        if total is not None and start_at >= total:
-            break
-        if len(issues) < page_size:
+        if max_items and len(issues) >= max_items:
             break
 
-    return keys
+    return issues[:max_items] if max_items else issues
+
+
+def approximate_count(cfg, jql):
+    """How many issues a query matches, without pulling them all back."""
+    if not jql:
+        return 0
+    resp = requests.post(_api(cfg, "search/approximate-count"),
+                         json={"jql": jql}, auth=_auth(cfg),
+                         headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return int(resp.json().get("count", 0))
+
+
+def fetch_myself(cfg):
+    """Who the configured credentials belong to — used as a connection check."""
+    resp = requests.get(_api(cfg, "myself"), auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_project_components(cfg, project):
+    """Component names defined on a project, so config typos can be caught."""
+    resp = requests.get(_api(cfg, f"project/{project}/components"),
+                        auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return [c.get("name") for c in resp.json() if c.get("name")]
+
+
+# ---------------------------------------------------------------------------
+#  Jira — workstream discovery
+# ---------------------------------------------------------------------------
+
+def fetch_jira_keys(cfg, jql):
+    """Return every Jira issue key matching JQL, paging until exhausted.
+
+    Used to discover the Epics (and directly tagged issues) that define a
+    workstream, so it deliberately ignores the item cap and fetches only keys.
+    """
+    return [iss["key"] for iss in
+            search_issues(cfg, jql, fields=["key"], max_items=0)
+            if iss.get("key")]
 
 
 # ---------------------------------------------------------------------------
 #  Jira — light fetch for the report
 # ---------------------------------------------------------------------------
 
+DEFAULT_REPORT_FIELDS = ("summary,status,assignee,updated,duedate,priority,"
+                         "issuetype,labels")
+
+
 def fetch_jira(cfg, jql, tag_prefix, start_index):
     """Return (items, next_index) for a Jira JQL query."""
     if not jql:
         return [], start_index
 
-    url = f"{cfg['base_url'].rstrip('/')}/rest/api/3/search"
-    resp = requests.get(
-        url,
-        params={"jql": jql,
-                "fields": cfg["fields"],
-                "maxResults": cfg["max_results"]},
-        auth=(cfg["email"], cfg["api_token"]),
-        headers={"Accept": "application/json"},
-        timeout=60,
-    )
-    resp.raise_for_status()
-    issues = resp.json().get("issues", [])
+    issues = search_issues(cfg, jql,
+                           fields=cfg.get("fields") or DEFAULT_REPORT_FIELDS)
 
     items, idx = [], start_index
     for iss in issues:
@@ -194,20 +253,8 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
         if extra and extra not in fields:
             fields.append(extra)
 
-    url = f"{cfg['base_url'].rstrip('/')}/rest/api/3/search"
-    resp = requests.get(
-        url,
-        params={"jql": jql,
-                "fields": ",".join(fields),
-                "maxResults": max_results or cfg["max_results"]},
-        auth=(cfg["email"], cfg["api_token"]),
-        headers={"Accept": "application/json"},
-        timeout=60,
-    )
-    resp.raise_for_status()
-
     out = []
-    for iss in resp.json().get("issues", []):
+    for iss in search_issues(cfg, jql, fields=fields, max_items=max_results):
         f = iss.get("fields", {})
 
         # Epic / parent link — team-managed uses "parent", classic a customfield.
@@ -253,20 +300,10 @@ def fetch_jira_cards(cfg, jql, max_results=None):
     if not jql:
         return []
 
-    url = f"{cfg['base_url'].rstrip('/')}/rest/api/3/search"
-    resp = requests.get(
-        url,
-        params={"jql": jql,
-                "fields": "summary,status,assignee,issuetype,updated",
-                "maxResults": max_results or cfg["max_results"]},
-        auth=(cfg["email"], cfg["api_token"]),
-        headers={"Accept": "application/json"},
-        timeout=60,
-    )
-    resp.raise_for_status()
+    fields = ["summary", "status", "assignee", "issuetype", "updated"]
 
     out = []
-    for iss in resp.json().get("issues", []):
+    for iss in search_issues(cfg, jql, fields=fields, max_items=max_results):
         f = iss.get("fields", {})
         out.append({
             "key": iss["key"],
@@ -279,6 +316,15 @@ def fetch_jira_cards(cfg, jql, max_results=None):
             "updated": f.get("updated"),
         })
     return out
+
+
+def fetch_issue_changelog(cfg, key):
+    """One issue's change history, for sites that don't expand it on search."""
+    resp = requests.get(_api(cfg, f"issue/{key}/changelog"), auth=_auth(cfg),
+                        params={"maxResults": 100},
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return resp.json().get("values") or []
 
 
 def fetch_jira_changelog(cfg, jql, since_days, max_results=None):
@@ -295,18 +341,9 @@ def fetch_jira_changelog(cfg, jql, since_days, max_results=None):
     import datetime as _dt
     cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=since_days)
 
-    url = f"{cfg['base_url'].rstrip('/')}/rest/api/3/search"
-    resp = requests.get(
-        url,
-        params={"jql": jql,
-                "fields": "summary,status,assignee,issuetype",
-                "expand": "changelog",
-                "maxResults": max_results or cfg["max_results"]},
-        auth=(cfg["email"], cfg["api_token"]),
-        headers={"Accept": "application/json"},
-        timeout=60,
-    )
-    resp.raise_for_status()
+    fields = ["summary", "status", "assignee", "issuetype"]
+    issues = search_issues(cfg, jql, fields=fields, expand="changelog",
+                           max_items=max_results)
 
     def _parse(ts):
         if not ts:
@@ -322,10 +359,14 @@ def fetch_jira_changelog(cfg, jql, since_days, max_results=None):
         return None
 
     out = []
-    for iss in resp.json().get("issues", []):
+    for iss in issues:
         f = iss.get("fields", {})
+        histories = (iss.get("changelog") or {}).get("histories")
+        if histories is None:
+            # Some sites do not expand the changelog on search; ask per issue.
+            histories = fetch_issue_changelog(cfg, iss["key"])
         transitions = []
-        for hist in (iss.get("changelog", {}) or {}).get("histories", []):
+        for hist in histories or []:
             when = _parse(hist.get("created"))
             if when is None or when < cutoff:
                 continue
