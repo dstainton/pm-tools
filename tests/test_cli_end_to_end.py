@@ -143,9 +143,14 @@ CONFIG = """\
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
-  temperature: 0.2
+  temperature: 0.4
+  json_temperature: 0.2
+  top_p: 0.8
+  top_k: 20
+  presence_penalty: 1.5
   max_tokens: 500
   timeout: 30
+  enable_thinking: false
 
 jira:
   base_url: "{url}"
@@ -181,7 +186,7 @@ lint:
   require_estimate: true
 
 review:
-  batch_size: 5
+  batch_size: 8
 
 ready:
   blocking_criteria:

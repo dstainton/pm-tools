@@ -161,15 +161,26 @@ On the Windows Ryzen AI laptop, the bundled PowerShell scripts set up
 .\setup-windows-qwen-small.ps1
 .\setup-windows-qwen-small.ps1 -StartServer
 
-# Larger 27B model for use when bandwidth is not constrained:
+# The model the prompts are written for — Qwen3.8-27B Q3_K_M, about 13.5 GB:
 .\setup-windows-qwen-large.ps1
 .\setup-windows-qwen-large.ps1 -StartServer
 ```
 
-Both scripts expose the model as `qwen-local`, so `pm` does not need a config
-change when you switch between the small and large model. Other
-OpenAI-compatible local servers can still be used by changing `model.endpoint`
-and `model.name`.
+Both scripts expose the model as `qwen-local` and start llama.cpp with thinking
+**off** (`--reasoning-budget 0`). Qwen3.8 thinks by default; a Q3_K_M run that
+is allowed to think will spend its token budget inside `<think>` and give
+`pm review` empty or half-cut JSON. `pm` also sends
+`chat_template_kwargs.enable_thinking: false` and a `/no_think` prefix on every
+call, so a server started by hand still behaves.
+
+The prompts themselves are short, numbered, and end with a fill-in skeleton or a
+worked JSON example — the shape Qwen3.8 Q3_K_M follows. Sampling matches Qwen's
+instruct profile (temperature 0.4, `top_p` 0.8, `top_k` 20, `presence_penalty`
+1.5), with a cooler `json_temperature` of 0.2 for `pm review`.
+
+Other OpenAI-compatible local servers can still be used by changing
+`model.endpoint` and `model.name`. If you turn thinking back on, set
+`model.enable_thinking: true` so `pm` stops sending `/no_think`.
 
 ---
 
@@ -509,8 +520,9 @@ a config sketch for each. The short list:
 - **Custom field IDs matter.** If story points or start date point at the wrong
   field ID, those checks silently skip. Verify against the field list above.
 - **Deterministic vs. inference.** `pm lint` and the fast `pm ready` are rules
-  you can trust. `pm report`, `pm review`, and `pm ready --deep` use the model —
-  read them before acting. Quantized local models save memory but may be less sharp than larger models.
+  you can trust. `pm report`, `pm review`, and `pm ready --deep` use Qwen3.8
+  Q3_K_M — read them before acting. A 3-bit quant is smaller and a bit less
+  sharp than Q4; keep thinking off and `review.batch_size` at 8 or below.
 - **Speed.** `pm lint` is instant. Model command speed depends heavily on the local model and hardware; `--deep` and `review all` make several
   calls, so scope them with `--workstream` when you want a quick pass.
 

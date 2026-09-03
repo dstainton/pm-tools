@@ -11,17 +11,27 @@
 # ============================================================================
 
 # ----------------------------------------------------------------------------
-#  1. The local model (llama.cpp or another OpenAI-compatible server)
+#  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
 # ----------------------------------------------------------------------------
-#  The bundled Windows setup scripts expose both the small test model and the
-#  larger Qwen model using the same alias, so pm does not need to change when
-#  you swap models.
+#  Prompts and these sampling values assume Qwen3.8 in instruct (non-thinking)
+#  mode. Thinking is off: a Q3_K_M run that is allowed to think will spend its
+#  token budget inside <think> and return empty or half-cut JSON.
+#
+#  Official Qwen instruct profile, with a cooler temperature so a 3-bit quant
+#  stays on the schema. json_temperature is used only by `pm review` / `--deep`.
+#  The small Qwen3-4B setup script uses the same alias, so swapping models does
+#  not require a config change.
 model:
   endpoint: "http://127.0.0.1:8080/v1/chat/completions"
   name: "qwen-local"
-  temperature: 0.2
-  max_tokens: 4000
+  temperature: 0.4
+  json_temperature: 0.2
+  top_p: 0.8
+  top_k: 20
+  presence_penalty: 1.5
+  max_tokens: 2048
   timeout: 600
+  enable_thinking: false
 
 # ----------------------------------------------------------------------------
 #  2. Jira (Cloud)
@@ -103,9 +113,9 @@ lint:
 #  5b. Review (used by `pm review`) — model-based judgement checks
 # ----------------------------------------------------------------------------
 review:
-  # How many issues to send to the model per call. Smaller = more reliable on
-  # a modest laptop; larger = fewer calls. 10-15 is a good balance.
-  batch_size: 15
+  # How many issues to send to the model per call. Qwen3.8 Q3_K_M keeps to
+  # the JSON schema more reliably on small batches; 6-8 is the sweet spot.
+  batch_size: 8
 
 # ----------------------------------------------------------------------------
 #  5c. Ready (used by `pm ready`) — the Definition of Ready gate

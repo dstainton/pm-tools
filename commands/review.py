@@ -24,41 +24,65 @@ from core import sources, model, workstreams
 
 
 # ---------------------------------------------------------------------------
-#  Prompts — each asks for a JSON array so the output is machine-readable
+#  Prompts — short, one example, JSON last. Written for Qwen3.8 Q3_K_M.
 # ---------------------------------------------------------------------------
+# A 3-bit Qwen3.8 follows a tiny schema and a worked example much more
+# reliably than a long "be a meticulous PM" brief. Both prompts keep the
+# phrase "JSON array" so tests and the fake model can recognise them.
 
-TITLES_PROMPT = """You are a meticulous product manager reviewing Jira issue \
-titles for clarity. A good title names the WHAT and, where useful, the WHO or \
-WHERE, so a teammate understands the work without opening the ticket.
+TITLES_PROMPT = """\
+Flag only Jira titles a teammate cannot understand without opening the ticket.
 
-You will be given a numbered list of issues (key and title). Identify only the \
-titles that are genuinely ambiguous, vague, or unclear — do NOT flag titles \
-that are already clear. For each one you flag, return an object with:
-  "key":      the issue key exactly as given
-  "problem":  one short sentence on why the title is unclear
-  "suggestion": a clearer rewritten title (keep it concise)
+A good title names the work. Flag a title if it is one or two vague words, \
+or if it does not say what will change. Do not flag a title that is already \
+clear.
 
-Return ONLY a JSON array of these objects, nothing else. If every title is \
-clear, return an empty array: []
-Do not invent issues or keys that are not in the list."""
+Return a JSON array. Each object has exactly three keys:
+- "key": the issue key, copied exactly
+- "problem": one short sentence
+- "suggestion": a clearer title
 
-CRITERIA_PROMPT = """You are a meticulous product manager reviewing whether \
-user stories have complete, testable acceptance criteria (AC). Good AC state \
-observable outcomes — what must be true for the story to be done — and cover \
-the main success path plus obvious edge/error cases.
+If nothing is unclear, return []
 
-You will be given a numbered list of stories, each with its title and its \
-current acceptance criteria / description text. Flag only stories whose AC are \
-MISSING, vague, or clearly incomplete — do NOT flag stories whose AC are \
-already solid. For each one you flag, return an object with:
-  "key":     the issue key exactly as given
-  "problem": one short sentence on what is missing or weak
-  "missing": a short list (as a single string) of the specific criteria you \
-would add
+Example input:
+1. APS-11: Fix stuff
+2. APS-10: Publish exchange status endpoint
 
-Return ONLY a JSON array of these objects, nothing else. If every story's AC \
-are solid, return an empty array: []
-Do not invent issues or keys that are not in the list."""
+Example JSON array:
+[{"key":"APS-11","problem":"Does not say what to fix.","suggestion":"Fix retry handling in the exchange client"}]
+
+Do not add keys that are not in the list. Do not write any text outside the \
+JSON array.
+"""
+
+CRITERIA_PROMPT = """\
+Flag only stories whose acceptance criteria are missing, vague, or not \
+testable. Good criteria state an observable outcome and cover the happy path \
+plus one obvious error case. Do not flag a story whose criteria are already \
+solid.
+
+Return a JSON array. Each object has exactly three keys:
+- "key": the issue key, copied exactly
+- "problem": one short sentence
+- "missing": the criteria you would add, as one short string
+
+If every story is solid, return []
+
+Example input:
+1. APS-20: Rate limiting for public endpoints
+   Acceptance criteria / description: (none provided)
+2. APS-10: Publish exchange status endpoint
+   Acceptance criteria / description: Acceptance criteria: returns current status.
+
+Example JSON array:
+[{"key":"APS-20","problem":"No acceptance criteria.","missing":"Given a tenant over the limit, requests are rejected with 429; under the limit, they succeed."}]
+
+Do not add keys that are not in the list. Do not write any text outside the \
+JSON array.
+"""
+
+TITLES_USER_TAIL = "Return the JSON array now."
+CRITERIA_USER_TAIL = "Return the JSON array now."
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +98,8 @@ def build_titles_input(issues):
     lines = []
     for n, iss in enumerate(issues, 1):
         lines.append(f"{n}. {iss['key']}: {iss['summary']}")
+    lines.append("")
+    lines.append(TITLES_USER_TAIL)
     return "\n".join(lines)
 
 
@@ -83,9 +109,12 @@ def build_criteria_input(issues):
         ac = iss["acceptance_criteria"].strip()
         if not ac:
             # Fall back to the description so the model has something to judge.
-            ac = sources.short(iss["description"], 500) or "(none provided)"
+            # Keep it short: Q3_K_M loses the instruction if the body is long.
+            ac = sources.short(iss["description"], 280) or "(none provided)"
         lines.append(f"{n}. {iss['key']}: {iss['summary']}\n"
                      f"   Acceptance criteria / description: {ac}")
+    lines.append("")
+    lines.append(CRITERIA_USER_TAIL)
     return "\n\n".join(lines)
 
 
@@ -193,7 +222,7 @@ def build_markdown(cfg, aspect, results, any_errors):
 
 def run(cfg, args):
     review_cfg = cfg.get("review", {})
-    batch_size = review_cfg.get("batch_size", 15)
+    batch_size = review_cfg.get("batch_size", 8)
     aspect = getattr(args, "aspect", "all")
     aspects = ["titles", "criteria"] if aspect == "all" else [aspect]
 

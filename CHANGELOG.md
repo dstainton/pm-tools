@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.1 - 2026-09-03
+
+### Prompts and sampling for Qwen3.8-27B Q3_K_M
+
+- Report and review prompts rewritten for Qwen3.8 in instruct (non-thinking)
+  mode: short numbered rules, a fill-in heading skeleton, and one worked JSON
+  example. Format goes last so a 3-bit quant does not lose it.
+- Every model call turns thinking off (`chat_template_kwargs.enable_thinking:
+  false` plus a `/no_think` prefix). Leftover `<think>` blocks are stripped
+  before JSON is parsed.
+- Default sampling matches Qwen's instruct profile, with a cooler
+  `json_temperature` of 0.2 for `pm review`. `review.batch_size` dropped from
+  15 to 8; report material is capped so the prompt stays short.
+- `setup-windows-qwen-large.ps1` now downloads Qwen3.8-27B Q3_K_M and starts
+  llama.cpp with `--jinja --reasoning-budget 0`. The small-model script uses
+  the same thinking-off flags.
+
 ## 0.3.0 - 2026-09-03
 
 ### Jira Cloud search API (breaking, upstream)

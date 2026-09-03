@@ -88,8 +88,10 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\setup-windows-qwen-large.ps1 -StartServer
 ```
 
-This uses Qwen3.8-27B Q4_K_M. Both scripts expose `qwen-local`, so the Python
-CLI does not need to change when you switch models.
+This uses Qwen3.8-27B Q3_K_M (~13.5 GB), which is the model the prompts are
+written for. Both scripts expose `qwen-local` and start the server with
+thinking off (`--reasoning-budget 0`), so the Python CLI does not need to
+change when you switch models.
 
 The server is intentionally bound to `127.0.0.1` rather than `0.0.0.0`.
 

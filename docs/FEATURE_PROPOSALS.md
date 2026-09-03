@@ -20,9 +20,10 @@ Two constraints shape every proposal here:
 `pm` is a single-user command-line assistant for a product manager running
 several workstreams out of one Jira project. It reads Jira, Confluence and
 optionally SharePoint, and writes Markdown a human is meant to read. Where
-judgement is needed it asks a **local** OpenAI-compatible model (llama.cpp with
-Qwen, per the bundled Windows setup scripts), so no backlog content leaves the
-machine.
+judgement is needed it asks a **local** OpenAI-compatible model (llama.cpp
+serving Qwen3.8-27B Q3_K_M, thinking off), so no backlog content leaves the
+machine. Prompts are short, numbered, and end with a skeleton or a worked
+JSON example — the shape that quant follows.
 
 | Command | Model? | Answers |
 |---------|--------|---------|
@@ -357,7 +358,8 @@ dependency.
 
 #### 20. Model-call resilience
 
-`core/model.py` skips a batch when JSON parsing fails. Better: retry once at half
+`core/model.py` now strips Qwen3.8 `<think>` blocks and retries JSON at a cooler
+temperature, but a batch that still fails is skipped. Better: retry once at half
 the batch size, then fall back to per-issue calls, and cache successful
 responses by content hash so a re-run after a crash is instant. Touches
 `core/model.py` only.

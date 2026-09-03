@@ -153,7 +153,7 @@ def _gather_deep(cfg, ws, issues):
     """Run model reviews for one workstream; return {issue_key: {aspect: reason}}."""
     deep = {}
     model_cfg = cfg["model"]
-    batch = cfg.get("review", {}).get("batch_size", 15)
+    batch = cfg.get("review", {}).get("batch_size", 8)
     for aspect in ("titles", "criteria"):
         findings, _errors = review.review_aspect(model_cfg, aspect, issues, batch)
         for f in findings:
