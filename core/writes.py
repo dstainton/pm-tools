@@ -63,10 +63,16 @@ def should_write(args):
 def execute(cfg, action):
     """Send one action and return the response JSON (or {})."""
     jira = cfg["jira"]
-    url = jira["base_url"].rstrip("/") + action["path"]
+    if action.get("url"):
+        url = action["url"]
+    else:
+        url = jira["base_url"].rstrip("/") + action["path"]
     method = (action.get("method") or "PUT").upper()
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
-    auth = (jira["email"], jira["api_token"])
+    if action.get("auth") == "none":
+        auth = None
+    else:
+        auth = (jira["email"], jira["api_token"])
     timeout = 60
     if method == "PUT":
         resp = requests.put(url, json=action.get("body") or {},
@@ -97,8 +103,11 @@ def log_write(cfg, action, result=None, error=None):
     }
     if error:
         record["error"] = str(error)
-    if result and isinstance(result, dict) and result.get("key"):
-        record["created"] = result.get("key")
+    if result and isinstance(result, dict):
+        if result.get("key"):
+            record["created"] = result.get("key")
+        if result.get("id") and action.get("kind", "").startswith("publish"):
+            record["published"] = result.get("id")
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(record) + "\n")
 
@@ -134,7 +143,7 @@ def apply_action(cfg, args, action):
         result = execute(cfg, action)
     except requests.RequestException as err:
         log_write(cfg, action, error=err)
-        sys.exit(f"Jira write failed: {err}")
+        sys.exit(f"Write failed: {err}")
     log_write(cfg, action, result=result)
     created = (result or {}).get("key")
     if created:

@@ -69,7 +69,11 @@ def backlog():
         {"key": "APS-11", "project": "APS", "issuetype": "Task",
          "summary": "Fix stuff", "components": [], "parent": "APS-1",
          "status_name": "In Progress", "status_category": "In Progress",
-         "sprint": "open", "assignee": "B. Ray", "updated": stamp(1)},
+         "sprint": "open", "assignee": "B. Ray", "updated": stamp(1),
+         "changelog": [
+             {"created": stamp(19), "author": {"displayName": "B. Ray"},
+              "items": [{"field": "status", "fromString": "To Do",
+                         "toString": "In Progress"}]}]},
         # A sub-task two levels below the Epic.
         {"key": "APS-12", "project": "APS", "issuetype": "Sub-task",
          "summary": "Wire retry handling into the client SDK", "components": [],
@@ -114,7 +118,24 @@ def backlog():
          "summary": "Retire the legacy handshake", "components": [],
          "parent": "APS-2", "status_name": "Done", "status_category": "Done",
          "sprint": None, "story_points": 1, "description": AC,
-         "updated": stamp(30)},
+         "updated": stamp(30), "changelog": [
+             {"created": stamp(45), "author": {"displayName": "C. Diaz"},
+              "items": [{"field": "status", "fromString": "To Do",
+                         "toString": "In Progress"}]},
+             {"created": stamp(30), "author": {"displayName": "C. Diaz"},
+              "items": [{"field": "status", "fromString": "In Progress",
+                         "toString": "Done"}]}]},
+        {"key": "APS-61", "project": "APS", "issuetype": "Story",
+         "summary": "Ship the exchange retry budget", "components": [],
+         "parent": "APS-1", "status_name": "Done", "status_category": "Done",
+         "sprint": None, "story_points": 5, "description": AC,
+         "updated": stamp(5), "changelog": [
+             {"created": stamp(12), "author": {"displayName": "A. Lee"},
+              "items": [{"field": "status", "fromString": "To Do",
+                         "toString": "In Progress"}]},
+             {"created": stamp(5), "author": {"displayName": "A. Lee"},
+              "items": [{"field": "status", "fromString": "In Progress",
+                         "toString": "Done"}]}]},
     ]
 
 
@@ -221,6 +242,18 @@ triage:
   new_bugs_within_days: 1
   in_sprint_untouched_days: 3
   overdue: true
+
+publish:
+  confluence:
+    enabled: true
+    space: "APS"
+    parent_page: "Weekly Reports"
+  teams:
+    enabled: true
+    webhook: "{url}/teams/webhook"
+
+metrics:
+  weeks: 8
 
 membership:
 {membership}
@@ -794,6 +827,91 @@ class ProductCheckTests(CliTestCase):
         self.assertIn("Team project: APS", out)
         self.assertIn("components name products and workstreams", out)
         self.assertIn("Setup looks good", out)
+
+
+class MetricsTests(CliTestCase):
+    def test_metrics_counts_done_work_and_writes_json(self):
+        out = self.run_pm("metrics", "--weeks", "8", "-w", "SDX")
+        self.assertIn("Delivery metrics", out)
+        self.assertIn("SDX", out)
+        self.assertIn("Throughput by week", out)
+        text = self.read_output(r"metrics_.*\.md")
+        self.assertIn("APS-11", text)   # aging in-flight work
+        payload = self.run_pm("metrics", "--json", "--weeks", "8", "-w", "APS")
+        self.assertIn("metrics_", payload)
+        import json
+        files = [f for f in os.listdir(self.dir)
+                 if f.startswith("metrics_") and f.endswith(".json")]
+        with open(os.path.join(self.dir, files[0]), encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual(data["weeks"], 8)
+        done = sum(b["done"] for b in data["products"][0]["workstreams"][0]["throughput"])
+        self.assertGreaterEqual(done, 1)
+
+
+class BriefTests(CliTestCase):
+    def test_brief_is_per_audience(self):
+        out = self.run_pm("brief", "--for", "standup", "--product", "IP", "-w", "SDX")
+        self.assertIn("Brief — standup", out)
+        self.assertIn("first time with this audience", out)
+        self.assertTrue(os.path.exists(
+            os.path.join(self.dir, "briefs", "standup.json")))
+        second = self.run_pm("brief", "--for", "standup", "-w", "SDX")
+        self.assertIn("since ", second)
+
+    def test_debrief_extracts_and_apply_dry_run_creates_nothing(self):
+        notes = os.path.join(self.dir, "notes.md")
+        with open(notes, "w", encoding="utf-8") as fh:
+            fh.write("We agreed to rotate certificates by 17 Sep.\n")
+        out = self.run_pm("brief", "--debrief", notes, "--for", "standup")
+        self.assertIn("Rotate certificates by 17 Sep", out)
+        self.assertIn("Book the rotation window", out)
+        before = [c for c in self.jira.calls if c[0] == "POST"
+                  and str(c[1]).rstrip("/") == "/rest/api/3/issue"]
+        preview = self.run_pm("brief", "--debrief", notes, "--apply", "--dry-run")
+        self.assertIn("nothing was sent", preview)
+        after = [c for c in self.jira.calls if c[0] == "POST"
+                 and str(c[1]).rstrip("/") == "/rest/api/3/issue"]
+        self.assertEqual(len(after), len(before))
+
+
+class PublishTests(CliTestCase):
+    def test_publish_dry_run_hits_neither_destination(self):
+        path = os.path.join(self.dir, "update.md")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("# Weekly State-of-Product Report\n\nHello directors.\n")
+        before = list(self.jira.calls)
+        out = self.run_pm("publish", path, "--dry-run")
+        self.assertIn("Would POST", out)
+        self.assertIn("nothing was sent", out)
+        new = self.jira.calls[len(before):]
+        posts = [c for c in new if c[0] == "POST"]
+        self.assertEqual(posts, [])
+
+    def test_report_publish_yes_sends_to_confluence_and_teams(self):
+        out = self.run_pm("report", "-w", "SDX", "--publish", "--yes")
+        self.assertIn("Sent (publish-confluence)", out)
+        self.assertIn("Sent (publish-teams)", out)
+        conf = [c for c in self.jira.calls if c[0] == "POST"
+                and "/wiki/rest/api/content" in str(c[1])]
+        teams = [c for c in self.jira.calls if c[0] == "POST"
+                 and "/teams/webhook" in str(c[1])]
+        self.assertTrue(conf)
+        self.assertTrue(teams)
+
+
+class ScheduleTests(CliTestCase):
+    def test_add_list_remove_and_refuse_writes(self):
+        out = self.run_pm("schedule", "add", "today", "--at", "08:30")
+        self.assertIn("Scheduled today", out)
+        listed = self.run_pm("schedule")
+        self.assertIn("today", listed)
+        self.assertIn("08:30", listed)
+        refused = self.run_pm("schedule", "add", "do", "--at", "09:00", expect=1)
+        self.assertIn("not safe unattended", refused)
+        self.run_pm("schedule", "remove", "today")
+        empty = self.run_pm("schedule")
+        self.assertIn("No scheduled commands", empty)
 
 
 if __name__ == "__main__":

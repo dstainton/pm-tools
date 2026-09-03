@@ -47,3 +47,14 @@ def today_path(cfg):
     if explicit:
         return os.path.expanduser(explicit)
     return os.path.join(local_dir(cfg), "today.json")
+
+
+def briefs_dir(cfg):
+    """Per-audience snapshots. Shared so the BA sees the same last-met memory."""
+    folder = os.path.join(shared_dir(cfg), "briefs")
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+def schedule_path(cfg):
+    return _join(local_dir(cfg), "schedule.json")

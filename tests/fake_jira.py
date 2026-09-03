@@ -416,6 +416,25 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/wiki/rest/api/content/search"):
             return self._confluence()
 
+        if path.rstrip("/") == "/wiki/rest/api/content":
+            query = parse_qs(parsed.query)
+            space = (query.get("spaceKey") or [None])[0]
+            title = (query.get("title") or [None])[0]
+            hits = []
+            for page in self.pages:
+                if space and page.get("space") != space:
+                    continue
+                if title and page.get("title") != title:
+                    continue
+                if title or space:
+                    hits.append({
+                        "id": page["id"],
+                        "title": page["title"],
+                        "space": {"key": page.get("space")},
+                        "version": {"number": page.get("version", 1)},
+                    })
+            return self._send({"results": hits})
+
         return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
 
     def _confluence(self):
@@ -452,6 +471,22 @@ class _Handler(BaseHTTPRequestHandler):
 
         if self.path.startswith("/v1/chat/completions"):
             return self._model(body)
+
+        if self.path.rstrip("/") == "/teams/webhook":
+            return self._send({"ok": True}, status=200)
+
+        if self.path.rstrip("/") == "/wiki/rest/api/content":
+            fields = body if isinstance(body, dict) else {}
+            page = {
+                "id": str(3000 + len(self.pages)),
+                "title": fields.get("title") or "Untitled",
+                "space": (fields.get("space") or {}).get("key") or "APS",
+                "body": ((fields.get("body") or {}).get("storage") or {}).get("value") or "",
+                "version": 1,
+                "labels": [],
+            }
+            self.pages.append(page)
+            return self._send({"id": page["id"], "title": page["title"]}, status=200)
 
         match = re.match(r"/rest/api/3/issue/([^/]+)/comment", self.path)
         if match:
@@ -502,6 +537,18 @@ class _Handler(BaseHTTPRequestHandler):
     def do_PUT(self):                                 # noqa: N802
         body = self._body()
         self.calls.append(("PUT", self.path, body))
+        match = re.match(r"/wiki/rest/api/content/([^/]+)", self.path)
+        if match:
+            page = next((p for p in self.pages if str(p.get("id")) == match.group(1)), None)
+            if page is None:
+                return self._send({"errorMessages": ["no page"]}, 404)
+            page["title"] = body.get("title") or page["title"]
+            page["version"] = int(page.get("version") or 1) + 1
+            storage = ((body.get("body") or {}).get("storage") or {}).get("value")
+            if storage:
+                page["body"] = storage
+            return self._send({"id": page["id"], "title": page["title"],
+                               "version": {"number": page["version"]}})
         match = re.match(r"/rest/api/3/issue/([^/]+)", self.path)
         if not match:
             return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
@@ -558,7 +605,15 @@ class _Handler(BaseHTTPRequestHandler):
                        if m.get("role") == "system"), "")
         user = next((m["content"] for m in body.get("messages", [])
                      if m.get("role") == "user"), "")
-        if "file this note" in system.lower() or "JSON object" in system:
+        if "Extract decisions and actions" in system:
+            reply = json.dumps({
+                "decisions": [{"text": "Rotate certificates by 17 Sep",
+                               "owner": "A. Lee"}],
+                "actions": [{"title": "Book the rotation window",
+                             "owner": "B. Ray", "issuetype": "Task",
+                             "workstream": "SDX"}],
+            })
+        elif "file this note" in system.lower() or "JSON object" in system:
             reply = json.dumps({
                 "product": "IP", "workstream": "SDX", "issuetype": "Story",
                 "title": "Export the SSO audit log for tenant admins",
@@ -594,9 +649,13 @@ class FakeJira:
         _Handler.users = users if users is not None else list(DEFAULT_USERS)
         _Handler.sprints = sprints or {
             "1": [{"id": 10, "name": "Sprint 42", "state": "active",
-                   "goal": "Ship certificate rotation"}],
+                   "goal": "Ship certificate rotation",
+                   "startDate": "2026-08-27T00:00:00.000+0000",
+                   "endDate": "2026-09-10T00:00:00.000+0000"}],
             "default": [{"id": 10, "name": "Sprint 42", "state": "active",
-                         "goal": "Ship certificate rotation"}],
+                         "goal": "Ship certificate rotation",
+                         "startDate": "2026-08-27T00:00:00.000+0000",
+                         "endDate": "2026-09-10T00:00:00.000+0000"}],
         }
         _Handler.calls = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)

@@ -19,6 +19,10 @@ pm refine       BA queue: draft titles, criteria and estimates
 pm review       Deprecated alias of `pm refine` (one release)
 pm note         Capture a thought offline; file it later
 pm inbox        List, create or drop captured notes
+pm metrics      Delivery numbers per product and workstream (no model)
+pm brief        Meeting prep for one audience, or a debrief
+pm publish      Send a Markdown file to Confluence and/or Teams
+pm schedule     Register read-only commands on a timer
 pm ready        Team ready-agreement gate: pass/fail per ticket
 pm standup      Daily movement + work-in-progress snapshot (no model)
 ```
@@ -518,6 +522,45 @@ pm inbox drop 1
 Capture is instant and offline. Filing suggests a product, workstream, type
 and title, then creates the issue after a preview.
 
+### `pm metrics` — portfolio health
+
+**No model.** Throughput, cycle time (median and 85th percentile), aging work
+in progress, sprint scope change, forecast accuracy (points Done vs forecast),
+and a plain landing date at the current weekly rate.
+
+```
+pm metrics --weeks 8
+pm metrics --product IP --json
+```
+
+### `pm brief` — meeting prep, and the debrief
+
+Memory is per audience, which is not the same as last week.
+
+```
+pm brief --for "Monthly portfolio review"
+pm brief --for standup --product IP
+pm brief --debrief notes.md --for "Monthly portfolio review"
+pm brief --debrief notes.md --apply
+```
+
+### `pm publish` and `pm schedule`
+
+Publish where people already read. Enable Confluence, Teams, or both in
+`publish:`. Every send is preview → confirm → write-log. Nothing that writes
+to Jira (or publishes) runs on a timer.
+
+```
+pm report --publish --dry-run
+pm publish weekly_report_2026-09-03.md --yes
+pm schedule add today --at 08:30
+pm schedule add report --weekly fri@16:00
+pm schedule list
+```
+
+On Windows, `scripts/register-pm-task.ps1` registers Task Scheduler entries.
+Elsewhere a `schedule.cron` snippet is written next to the job list.
+
 ### `pm ready` — Definition-of-Ready gate
 
 One pass/fail verdict per ticket: *is this good to pull into a sprint?* A ticket
@@ -565,7 +608,10 @@ The window and the definition of "in progress" come from the `standup_moved` and
 - **Backlog refinement:** `pm lint` for the fast fact-based sweep, then
   `pm refine` to draft the gaps. `pm triage` for the queue waiting on you.
 - **Between meetings:** `pm note "..."` — file it from `pm inbox` later.
-- **End of week:** `pm report` for the stakeholder snapshot.
+- **Before a meeting:** `pm brief --for "Monthly portfolio review"`.
+- **End of week:** `pm report --publish` for the stakeholder snapshot.
+- **Once:** `pm schedule add today --at 08:30` and
+  `pm schedule add report --weekly fri@16:00`.
 
 ---
 
@@ -603,6 +649,7 @@ pm_helper/
 │   ├── sources.py       #   Jira / Confluence / SharePoint fetchers
 │   ├── writes.py        #   the one path that writes to Jira
 │   ├── decisions.py     #   snooze / accept / assign memory
+│   ├── metrics.py       #   throughput, cycle time, forecast
 │   ├── paths.py         #   local ~/.pm vs shared state folder
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff
@@ -623,6 +670,10 @@ pm_helper/
     ├── refine.py        # pm refine
     ├── review.py        # pm review (deprecated alias)
     ├── inbox.py         # pm note / pm inbox
+    ├── metrics.py       # pm metrics
+    ├── brief.py         # pm brief
+    ├── publish.py       # pm publish
+    ├── schedule.py      # pm schedule
     ├── ready.py         # pm ready
     └── standup.py       # pm standup
 ```
@@ -647,10 +698,9 @@ for a PM running several products and the BA who refines with them.
 - **`pm triage`** — shipped in 0.5.0.
 - **`pm refine`** — shipped in 0.5.0 (`pm review` is a deprecated alias).
 - **Findings that remember your decision** — shipped in 0.5.0.
-- **`pm brief`** — meeting prep and debrief, with per-audience memory.
-- **`pm metrics`** — throughput, cycle time, aging work and a plain forecast.
-- **`pm publish` / `pm schedule`** — the weekly update goes out without you
-  (Teams and/or Confluence; tranche 3).
+- **`pm brief`** — shipped in 0.6.0.
+- **`pm metrics`** — shipped in 0.6.0.
+- **`pm publish` / `pm schedule`** — shipped in 0.6.0 (Teams and/or Confluence).
 - **`pm doctor`** — shipped in 0.4.0, with the fetch cache.
 
 `docs/FEATURE_PROPOSALS.md` holds the earlier, code-first list of twenty; the

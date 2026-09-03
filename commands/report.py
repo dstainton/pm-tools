@@ -135,8 +135,17 @@ def run(cfg, args):
                       + ", ".join(w["abbrev"] for w in selected) + ".")
 
     report = build_report(cfg, sections, all_items, scope_note)
+    try:
+        from commands import metrics as metrics_cmd
+        groups = metrics_cmd.gather(cfg, 8)
+        report = report.rstrip() + "\n\n" + metrics_cmd.render(groups, 8)
+    except Exception:                              # noqa: BLE001
+        pass
     out_path = cfg["output"]["file"].format(date=dt.date.today().isoformat())
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
 
     print(f"\nDone. Report written to: {out_path}")
+    if getattr(args, "publish", False):
+        from commands import publish as pub
+        pub.publish_file(cfg, args, out_path)
