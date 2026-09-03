@@ -7,6 +7,7 @@ It speaks just enough of the real thing to run `pm` for real:
   GET  /rest/api/3/myself
   GET  /rest/api/3/project/<KEY>/components
   GET  /rest/api/3/issue/<KEY>/changelog
+  GET  /wiki/rest/api/content/search        Confluence pages, filtered by space
   POST /v1/chat/completions                 an OpenAI-compatible model reply
 
 The searches are answered by evaluating the JQL `pm` generates against an
@@ -19,6 +20,7 @@ import json
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +300,7 @@ def render(issue, fields, expand=None):
 class _Handler(BaseHTTPRequestHandler):
     backlog = []
     components = {}
+    pages = []
     calls = []
 
     def log_message(self, *args):                    # keep test output readable
@@ -333,7 +336,31 @@ class _Handler(BaseHTTPRequestHandler):
                           if i["key"] == match.group(1)), None)
             return self._send({"values": (issue or {}).get("changelog") or []})
 
+        if self.path.startswith("/wiki/rest/api/content/search"):
+            return self._confluence()
+
         return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
+
+    def _confluence(self):
+        query = unquote(parse_qs(urlparse(self.path).query).get("cql", [""])[0])
+        space = re.search(r'space\s*=\s*"?([\w-]+)"?', query)
+        labels = re.findall(r'"([\w-]+)"', query.split("label", 1)[-1]) \
+            if "label" in query else []
+
+        hits = []
+        for page in self.pages:
+            if space and page.get("space") != space.group(1):
+                continue
+            if labels and not set(labels) & set(page.get("labels") or []):
+                continue
+            hits.append({
+                "id": page["id"],
+                "title": page["title"],
+                "body": {"view": {"value": f"<p>{page.get('body', '')}</p>"}},
+                "version": {"when": page.get("when", "2026-09-01T00:00:00.000Z")},
+                "_links": {"webui": page.get("webui", f"/pages/{page['id']}")},
+            })
+        return self._send({"results": hits})
 
     # -- POSTs -------------------------------------------------------------
     def do_POST(self):                               # noqa: N802 — http.server API
@@ -384,9 +411,10 @@ class _Handler(BaseHTTPRequestHandler):
 class FakeJira:
     """Run the stand-in on a spare port for the length of a test."""
 
-    def __init__(self, backlog, components=None):
+    def __init__(self, backlog, components=None, pages=None):
         _Handler.backlog = link_parents(backlog)
         _Handler.components = components or {}
+        _Handler.pages = pages or []
         _Handler.calls = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         self.thread = threading.Thread(target=self.server.serve_forever,

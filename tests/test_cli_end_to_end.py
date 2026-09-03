@@ -121,6 +121,22 @@ def backlog():
 PROJECT_COMPONENTS = {"APS": ["Secure Data Exchange", "API Platform",
                               "Integration Toolkit", "Documentation"]}
 
+
+def pages():
+    return [
+        {"id": "1001", "space": "SDX", "labels": ["decision"],
+         "title": "Decision: certificate rotation cadence",
+         "body": "Rotate every 90 days, automated from October.",
+         "when": stamp(1)},
+        {"id": "1002", "space": "SDX", "labels": ["risk"],
+         "title": "Risk: HSM capacity during rotation",
+         "body": "Capacity headroom is thin during the switchover window.",
+         "when": stamp(2)},
+        {"id": "2001", "space": "APS", "labels": ["decision"],
+         "title": "Decision: rate limit defaults",
+         "body": "1000 requests a minute per tenant.", "when": stamp(3)},
+    ]
+
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
@@ -188,6 +204,8 @@ workstreams:
   - name: "Secure Data Exchange"
     abbrev: "SDX"
     components: [{sdx_component}]
+    confluence_space: "SDX"
+    confluence_labels: [decision, risk]
 
   - name: "API Platform"
     abbrev: "APS"
@@ -212,7 +230,7 @@ class CliTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.jira = FakeJira(backlog(), PROJECT_COMPONENTS)
+        cls.jira = FakeJira(backlog(), PROJECT_COMPONENTS, pages())
         cls.jira.__enter__()
 
     @classmethod
@@ -409,6 +427,14 @@ class ReportTests(CliTestCase):
         self.assertIn("APS-1:", report)
         self.assertTrue(os.path.exists(os.path.join(self.dir,
                                                     "report_state.json")))
+
+    def test_confluence_decisions_are_gathered_from_space_and_labels(self):
+        self.run_pm("report", "-w", "SDX")
+        report = self.read_output(r"weekly_report_.*\.md")
+        self.assertIn("Decision: certificate rotation cadence", report)
+        self.assertIn("Risk: HSM capacity during rotation", report)
+        # The other workstream's space stays out of it.
+        self.assertNotIn("Decision: rate limit defaults", report)
 
     def test_second_run_reports_what_changed(self):
         self.run_pm("report", "-w", "SDX")
