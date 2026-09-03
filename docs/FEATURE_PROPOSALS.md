@@ -293,7 +293,7 @@ The PM reads a lint report and then does the fixes by hand. A narrow, safe
 subset is worth automating:
 
 ```
-pm lint  --apply-labels needs-grooming --yes
+pm lint  --apply-labels needs-refinement --yes
 pm ready --apply-label ready-for-sprint --yes
 ```
 

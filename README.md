@@ -431,8 +431,8 @@ The window and the definition of "in progress" come from the `standup_moved` and
 - **Each morning:** `pm standup` — what moved yesterday, what's in flight today.
 - **Before sprint planning:** `pm ready` (or `--deep`) to see what's good to pull
   in and what needs work first. Fix the reds, re-run.
-- **Backlog grooming:** `pm lint` for the fast fact-based sweep, then `pm review`
-  when you want the model's eyes on titles and acceptance criteria.
+- **Backlog refinement:** `pm lint` for the fast fact-based sweep, then
+  `pm review` when you want the model's eyes on titles and acceptance criteria.
 - **End of week:** `pm report` for the director snapshot.
 
 ---
@@ -496,13 +496,13 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 ## Roadmap (ideas, not commitments)
 
 `docs/PORTFOLIO_PROPOSALS.md` is the current plan: the next ten features, chosen
-for a PM running several products and the BA who grooms with them.
+for a PM running several products and the BA who refines with them.
 
 - **Products above workstreams** — a portfolio layer, `--product` everywhere.
 - **`pm today`** — one bounded screen, with a numbered action list.
 - **`pm capture` / `pm inbox`** — three seconds to file an idea, decide later.
 - **`pm triage`** — what is waiting on a decision from you, with the action.
-- **`pm groom`** — the BA's queue, with drafted titles, criteria and estimates.
+- **`pm refine`** — the BA's queue, with drafted titles, criteria and estimates.
 - **Findings that remember your decision** — snooze, accept, or hand to the BA.
 - **`pm brief`** — meeting prep and debrief, with per-audience memory.
 - **`pm metrics`** — throughput, cycle time, aging work and a plain forecast.

@@ -1,7 +1,7 @@
 # The next ten features
 
 For a Senior PM with ADHD running a portfolio of several products, and the
-Business Analyst who grooms the backlog with them.
+Business Analyst who refines the backlog with them.
 
 `docs/FEATURE_PROPOSALS.md` proposed twenty features by reading the code. This
 list is different: it starts from the two people using the tool and how their
@@ -28,7 +28,7 @@ expensive, and they are not the parts a normal backlog tool optimises:
 | Re-deciding | The same 40 lint warnings every week, each one re-evaluated from scratch. |
 | Capture | The best idea of the week happened between meetings and never made it into Jira. |
 
-**The BA.** Turns intent into groomed, estimable tickets. Their day is
+**The BA.** Turns intent into refined, estimable tickets. Their day is
 concrete: which tickets are not ready, and what exactly is missing. They do not
 want a report — they want a queue and a starting draft. Today `pm lint` tells
 them 40 things are wrong and leaves them with 40 blank fields to fill.
@@ -142,8 +142,8 @@ MOVED SINCE YESTERDAY (2)
 AGING (1)
   APS-11   In Progress 19 days, untouched 12 — longest in Data Exchange
 
-WITH THE BA (4 of 10 groomed)
-  SDX  4 tickets still fail Definition of Ready       pm groom -w SDX
+WITH THE BA (4 of 10 refined)
+  SDX  4 tickets still fail Definition of Ready       pm refine -w SDX
 
 3 findings snoozed until 14 Sep.
 ```
@@ -236,7 +236,7 @@ deterministic — no model. **Depends on** 1; shares the action mechanism with 2
 
 ---
 
-### 5. `pm groom` — the BA's queue, with drafts instead of blank fields
+### 5. `pm refine` — the BA's queue, with drafts instead of blank fields
 
 **Pain.** `pm lint` and `pm review` hand the BA a list of 40 problems. Every one
 of them starts as an empty field. This is the single biggest time sink in the
@@ -246,8 +246,8 @@ BA's week, and the place a local model earns its keep.
 worksheet with a draft for every gap, then writes back only what the BA kept.
 
 ```
-$ pm groom -w SDX
-6 tickets fail Definition of Ready. Drafts in groom_SDX_2026-09-03.md
+$ pm refine -w SDX
+6 tickets fail Definition of Ready. Drafts in refine_SDX_2026-09-03.md
 
   APS-11  vague title       → "Fix retry handling in the exchange client"
   APS-20  no criteria       → 3 criteria drafted
@@ -256,7 +256,7 @@ $ pm groom -w SDX
   ...
 
 Edit the file, delete anything you disagree with, then:
-  pm groom --apply -w SDX          # shows a diff, asks once, writes to Jira
+  pm refine --apply -w SDX         # shows a diff, asks once, writes to Jira
 ```
 
 The estimate suggestion is deterministic — the median of closed, similar
@@ -270,8 +270,16 @@ and `commands/ready.py`, plus `update_issue`. The largest item here, and the
 one with the highest payoff per hour of the BA's week. **Depends on** 1;
 strongly paired with 6.
 
-**Success signal.** Percent-ready climbs week over week without a grooming
-meeting, and the BA's edits are mostly deletions rather than rewrites.
+**A naming consequence worth deciding.** `pm refine` and `pm review` would sit
+next to each other doing nearly the same thing — `review` reports the model's
+opinion on titles and criteria, `refine` acts on it. Two commands that start
+with `re` and overlap in purpose is exactly the choice-tax rule 1 exists to
+remove. I would let `pm refine` absorb `pm review`, keeping `pm review` as a
+deprecated alias for one release, so the vocabulary matches how the team
+actually talks about the work: lint finds it, refine fixes it, ready gates it.
+
+**Success signal.** Percent-ready climbs week over week without a refinement
+session, and the BA's edits are mostly deletions rather than rewrites.
 
 ---
 
@@ -295,7 +303,7 @@ pm lint
 ```
 
 `--assign --to ba` is also the PM-to-BA handoff: it lands in the BA's
-`pm groom` queue and is tracked until it closes, so the PM stops re-reporting
+`pm refine` queue and is tracked until it closes, so the PM stops re-reporting
 it and the BA stops rediscovering it.
 
 **Where the memory lives** is the one real design question, and it needs your
@@ -474,7 +482,7 @@ These affect several items, so they are worth settling first.
 one command to type and it is fast.
 
 **Second — the two work queues.** Item 6 (decisions stick), item 4 (`pm triage`),
-item 5 (`pm groom`), item 3 (capture). Item 6 first, because it is what keeps
+item 5 (`pm refine`), item 3 (capture). Item 6 first, because it is what keeps
 the other three from becoming noise. This tranche is where the BA's week
 changes.
 
@@ -498,6 +506,16 @@ are numbers behind them.
 | 4 output paths, 5 exit codes | Small; ride along with items 2 and 9 |
 | 10 duplicates, 11 release notes, 14 sprint review | Still worth doing, below these ten |
 | 16 deeper hierarchies, 17 concurrency, 18 CI, 19 keyring, 20 model resilience | Unchanged, still below the line — though CI gets more valuable with every item above |
+
+## A note on vocabulary
+
+The team says **refinement**, not grooming, so the tool should too: item 5 is
+`pm refine`, its output is `refine_<workstream>_<date>.md`, and the label item
+13 of the earlier list would apply is `needs-refinement`. The wider point is
+that `pm` should never make someone translate between its words and theirs —
+worth checking against the rest of the vocabulary (`workstream`, `scope`,
+`membership`, `Definition of Ready`) before the next tranche hard-codes any of
+it into a command name or a Jira label.
 
 ## What I would not build
 
