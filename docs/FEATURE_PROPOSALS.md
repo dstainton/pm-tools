@@ -5,6 +5,11 @@ command end to end against a stand-in Jira. Part 1 describes the tool as it
 stands. Part 2 lists what a read of the code suggests is worth building, in
 priority order, with a config sketch for each.
 
+> **Superseded in part.** `docs/PORTFOLIO_PROPOSALS.md` is the current plan: ten
+> features chosen from the two people using the tool rather than from the code.
+> Its last section maps every proposal below to what happened to it. Part 1 here
+> is still the best description of how `pm` works today.
+
 Two constraints shape every proposal here:
 
 - **Workstreams stay easy to add and remove.** Anything new must work for a
@@ -214,7 +219,7 @@ delivery metrics, and they are pure arithmetic:
 - throughput: issues reaching Done per week, per workstream
 - cycle time: first `In Progress` to `Done`, median and 85th percentile
 - aging work in progress: how long each in-flight item has been in flight
-- estimate accuracy: story points completed per sprint versus committed
+- forecast accuracy: story points Done per Sprint versus forecast
 - scope change: items added to an open sprint after it started
 
 ```
@@ -288,7 +293,7 @@ The PM reads a lint report and then does the fixes by hand. A narrow, safe
 subset is worth automating:
 
 ```
-pm lint  --apply-labels needs-grooming --yes
+pm lint  --apply-labels needs-refinement --yes
 pm ready --apply-label ready-for-sprint --yes
 ```
 
@@ -296,9 +301,9 @@ Nothing writes without both the flag and `--yes`, and a dry run prints the exact
 change list first. Touches a new `update_issue` in `core/sources.py`. Higher
 risk than anything else here, hence the double opt-in.
 
-#### 14. `pm sprint-review` — committed versus delivered
+#### 14. `pm sprint-review` — forecast versus delivered
 
-At sprint end: what was in the sprint at the start, what finished, what carried
+At Sprint end: what was in the Sprint at the start, what finished, what carried
 over, and what was added mid-flight. All from the changelog, all deterministic,
 and the one report that makes the weekly write-up credible over time.
 

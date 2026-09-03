@@ -412,7 +412,7 @@ what's *in progress now* and who owns it.
 ```
 pm standup                    # yesterday's movement + today's WIP
 pm standup --days 3           # widen the window (e.g. after a weekend)
-pm standup --by workstream    # group WIP by workstream instead of by owner
+pm standup --by workstream    # group WIP by workstream instead of by assignee
 pm standup --print            # also echo the snapshot to the terminal
 ```
 
@@ -431,8 +431,8 @@ The window and the definition of "in progress" come from the `standup_moved` and
 - **Each morning:** `pm standup` — what moved yesterday, what's in flight today.
 - **Before sprint planning:** `pm ready` (or `--deep`) to see what's good to pull
   in and what needs work first. Fix the reds, re-run.
-- **Backlog grooming:** `pm lint` for the fast fact-based sweep, then `pm review`
-  when you want the model's eyes on titles and acceptance criteria.
+- **Backlog refinement:** `pm lint` for the fast fact-based sweep, then
+  `pm review` when you want the model's eyes on titles and acceptance criteria.
 - **End of week:** `pm report` for the director snapshot.
 
 ---
@@ -495,15 +495,27 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 
 ## Roadmap (ideas, not commitments)
 
-`docs/FEATURE_PROPOSALS.md` holds the current thinking, in priority order, with
-a config sketch for each. The short list:
+`docs/PORTFOLIO_PROPOSALS.md` is the current plan: the next ten features, chosen
+for a PM running several products and the BA who refines with them.
 
-- `pm doctor` — one command that proves the whole setup works end to end.
-- `pm triage` — the daily "what needs a decision from me" queue.
-- `pm metrics` — throughput, cycle time and estimate accuracy per workstream.
-- `pm duplicates` — model-flagged likely duplicate tickets.
-- `pm release-notes` — draft notes from tickets marked Done since last release.
-- `pm publish` — post the weekly report to Confluence or Teams.
+- **Products above workstreams** — a portfolio layer, `--product` everywhere.
+- **`pm today`** — one bounded screen, with a numbered action list.
+- **`pm capture` / `pm inbox`** — three seconds to file an idea, decide later.
+- **`pm triage`** — what is waiting on a decision from you, with the action.
+- **`pm refine`** — the BA's queue, with drafted titles, criteria and estimates.
+- **Findings that remember your decision** — snooze, accept, or hand to the BA.
+- **`pm brief`** — meeting prep and debrief, with per-audience memory.
+- **`pm metrics`** — throughput, cycle time, aging work and a plain forecast.
+- **`pm publish` / `pm schedule`** — the weekly update goes out without you.
+- **`pm doctor`** — verify the whole setup, and a cache that makes it all fast.
+
+`docs/FEATURE_PROPOSALS.md` holds the earlier, code-first list of twenty; the
+last section of the portfolio document says what happened to each of them.
+
+`docs/TERMINOLOGY.md` checks every word the tool uses against the November 2020
+Scrum Guide — what to rename, what to keep in Jira's vocabulary on purpose, and
+the three Scrum concepts `pm` has no notion of yet (Sprint Goal, Definition of
+Done, Product Goal).
 
 ---
 
