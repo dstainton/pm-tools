@@ -637,12 +637,13 @@ class TodayTests(CliTestCase):
         self.assertIn("pm do", out)
         self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))
 
+        before = len([c for c in self.jira.calls if c[0] == "PUT"])
         preview = self.run_pm("do", "1", "--dry-run")
         self.assertIn("Would PUT", preview)
         self.assertIn("--dry-run: nothing was sent.", preview)
         self.assertIn("/rest/api/3/issue/", preview)
         puts = [c for c in self.jira.calls if c[0] == "PUT"]
-        self.assertEqual(puts, [])
+        self.assertEqual(len(puts), before)
 
     def test_do_without_confirm_refuses_to_write(self):
         self.run_pm("today")
@@ -716,11 +717,12 @@ class TriageTests(CliTestCase):
         self.assertIn("APS-30", out)
         self.assertIn("pm triage --apply", out)
         self.assertTrue(os.path.exists(os.path.join(self.dir, "triage.json")))
+        before = len([c for c in self.jira.calls if c[0] == "PUT"])
         preview = self.run_pm("triage", "--apply", "1", "--dry-run")
         self.assertIn("Would PUT", preview)
         self.assertIn("nothing was sent", preview)
         puts = [c for c in self.jira.calls if c[0] == "PUT"]
-        self.assertEqual(puts, [])
+        self.assertEqual(len(puts), before)
 
     def test_triage_apply_yes_writes(self):
         self.run_pm("triage")
@@ -777,11 +779,13 @@ class InboxTests(CliTestCase):
 
     def test_inbox_create_dry_run_sends_nothing(self):
         self.run_pm("note", "do not create this")
+        before = [c for c in self.jira.calls if c[0] == "POST"
+                  and c[1].rstrip("/") == "/rest/api/3/issue"]
         out = self.run_pm("inbox", "create", "1", "--dry-run")
         self.assertIn("nothing was sent", out)
         posts = [c for c in self.jira.calls if c[0] == "POST"
                  and c[1].rstrip("/") == "/rest/api/3/issue"]
-        self.assertEqual(posts, [])
+        self.assertEqual(len(posts), len(before))
 
 
 class ProductCheckTests(CliTestCase):
