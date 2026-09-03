@@ -51,13 +51,16 @@ def gather(cfg, weeks, today=None):
 def _fmt_date(value):
     if not value:
         return "—"
-    if isinstance(value, dt.date):
-        return value.strftime(f"{value.day} %b")
-    try:
-        day = dt.date.fromisoformat(str(value)[:10])
-        return day.strftime(f"{day.day} %b")
-    except ValueError:
-        return str(value)
+    if isinstance(value, dt.datetime):
+        value = value.date()
+    if not isinstance(value, dt.date):
+        try:
+            value = dt.date.fromisoformat(str(value)[:10])
+        except ValueError:
+            return str(value)
+    if value.year != dt.date.today().year:
+        return value.strftime(f"{value.day} %b %Y")
+    return value.strftime(f"{value.day} %b")
 
 
 def render(groups, weeks):
