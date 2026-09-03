@@ -20,15 +20,16 @@ to PATH. See `README.md` for details.
 > **Existing installation:** `pm init` does not overwrite an existing
 > `~/.pm/config.yaml`. Updating the package therefore does not automatically
 > migrate your live config. Copy the `products:`, `cache:`, `today:`,
-> `state:`, `triage:`, `membership:`, `scopes:` and revised `workstreams:`
-> sections from the bundled `config.yaml` into your current one.
+> `state:`, `triage:`, `metrics:`, `publish:`, `membership:`, `scopes:` and
+> revised `workstreams:` sections from the bundled `config.yaml` into your
+> current one.
 > preserving your existing URLs and credentials. Older configs keep working, so
 > this can wait until convenient.
 
 The bundled config assumes:
 
-- one Jira project, named once in `jira.project` (`APS` by default)
-- workstreams are identified by Component(s), normally carried on Epics
+- one Jira project is the team, named once in `jira.project` (`APS` by default)
+- components represent products and workstreams, normally carried on Epics
 - Stories, Tasks, Bugs and Sub-tasks inherit their workstream from their parent
   when they carry no Component of their own
 

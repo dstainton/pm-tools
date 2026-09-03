@@ -20,6 +20,10 @@ Commands:
     pm review            Deprecated alias of `pm refine` (one release).
     pm note              Capture a thought offline; file it later.
     pm inbox             List, create or drop captured notes.
+    pm metrics           Delivery numbers per product and workstream.
+    pm brief             Meeting prep for one audience, or a debrief.
+    pm publish           Send a Markdown file to Confluence and/or Teams.
+    pm schedule          Register read-only commands on a timer.
     pm ready             Team ready-agreement gate: pass/fail per ticket.
     pm standup           Daily movement + work-in-progress snapshot (no model).
 
@@ -48,6 +52,10 @@ Examples:
   pm triage --apply 2 --yes
   pm refine -w SDX
   pm note "customer wants an SSO audit export"
+  pm metrics --weeks 8
+  pm brief --for "Monthly portfolio review"
+  pm report --publish --dry-run
+  pm schedule add today --at 08:30
   pm ready --deep --workstream sdx,itk
   pm standup --days 3 --by workstream
 """
@@ -64,7 +72,8 @@ from core.config import load_config, filter_workstreams        # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
 from commands import (report, lint, ready, init,                # noqa: E402
                       standup, workstreams, products, doctor, today,
-                      triage, refine, inbox)
+                      triage, refine, inbox, metrics, brief, publish,
+                      schedule)
 
 
 def resolve_config_path(explicit):
@@ -133,7 +142,8 @@ def build_parser():
     sub = parser.add_subparsers(
         dest="command", required=True,
         metavar="{init,products,workstreams,today,do,doctor,report,lint,"
-                "triage,refine,review,note,inbox,ready,standup}")
+                "triage,refine,review,note,inbox,metrics,brief,publish,"
+                "schedule,ready,standup}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
@@ -201,8 +211,10 @@ def build_parser():
                                "points, start date, or acceptance criteria")
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
-    p_report = sub.add_parser("report", parents=[common],
+    p_report = sub.add_parser("report", parents=[common, write_opts],
                               help="Weekly state-of-product report")
+    p_report.add_argument("--publish", action="store_true",
+                          help="Also send the report to Confluence and/or Teams")
     p_report.set_defaults(func=report.run, needs_config=True)
 
     p_lint = sub.add_parser("lint", parents=[common, write_opts],
@@ -268,6 +280,47 @@ def build_parser():
     p_inbox.add_argument("--issuetype", help="Override the suggested type")
     p_inbox.set_defaults(func=inbox.run_inbox, needs_config=True)
 
+    p_metrics = sub.add_parser("metrics", parents=[common],
+                               help="Delivery metrics per product and workstream")
+    p_metrics.add_argument("--weeks", type=int, default=None,
+                           help="How many weeks back (default: metrics.weeks or 8)")
+    p_metrics.add_argument("--json", action="store_true",
+                           help="Write the numbers as JSON")
+    p_metrics.set_defaults(func=metrics.run, needs_config=True)
+
+    p_brief = sub.add_parser("brief", parents=[common, write_opts],
+                             help="Meeting prep for one audience, or a debrief")
+    p_brief.add_argument("--for", dest="for_audience", metavar="AUDIENCE",
+                         help="Who the page is for (memory is per audience)")
+    p_brief.add_argument("--debrief", metavar="FILE",
+                         help="Turn meeting notes into decisions and actions")
+    p_brief.add_argument("--apply", action="store_true",
+                         help="With --debrief, create the action tickets")
+    p_brief.add_argument("--publish", action="store_true",
+                         help="Also send the brief to Confluence and/or Teams")
+    p_brief.set_defaults(func=brief.run, needs_config=True)
+
+    p_publish = sub.add_parser("publish", parents=[common, write_opts],
+                               help="Send a Markdown file to Confluence and/or Teams")
+    p_publish.add_argument("file", nargs="?",
+                           help="The Markdown file to send")
+    p_publish.set_defaults(func=publish.run, needs_config=True)
+
+    p_sched = sub.add_parser("schedule", parents=[common],
+                             help="Register read-only commands on a timer")
+    p_sched.add_argument("action", nargs="?", default="list",
+                         choices=["list", "add", "remove"],
+                         help="What to do (default: list)")
+    p_sched.add_argument("target", nargs="?",
+                         help="The command to add or the job to remove")
+    p_sched.add_argument("--at", metavar="HH:MM",
+                         help="Weekday time, e.g. 08:30")
+    p_sched.add_argument("--weekly", metavar="DAY@HH:MM",
+                         help="One day a week, e.g. fri@16:00")
+    p_sched.add_argument("--for", dest="for_audience",
+                         help="With `add brief`, the audience name")
+    p_sched.set_defaults(func=schedule.run, needs_config=True)
+
     p_ready = sub.add_parser("ready", parents=[common],
                              help="Definition-of-Ready gate (pass/fail)")
     p_ready.add_argument("--deep", action="store_true",
@@ -321,10 +374,11 @@ def main():
     product_sel = getattr(args, "product", None)
     action = getattr(args, "action", None)
     skip_product_filter = (
-        args.command in ("do", "note")
+        args.command in ("do", "note", "publish", "schedule")
         or (args.command in ("workstreams", "products")
             and action in ("add", "remove"))
         or (args.command == "inbox" and action in ("create", "drop"))
+        or (args.command == "brief" and getattr(args, "debrief", None))
         or (args.command == "lint"
             and (getattr(args, "snooze", None)
                  or getattr(args, "accept", None)

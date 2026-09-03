@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.0 - 2026-09-03
+
+### `pm metrics`
+
+- Deterministic delivery numbers per product and workstream: throughput,
+  cycle time (median / 85th percentile), aging WIP, sprint scope change,
+  forecast accuracy, and a plain landing date.
+- `--weeks` and `--json`. The weekly report appends the same table.
+
+### `pm brief`
+
+- Prep is one page per audience, with memory of the last time you met
+  *that* audience. Decisions needed and recent risks sit under each product.
+- `--debrief notes.md` extracts decisions and actions. `--apply` creates
+  the action tickets after a preview.
+
+### `pm publish` and `pm schedule`
+
+- Confluence and/or Teams, via `publish:` (enable one, the other, or both).
+  `pm report --publish` and `pm publish FILE` use the shared write path.
+- `pm schedule add` only accepts read-only commands. Windows gets a Task
+  Scheduler shim; elsewhere a crontab snippet is written.
+
 ## 0.5.0 - 2026-09-03
 
 ### Jira writes

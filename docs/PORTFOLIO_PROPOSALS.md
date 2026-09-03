@@ -12,8 +12,9 @@ to each.
 Tranche 1 is built: item 1 (products), item 10 (doctor and the cache), and
 item 2 (`pm today`). Tranche 2 is built: item 6 (decisions stick), item 4
 (`pm triage`), item 5 (`pm refine`), item 3 (`pm note` / `pm inbox`), and
-`pm do` now writes after a preview and one confirmation. Tranche 3
-(metrics, brief, publish) is still a proposal.
+`pm do` now writes after a preview and one confirmation. Tranche 3 is
+built: item 8 (`pm metrics`), item 7 (`pm brief`), item 9 (`pm publish`
+and `pm schedule`).
 
 ---
 

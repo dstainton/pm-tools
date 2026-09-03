@@ -236,6 +236,26 @@ triage:
   overdue: true
 
 # ----------------------------------------------------------------------------
+#  5k. Metrics — how many weeks `pm metrics` looks back
+# ----------------------------------------------------------------------------
+metrics:
+  weeks: 8
+
+# ----------------------------------------------------------------------------
+#  5l. Publish — Confluence and/or Teams. Enable one, the other, or both.
+#      `pm report --publish` and `pm publish FILE` use the write path
+#      (preview, confirm, log). Nothing here runs on a schedule.
+# ----------------------------------------------------------------------------
+publish:
+  confluence:
+    enabled: false
+    space: "APS"
+    parent_page: "Weekly Reports"
+  teams:
+    enabled: false
+    webhook: "${ENV:PM_TEAMS_WEBHOOK}"
+
+# ----------------------------------------------------------------------------
 #  6. Products — the portfolio layer, above workstreams
 # ----------------------------------------------------------------------------
 #  A Jira project is the team. Components represent products and workstreams.

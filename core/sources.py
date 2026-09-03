@@ -306,6 +306,8 @@ def fetch_active_sprints(cfg, project):
                     "goal": (sprint.get("goal") or "").strip(),
                     "board": board.get("name") or "",
                     "project": project,
+                    "start": (sprint.get("startDate") or "")[:10] or None,
+                    "end": (sprint.get("endDate") or sprint.get("end") or "")[:10] or None,
                 })
         except requests.RequestException:
             continue
@@ -534,6 +536,79 @@ def fetch_jira_changelog(cfg, jql, since_days, max_results=None):
             "assignee": (f.get("assignee") or {}).get("displayName",
                                                       "Unassigned"),
             "issuetype": (f.get("issuetype") or {}).get("name", ""),
+            "transitions": transitions,
+        })
+    return out
+
+
+def parse_jira_datetime(value):
+    """Parse a Jira ISO timestamp into an aware UTC datetime, or None."""
+    if not value:
+        return None
+    text = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2",
+                  str(value).replace("Z", "+00:00"))
+    for cand in (text, text.split(".")[0]):
+        try:
+            parsed = dt.datetime.fromisoformat(cand)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def fetch_jira_history(cfg, jql, max_results=None):
+    """Issues plus their full status and sprint changelog (no recency cutoff).
+
+    Used by `pm metrics`. Each record has the lint-style fields plus
+    `transitions`: [{field, from, to, when, who}, ...].
+    """
+    if not jql:
+        return []
+
+    sp = cfg.get("story_points_field") or ""
+    fields = ["summary", "status", "assignee", "issuetype", "updated",
+              "created", "duedate"]
+    if sp:
+        fields.append(sp)
+
+    issues = search_issues(cfg, jql, fields=fields, expand="changelog",
+                           max_items=max_results)
+    out = []
+    for iss in issues:
+        f = iss.get("fields", {})
+        histories = (iss.get("changelog") or {}).get("histories")
+        if histories is None:
+            histories = fetch_issue_changelog(cfg, iss["key"])
+        transitions = []
+        for hist in histories or []:
+            when = parse_jira_datetime(hist.get("created"))
+            if when is None:
+                continue
+            for it in hist.get("items", []):
+                field = (it.get("field") or "").lower()
+                if field not in ("status", "sprint"):
+                    continue
+                transitions.append({
+                    "field": field,
+                    "from": it.get("fromString") or "",
+                    "to": it.get("toString") or "",
+                    "when": when,
+                    "who": (hist.get("author") or {}).get("displayName", ""),
+                })
+        transitions.sort(key=lambda t: t["when"])
+        category = ((f.get("status") or {}).get("statusCategory") or {}).get("key", "")
+        out.append({
+            "key": iss["key"],
+            "url": f"{cfg['base_url'].rstrip('/')}/browse/{iss['key']}",
+            "summary": f.get("summary") or "",
+            "status": (f.get("status") or {}).get("name", "Unknown"),
+            "status_category": category,
+            "assignee": (f.get("assignee") or {}).get("displayName", "Unassigned"),
+            "issuetype": (f.get("issuetype") or {}).get("name", ""),
+            "story_points": f.get(sp) if sp else None,
+            "updated": f.get("updated"),
+            "created": f.get("created"),
+            "due_date": f.get("duedate"),
             "transitions": transitions,
         })
     return out
