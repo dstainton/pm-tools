@@ -8,6 +8,7 @@ your local model — nothing leaves your machine.
 
 Commands:
   pm init              Create a starter config at ~/.pm/config.yaml.
+  pm workstreams       List, add, remove or check your workstreams.
   pm report            Weekly state-of-product report (uses the local model).
   pm lint              Deterministic backlog quality checks (no model).
   pm review            Model-based judgement checks (title clarity, AC quality).
@@ -24,6 +25,9 @@ Common options (work on every command except init):
 
 Examples:
   pm init
+  pm workstreams add --name "Billing Platform" --abbrev BIL \
+                     --components "Billing Platform"
+  pm workstreams check --show-jql
   pm report
   pm lint --severity error
   pm review titles --workstream SDX
@@ -40,7 +44,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.config import load_config, filter_workstreams        # noqa: E402
 from commands import (report, lint, review, ready, init,        # noqa: E402
-                      standup)
+                      standup, workstreams)
 
 
 def resolve_config_path(explicit):
@@ -92,8 +96,9 @@ def build_parser():
                              "comma-separated (e.g. SDX or sdx,itk). "
                              "Default: all workstreams.")
 
-    sub = parser.add_subparsers(dest="command", required=True,
-                                metavar="{init,report,lint,review,ready,standup}")
+    sub = parser.add_subparsers(
+        dest="command", required=True,
+        metavar="{init,workstreams,report,lint,review,ready,standup}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
@@ -103,6 +108,30 @@ def build_parser():
     p_init.add_argument("--path", default=None,
                         help="Write to a specific path instead of ~/.pm")
     p_init.set_defaults(func=init.run, needs_config=False)
+
+    p_ws = sub.add_parser("workstreams", parents=[common],
+                          help="List, add, remove or check your workstreams")
+    p_ws.add_argument("action", nargs="?", default="list",
+                      choices=["list", "add", "remove", "check"],
+                      help="What to do (default: list)")
+    p_ws.add_argument("target", nargs="?",
+                      help="The workstream abbrev, for `remove`")
+    p_ws.add_argument("--name", help="Full workstream name, for `add`")
+    p_ws.add_argument("--abbrev", help="Short name, for `add` / `remove`")
+    p_ws.add_argument("--components", metavar="NAMES",
+                      help="Jira Component name(s) that identify the "
+                           "workstream, comma-separated")
+    p_ws.add_argument("--project",
+                      help="Jira project, if it differs from jira.project")
+    p_ws.add_argument("--confluence-space",
+                      help="Confluence space key for its decisions/risks")
+    p_ws.add_argument("--confluence-labels", metavar="LABELS",
+                      help="Confluence labels to gather, comma-separated")
+    p_ws.add_argument("--sharepoint-query",
+                      help="Search term for its SharePoint documents")
+    p_ws.add_argument("--show-jql", action="store_true",
+                      help="With `check`, print the JQL pm generates")
+    p_ws.set_defaults(func=workstreams.run, needs_config=True)
 
     p_report = sub.add_parser("report", parents=[common],
                               help="Weekly state-of-product report")
@@ -156,6 +185,9 @@ def main():
 
     config_path = resolve_config_path(getattr(args, "config", None))
     cfg = load_config(config_path)
+    # `pm workstreams add/remove` edits this file, and every command mentions it
+    # when something is misconfigured, so keep the resolved path to hand.
+    cfg["_config_path"] = config_path
 
     # Narrow the workstreams once, centrally, so every command respects
     # --workstream without needing its own logic. Commands read the result
