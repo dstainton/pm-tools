@@ -11,13 +11,15 @@ narrowed if --workstream was given.
 import datetime as dt
 
 from core import sources, model, state, workstreams
+from core import products as product_core
 
 
 def build_report(cfg, sections, all_items, scope_note):
     today = dt.date.today().isoformat()
+    audience = cfg.get("output", {}).get("audience") or "stakeholders"
     lines = [
         "# Weekly State-of-Product Report",
-        f"_Prepared for {cfg['output']['audience']} on {today}.{scope_note}_",
+        f"_Prepared for {audience} on {today}.{scope_note}_",
         "",
         "This snapshot covers in-sprint work, roadmap movement, decisions, "
         "dependencies, and open risks for each workstream. Every claim is "
@@ -25,11 +27,39 @@ def build_report(cfg, sections, all_items, scope_note):
         "",
     ]
 
-    for ws, body in sections:
-        lines.append(f"## {ws['name']} ({ws['abbrev']})")
+    body_by = {ws["abbrev"]: body for ws, body in sections}
+    groups = product_core.group_workstreams(cfg, [ws for ws, _ in sections])
+    show_products = bool(product_core.listed_products(cfg)) or len(groups) > 1
+
+    if show_products and groups:
+        lines.append("## Portfolio")
         lines.append("")
-        lines.append(body)
+        lines.append("| Product | Workstreams | Items |")
+        lines.append("|---------|-------------|------:|")
+        items_by_ws = {}
+        for it in all_items:
+            # ref looks like SDX-J1; fall back to counting per section order
+            prefix = (it.get("ref") or "").split("-")[0]
+            items_by_ws[prefix] = items_by_ws.get(prefix, 0) + 1
+        for product, streams in groups:
+            abbrevs = ", ".join(ws["abbrev"] for ws in streams)
+            count = sum(items_by_ws.get(ws["abbrev"], 0) for ws in streams)
+            lines.append(f"| {product['name']} ({product['abbrev']}) | "
+                         f"{abbrevs} | {count} |")
         lines.append("")
+
+    for product, streams in groups or [({}, [ws for ws, _ in sections])]:
+        if show_products and product:
+            lines.append(f"## {product['name']} ({product['abbrev']})")
+            lines.append("")
+        for ws in streams:
+            heading = (f"### {ws['name']} ({ws['abbrev']})"
+                       if show_products and product
+                       else f"## {ws['name']} ({ws['abbrev']})")
+            lines.append(heading)
+            lines.append("")
+            lines.append(body_by.get(ws["abbrev"], ""))
+            lines.append("")
 
     # Reference table — built from the real items, so links are guaranteed.
     lines.append("## References")

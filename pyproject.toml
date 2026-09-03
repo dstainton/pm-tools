@@ -19,8 +19,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pm-helper"
-version = "0.3.1"
-description = "Product Manager Helper CLI — workstreams, report, lint, review, ready, standup"
+version = "0.4.0"
+description = "Product Manager Helper CLI — products, today, doctor, workstreams, report, lint, review, ready, standup"
 requires-python = ">=3.9"
 dependencies = [
     "requests",

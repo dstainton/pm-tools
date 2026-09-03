@@ -9,7 +9,9 @@ days actually go, then works back to what to build. Several items from the older
 list survive here in a different shape, and the last section says what happened
 to each.
 
-Nothing here is built yet. This is the proposal.
+Tranche 1 is built: item 1 (products), item 10 (doctor and the cache), and
+item 2 (`pm today` / `pm do` as a preview). The rest is still a proposal.
+`pm do` does not write to Jira yet.
 
 ---
 

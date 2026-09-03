@@ -265,6 +265,21 @@ def short_detail(text, limit):
     return text[:limit].rstrip() + "..."
 
 
+def ping(model_cfg):
+    """Cheap connectivity check for `pm doctor`. Returns (ok, detail)."""
+    import time
+    start = time.monotonic()
+    text = call_model(model_cfg, "Reply with the single word pong and nothing else.",
+                      "pong")
+    elapsed = time.monotonic() - start
+    thinking = "thinking on" if model_cfg.get("enable_thinking") else "thinking off"
+    if text.startswith("_Could not reach"):
+        return False, f"{text} ({elapsed:.1f}s)"
+    if text.startswith("_The model returned an empty"):
+        return False, f"empty reply in {elapsed:.1f}s, {thinking}"
+    return True, f"answered in {elapsed:.1f}s, {thinking}"
+
+
 def infer_report_section(model_cfg, audience, workstream, items, change_block):
     """Ask the local model to write the report section for one workstream."""
     material = build_material(items)

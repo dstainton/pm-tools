@@ -189,7 +189,8 @@ def scope_options(cfg, ws, scope_name, overrides=None):
               f"Valid scopes: {', '.join(sorted(SCOPE_INCLUDES))}.")
 
     merged = dict(DEFAULT_SCOPES.get(scope_name, {}))
-    for layer in ((cfg.get("scopes") or {}), (ws.get("scopes") or {})):
+    product_scopes = _product_scopes(cfg, ws)
+    for layer in ((cfg.get("scopes") or {}), product_scopes, (ws.get("scopes") or {})):
         if not isinstance(layer, dict):
             _fail("`scopes:` must be a mapping of scope name to options.")
         block = layer.get(scope_name)
@@ -204,9 +205,25 @@ def scope_options(cfg, ws, scope_name, overrides=None):
     return merged
 
 
+def _product_scopes(cfg, ws):
+    """The `scopes:` block on the workstream's product, if it has one."""
+    abbrev = (ws.get("product") or "").strip()
+    if not abbrev:
+        return {}
+    for product in cfg.get("products") or []:
+        if (product.get("abbrev") or "").lower() == abbrev.lower():
+            return product.get("scopes") or {}
+    return {}
+
+
 def validate_config_scopes(cfg):
     """Compile every configured scope once at load time so typos fail early."""
     layers = [("scopes", cfg.get("scopes") or {})]
+    for product in cfg.get("products") or []:
+        if not isinstance(product, dict):
+            continue
+        label = product.get("abbrev") or product.get("name") or "(unnamed)"
+        layers.append((f"product {label} scopes", product.get("scopes") or {}))
     for ws in cfg.get("workstreams") or []:
         label = ws.get("abbrev") or ws.get("name") or "(unnamed)"
         layers.append((f"workstream {label} scopes", ws.get("scopes") or {}))

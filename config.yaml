@@ -193,15 +193,59 @@ scopes:
   standup_wip:   {status: in-progress}
 
 # ----------------------------------------------------------------------------
-#  6. Workstreams — reported and checked separately, in this order
+#  5g. Cache — reused Jira fetches, so `pm today` stays fast
+# ----------------------------------------------------------------------------
+#  Hits younger than ttl_seconds are reused. `pm ... --cached` uses a hit
+#  even if it is stale (a plane / offline run). `pm ... --refresh` ignores
+#  the cache. Relative paths are resolved from the folder you run pm in.
+cache:
+  enabled: true
+  path: "~/.pm/cache"
+  ttl_seconds: 300
+
+# ----------------------------------------------------------------------------
+#  5h. Today — the one command you type on a normal day
+# ----------------------------------------------------------------------------
+today:
+  state_file: "~/.pm/today.json"   # numbered actions for `pm do N`
+  max_needs_you: 5
+  max_moved: 8
+  max_aging: 3
+  untouched_days: 3                # in-sprint and quieter than this → NEEDS YOU
+
+# ----------------------------------------------------------------------------
+#  6. Products — the portfolio layer, above workstreams
+# ----------------------------------------------------------------------------
+#  A product is a name, an abbreviation, and optional defaults (Jira project,
+#  scopes). Workstreams stay a flat list and point at a product with
+#  `product: <abbrev>`. A workstream with no product lands in Unassigned.
+#
+#  The product abbrev is what you pass to --product. Do not reuse a
+#  workstream's abbrev as a product abbrev if you can help it — they live
+#  in different flags, but identical short names are easy to mix up.
+#
+#    pm products
+#    pm products add --name "Billing Platform" --abbrev BILL --project BILL
+#    pm products check
+#    pm lint --product IP
+# ----------------------------------------------------------------------------
+products:
+
+  - name: "Integration Platform"
+    abbrev: "IP"
+    project: "APS"
+
+# ----------------------------------------------------------------------------
+#  6b. Workstreams — reported and checked separately, in this order
 # ----------------------------------------------------------------------------
 #  A workstream needs only a name, an abbreviation, and the Jira Component(s)
 #  that identify it. Everything else is optional.
 #
 #    name               how it appears in reports
 #    abbrev             what you pass to --workstream
+#    product            the product abbrev it belongs to (optional)
 #    components         exact Jira Component name(s) — must match Jira
-#    project            only if this stream lives outside jira.project
+#    project            only if this stream lives outside its product / jira.project
 #    confluence_space   space key holding its decisions / risks
 #    confluence_labels  which labels to gather from that space
 #    sharepoint_query   search term for its documents
@@ -209,18 +253,20 @@ scopes:
 #
 #  Add or remove one without hand-editing this file:
 #    pm workstreams add --name "Billing Platform" --abbrev BIL \
-#                       --components "Billing Platform"
+#                       --components "Billing Platform" --product IP
 #    pm workstreams remove BIL
 #
 #  Then confirm Jira agrees with what you typed:
 #    pm workstreams check --show-jql
 #
 #  Target a single stream on any command with:  --workstream SDX
+#  Target a whole product with:                 --product IP
 # ----------------------------------------------------------------------------
 workstreams:
 
   - name: "Secure Data Exchange"
     abbrev: "SDX"
+    product: "IP"
     components: ["Secure Data Exchange"]
     confluence_space: "SDX"
     confluence_labels: [decision, risk, dependency]
@@ -228,6 +274,7 @@ workstreams:
 
   - name: "API Platform"
     abbrev: "APS"
+    product: "IP"
     components: ["API Platform"]
     confluence_space: "APS"
     confluence_labels: [decision, risk, dependency]
@@ -235,6 +282,7 @@ workstreams:
 
   - name: "Integration Toolkit"
     abbrev: "ITK"
+    product: "IP"
     components: ["Integration Toolkit"]
     confluence_space: "ITK"
     confluence_labels: [decision, risk, dependency]
@@ -245,7 +293,7 @@ workstreams:
 # ----------------------------------------------------------------------------
 output:
   file: "weekly_report_{date}.md"
-  audience: "directors"
+  audience: "stakeholders"
   # Remembers last week's items so the report can show what changed.
   # Created automatically after the first run; keep it between runs.
   state_file: "report_state.json"

@@ -18,6 +18,8 @@ import re
 
 import requests
 
+from core.cache import cache_key
+
 
 # ---------------------------------------------------------------------------
 #  Text helpers
@@ -71,7 +73,7 @@ def make_item(ref, source, title, detail, url, meta="", uid=None, watch=""):
         "title": title,
         "detail": detail,
         "url": url,
-        "meta": meta,        # e.g. "Status: In Progress | Owner: A. Lee"
+        "meta": meta,        # e.g. "Status: In Progress | Assignee: A. Lee"
         "uid": uid or url,   # STABLE identity across weeks (Jira key, page url)
         "watch": watch,      # the value we compare week-to-week (e.g. status)
     }
@@ -117,6 +119,14 @@ def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
     if max_items:
         page_size = min(page_size, max_items)
 
+    cache = cfg.get("_fetch_cache")
+    key = None
+    if cache is not None:
+        key = cache_key("search", jql, _field_list(fields), expand, max_items)
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+
     url = _api(cfg, "search/jql")
     issues, token = [], None
     while True:
@@ -142,23 +152,52 @@ def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
         if max_items and len(issues) >= max_items:
             break
 
-    return issues[:max_items] if max_items else issues
+    result = issues[:max_items] if max_items else issues
+    if cache is not None and key is not None:
+        cache.put(key, result)
+    return result
 
 
 def approximate_count(cfg, jql):
     """How many issues a query matches, without pulling them all back."""
     if not jql:
         return 0
+    cache = cfg.get("_fetch_cache")
+    key = None
+    if cache is not None:
+        key = cache_key("count", jql)
+        hit = cache.get(key)
+        if hit is not None:
+            return int(hit)
     resp = requests.post(_api(cfg, "search/approximate-count"),
                          json={"jql": jql}, auth=_auth(cfg),
                          headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
-    return int(resp.json().get("count", 0))
+    count = int(resp.json().get("count", 0))
+    if cache is not None and key is not None:
+        cache.put(key, count)
+    return count
 
 
 def fetch_myself(cfg):
     """Who the configured credentials belong to — used as a connection check."""
     resp = requests.get(_api(cfg, "myself"), auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_fields(cfg):
+    """Every field the site knows about — used by `pm doctor --discover-fields`."""
+    resp = requests.get(_api(cfg, "field"), auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return resp.json() or []
+
+
+def fetch_project(cfg, project):
+    """One project's metadata, or raise if the key does not exist."""
+    resp = requests.get(_api(cfg, f"project/{project}"), auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
     return resp.json()
@@ -171,6 +210,51 @@ def fetch_project_components(cfg, project):
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
     return [c.get("name") for c in resp.json() if c.get("name")]
+
+
+def fetch_active_sprints(cfg, project):
+    """Active sprints (and their Sprint Goals) for a project, if Agile is on.
+
+    Uses `/rest/agile/1.0`. Returns [] when the endpoint is missing, the
+    project has no board, or anything else goes wrong — callers treat an
+    empty list as "no Sprint Goal to show", not an error.
+    """
+    if not project:
+        return []
+    base = cfg["base_url"].rstrip("/")
+    auth = _auth(cfg)
+    headers = {"Accept": "application/json"}
+    try:
+        resp = requests.get(f"{base}/rest/agile/1.0/board",
+                            params={"projectKeyOrId": project},
+                            auth=auth, headers=headers, timeout=30)
+        resp.raise_for_status()
+        boards = resp.json().get("values") or []
+    except requests.RequestException:
+        return []
+
+    sprints = []
+    for board in boards[:5]:
+        board_id = board.get("id")
+        if board_id is None:
+            continue
+        try:
+            resp = requests.get(
+                f"{base}/rest/agile/1.0/board/{board_id}/sprint",
+                params={"state": "active"},
+                auth=auth, headers=headers, timeout=30)
+            resp.raise_for_status()
+            for sprint in resp.json().get("values") or []:
+                sprints.append({
+                    "id": sprint.get("id"),
+                    "name": sprint.get("name") or "",
+                    "goal": (sprint.get("goal") or "").strip(),
+                    "board": board.get("name") or "",
+                    "project": project,
+                })
+        except requests.RequestException:
+            continue
+    return sprints
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +295,7 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
         assignee = (f.get("assignee") or {}).get("displayName", "Unassigned")
         due = f.get("duedate") or "no due date"
         priority = (f.get("priority") or {}).get("name", "")
-        meta = f"Status: {status} | Owner: {assignee} | Due: {due}"
+        meta = f"Status: {status} | Assignee: {assignee} | Due: {due}"
         if priority:
             meta += f" | Priority: {priority}"
         ref = f"{tag_prefix}-J{idx}"
@@ -248,7 +332,8 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
     epic = cfg.get("epic_link_field") or "parent"
 
     fields = ["summary", "status", "issuetype", "components",
-              "duedate", "updated", "description", "parent"]
+              "assignee", "labels", "duedate", "updated", "description",
+              "parent"]
     for extra in (sp, sd, ac, epic):
         if extra and extra not in fields:
             fields.append(extra)
@@ -276,6 +361,9 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
                 "statusCategory") or {}).get("key", ""),
             "issuetype": (f.get("issuetype") or {}).get("name", ""),
             "components": [c.get("name") for c in (f.get("components") or [])],
+            "assignee": (f.get("assignee") or {}).get("displayName",
+                                                      "Unassigned"),
+            "labels": f.get("labels") or [],
             "epic": epic_key,
             "story_points": f.get(sp) if sp else None,
             "start_date": f.get(sd) if sd else None,
