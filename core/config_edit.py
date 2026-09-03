@@ -79,9 +79,16 @@ def ensure_block(text, key, before_key=None):
     return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
 
 
-def add_list_entry(text, key, entry, render, before_key=None):
-    """Append one mapping (with an `abbrev`) to the named top-level list."""
-    text = ensure_block(text, key, before_key=before_key)
+def add_list_entry(text, key, entry, render, before_key=None, create=False):
+    """Append one mapping (with an `abbrev`) to the named top-level list.
+
+    `create=True` inserts an empty `key:` block when the file does not have
+    one yet (used for `products:`, which older configs omit). Workstreams
+    must already be present — a missing list is a config problem, not
+    something to silently invent.
+    """
+    if create:
+        text = ensure_block(text, key, before_key=before_key)
     lines = text.splitlines()
     start, end = find_block(lines, key)
     if start is None:

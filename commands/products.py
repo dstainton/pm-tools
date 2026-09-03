@@ -38,7 +38,8 @@ def _entry_lines(entry, indent="  "):
 
 def add_entry_to_text(text, entry):
     return config_edit.add_list_entry(
-        text, "products", entry, _entry_lines, before_key="workstreams")
+        text, "products", entry, _entry_lines, before_key="workstreams",
+        create=True)
 
 
 def remove_entry_from_text(text, abbrev):

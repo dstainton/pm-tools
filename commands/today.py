@@ -117,6 +117,9 @@ def classify_need(issue, untouched_days, today=None):
     """
     if _is_done(issue):
         return None
+    # Epics are containers, not a daily action. The child work is what needs you.
+    if (issue.get("issuetype") or "").lower() == "epic":
+        return None
     if _is_overdue(issue, today=today):
         return "overdue"
     if _is_blocked(issue):

@@ -46,6 +46,10 @@ class ClassifyTests(unittest.TestCase):
                      updated="2026-08-01T09:12:00.000+0000")
         self.assertEqual(today.classify_need(issue, 3), "untouched")
 
+    def test_epics_are_not_daily_actions(self):
+        issue = dict(ISSUE, issuetype="Epic", due_date=None)
+        self.assertIsNone(today.classify_need(issue, 3))
+
     def test_done_items_are_ignored(self):
         issue = dict(ISSUE, status_category="done")
         self.assertIsNone(today.classify_need(issue, 3))
