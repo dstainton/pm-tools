@@ -210,6 +210,18 @@ today:
   max_aging: 3
   untouched_days: 3
 
+state:
+  shared_path: "."
+  local_path: "."
+
+triage:
+  unassigned_in_sprint: true
+  blocked: true
+  mentions_me_within_days: 3
+  new_bugs_within_days: 1
+  in_sprint_untouched_days: 3
+  overdue: true
+
 membership:
 {membership}
 
@@ -625,10 +637,17 @@ class TodayTests(CliTestCase):
         self.assertIn("pm do", out)
         self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))
 
-        preview = self.run_pm("do", "1")
-        self.assertIn("Would update", preview)
-        self.assertIn("Jira writes are not enabled yet", preview)
+        preview = self.run_pm("do", "1", "--dry-run")
+        self.assertIn("Would PUT", preview)
+        self.assertIn("--dry-run: nothing was sent.", preview)
         self.assertIn("/rest/api/3/issue/", preview)
+        puts = [c for c in self.jira.calls if c[0] == "PUT"]
+        self.assertEqual(puts, [])
+
+    def test_do_without_confirm_refuses_to_write(self):
+        self.run_pm("today")
+        out = self.run_pm("do", "1", expect=1)
+        self.assertIn("Refusing to write", out)
 
     def test_do_without_today_explains_itself(self):
         out = self.run_pm("do", "1", expect=1)
@@ -638,6 +657,139 @@ class TodayTests(CliTestCase):
         out = self.run_pm("today", "--product", "IP", "-w", "SDX")
         self.assertIn("APS-30", out)
         self.assertNotIn("APS-20", out)              # APS workstream
+
+
+class TodayWriteTests(CliTestCase):
+    def test_do_yes_writes_the_due_date(self):
+        self.run_pm("today")
+        out = self.run_pm("do", "1", "--yes")
+        self.assertIn("Sent.", out)
+        puts = [c for c in self.jira.calls if c[0] == "PUT"]
+        self.assertTrue(puts)
+        self.assertIn("duedate", (puts[-1][2].get("fields") or {}))
+        log = os.path.join(self.dir, "write-log.jsonl")
+        self.assertTrue(os.path.exists(log))
+        with open(log, encoding="utf-8") as fh:
+            self.assertIn("APS-30", fh.read())
+
+
+class LintDecisionTests(CliTestCase):
+    def _findings(self, *extra):
+        self.run_pm("lint", "--json", *extra)
+        import json
+        files = [f for f in os.listdir(self.dir)
+                 if f.startswith("lint_report_") and f.endswith(".json")]
+        with open(os.path.join(self.dir, files[0]), encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_snooze_hides_a_finding_until_all(self):
+        before = {f["key"] for f in self._findings() if f["rule"] == "vague-title"}
+        self.assertIn("APS-11", before)
+        out = self.run_pm("lint", "--snooze", "APS-11", "--until", "14d",
+                          "--why", "cosmetic, agreed with A. Lee")
+        self.assertIn("Remembered: snooze APS-11", out)
+        self.assertIn("hidden", out)
+        after = {f["key"] for f in self._findings()}
+        self.assertNotIn("APS-11", after)
+        shown = {f["key"] for f in self._findings("--all")}
+        self.assertIn("APS-11", shown)
+
+    def test_assign_hides_and_writes_assignee(self):
+        out = self.run_pm("lint", "--assign", "APS-20", "--to", "dana",
+                          "--why", "Dana will refine the AC", "--yes")
+        self.assertIn("Remembered: assign APS-20", out)
+        self.assertIn("Sent.", out)
+        puts = [c for c in self.jira.calls if c[0] == "PUT"
+                and "APS-20" in c[1]]
+        self.assertTrue(puts)
+        self.assertEqual(
+            (puts[-1][2].get("fields") or {}).get("assignee"),
+            {"accountId": "dana"})
+        keys = {f["key"] for f in self._findings()}
+        self.assertNotIn("APS-20", keys)
+
+
+class TriageTests(CliTestCase):
+    def test_triage_lists_and_apply_dry_run_sends_nothing(self):
+        out = self.run_pm("triage")
+        self.assertIn("TRIAGE", out)
+        self.assertIn("APS-30", out)
+        self.assertIn("pm triage --apply", out)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, "triage.json")))
+        preview = self.run_pm("triage", "--apply", "1", "--dry-run")
+        self.assertIn("Would PUT", preview)
+        self.assertIn("nothing was sent", preview)
+        puts = [c for c in self.jira.calls if c[0] == "PUT"]
+        self.assertEqual(puts, [])
+
+    def test_triage_apply_yes_writes(self):
+        self.run_pm("triage")
+        out = self.run_pm("triage", "--apply", "1", "--yes")
+        self.assertIn("Sent.", out)
+        puts = [c for c in self.jira.calls if c[0] == "PUT"]
+        self.assertTrue(puts)
+
+
+class RefineTests(CliTestCase):
+    def test_refine_writes_a_worksheet_with_drafts(self):
+        out = self.run_pm("refine", "-w", "SDX")
+        self.assertIn("Drafts in refine_SDX_", out)
+        text = self.read_output(r"refine_SDX_.*\.md")
+        self.assertIn("## APS-11", text)
+        self.assertIn("title: Fix retry handling in the exchange client", text)
+
+    def test_refine_apply_writes_kept_fields(self):
+        self.run_pm("refine", "-w", "SDX")
+        out = self.run_pm("refine", "--apply", "-w", "SDX", "--yes")
+        self.assertIn("Sent.", out)
+        puts = [c for c in self.jira.calls if c[0] == "PUT"
+                and "APS-11" in c[1]]
+        self.assertTrue(puts)
+        self.assertEqual(
+            (puts[-1][2].get("fields") or {}).get("summary"),
+            "Fix retry handling in the exchange client")
+
+    def test_review_alias_prints_a_deprecation_note(self):
+        out = self.run_pm("review", "titles", "-w", "SDX")
+        self.assertIn("deprecated alias", out)
+
+
+class InboxTests(CliTestCase):
+    def test_note_then_inbox_create(self):
+        out = self.run_pm("note", "customer wants an SSO audit export")
+        self.assertIn("Captured #1", out)
+        listed = self.run_pm("inbox")
+        self.assertIn("#1", listed)
+        self.assertIn("Export the SSO audit log", listed)
+        created = self.run_pm("inbox", "create", "1", "--yes")
+        self.assertIn("Created APS-", created)
+        posts = [c for c in self.jira.calls if c[0] == "POST"
+                 and c[1].rstrip("/") == "/rest/api/3/issue"]
+        self.assertTrue(posts)
+        empty = self.run_pm("inbox")
+        self.assertIn("Inbox is empty", empty)
+
+    def test_inbox_drop(self):
+        self.run_pm("note", "scratch this later")
+        out = self.run_pm("inbox", "drop", "1")
+        self.assertIn("Dropped #1", out)
+        self.assertIn("Inbox is empty", self.run_pm("inbox"))
+
+    def test_inbox_create_dry_run_sends_nothing(self):
+        self.run_pm("note", "do not create this")
+        out = self.run_pm("inbox", "create", "1", "--dry-run")
+        self.assertIn("nothing was sent", out)
+        posts = [c for c in self.jira.calls if c[0] == "POST"
+                 and c[1].rstrip("/") == "/rest/api/3/issue"]
+        self.assertEqual(posts, [])
+
+
+class ProductCheckTests(CliTestCase):
+    def test_products_check_uses_the_team_project(self):
+        out = self.run_pm("products", "check")
+        self.assertIn("Team project: APS", out)
+        self.assertIn("components name products and workstreams", out)
+        self.assertIn("Setup looks good", out)
 
 
 if __name__ == "__main__":

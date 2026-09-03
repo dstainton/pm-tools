@@ -212,6 +212,61 @@ def fetch_project_components(cfg, project):
     return [c.get("name") for c in resp.json() if c.get("name")]
 
 
+def fetch_comments(cfg, key):
+    """Comments on one issue, newest last."""
+    resp = requests.get(_api(cfg, f"issue/{key}/comment"),
+                        auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return resp.json().get("comments") or []
+
+
+def fetch_issue_links(cfg, key):
+    """issuelinks for one issue: [{type, inward, outward, key, summary}]."""
+    resp = requests.get(_api(cfg, f"issue/{key}"),
+                        params={"fields": "issuelinks,summary"},
+                        auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    links = []
+    for link in (resp.json().get("fields") or {}).get("issuelinks") or []:
+        rel = link.get("type") or {}
+        other = link.get("outwardIssue") or link.get("inwardIssue") or {}
+        direction = "outward" if link.get("outwardIssue") else "inward"
+        name = rel.get("outward") if direction == "outward" else rel.get("inward")
+        links.append({
+            "type": rel.get("name") or "",
+            "relation": (name or "").lower(),
+            "key": other.get("key"),
+            "summary": ((other.get("fields") or {}).get("summary") or ""),
+        })
+    return links
+
+
+def search_users(cfg, query):
+    """People whose name or email matches `query`."""
+    if not query:
+        return []
+    resp = requests.get(_api(cfg, "user/search"),
+                        params={"query": query},
+                        auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    return resp.json() or []
+
+
+def resolve_assignee(cfg, name):
+    """Pick the first user search hit. Returns {accountId, displayName} or None."""
+    hits = search_users(cfg, name)
+    if not hits:
+        return None
+    person = hits[0]
+    return {
+        "accountId": person.get("accountId"),
+        "displayName": person.get("displayName") or name,
+    }
+
+
 def fetch_active_sprints(cfg, project):
     """Active sprints (and their Sprint Goals) for a project, if Agile is on.
 
@@ -332,8 +387,8 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
     epic = cfg.get("epic_link_field") or "parent"
 
     fields = ["summary", "status", "issuetype", "components",
-              "assignee", "labels", "duedate", "updated", "description",
-              "parent"]
+              "assignee", "labels", "duedate", "updated", "created",
+              "description", "parent"]
     for extra in (sp, sd, ac, epic):
         if extra and extra not in fields:
             fields.append(extra)
@@ -369,6 +424,7 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
             "start_date": f.get(sd) if sd else None,
             "due_date": f.get("duedate"),
             "updated": f.get("updated"),
+            "created": f.get("created"),
             "description": adf_to_text(f.get("description")),
             "acceptance_criteria": adf_to_text(f.get(ac)) if ac else "",
         })

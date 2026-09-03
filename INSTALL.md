@@ -20,8 +20,8 @@ to PATH. See `README.md` for details.
 > **Existing installation:** `pm init` does not overwrite an existing
 > `~/.pm/config.yaml`. Updating the package therefore does not automatically
 > migrate your live config. Copy the `products:`, `cache:`, `today:`,
-> `membership:`, `scopes:` and revised `workstreams:` sections from the
-> bundled `config.yaml` into your current one.
+> `state:`, `triage:`, `membership:`, `scopes:` and revised `workstreams:`
+> sections from the bundled `config.yaml` into your current one.
 > preserving your existing URLs and credentials. Older configs keep working, so
 > this can wait until convenient.
 

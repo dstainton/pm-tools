@@ -117,7 +117,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn("MOVED SINCE YESTERDAY", text)
         self.assertIn("AGING", text)
         self.assertIn("REFINEMENT GAPS", text)
-        self.assertIn("pm ready -w SDX", text)
+        self.assertIn("pm refine -w SDX", text)
 
 
 if __name__ == "__main__":

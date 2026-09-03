@@ -281,6 +281,8 @@ def render(issue, fields, expand=None):
         "components": [{"name": c} for c in issue.get("components") or []],
         "duedate": issue.get("duedate"),
         "updated": issue.get("updated"),
+        "created": issue.get("created") or issue.get("updated"),
+        "issuelinks": issue.get("issuelinks") or [],
         "priority": {"name": issue.get("priority", "Medium")},
         "labels": issue.get("labels") or [],
         "description": (_adf(issue["description"])
@@ -311,6 +313,13 @@ DEFAULT_FIELDS = [
      "schema": {"type": "any"}},
 ]
 
+DEFAULT_USERS = [
+    {"accountId": "test-pm", "displayName": "Test PM",
+     "emailAddress": "pm@example.com"},
+    {"accountId": "dana", "displayName": "Dana",
+     "emailAddress": "dana@example.com"},
+]
+
 
 class _Handler(BaseHTTPRequestHandler):
     backlog = []
@@ -318,6 +327,7 @@ class _Handler(BaseHTTPRequestHandler):
     pages = []
     fields = DEFAULT_FIELDS
     sprints = {}
+    users = DEFAULT_USERS
     calls = []
 
     def log_message(self, *args):                    # keep test output readable
@@ -381,6 +391,28 @@ class _Handler(BaseHTTPRequestHandler):
                           if i["key"] == match.group(1)), None)
             return self._send({"values": (issue or {}).get("changelog") or []})
 
+        match = re.match(r"/rest/api/3/issue/([^/]+)/comment", path)
+        if match:
+            issue = next((i for i in self.backlog
+                          if i["key"] == match.group(1)), None)
+            return self._send({"comments": (issue or {}).get("comments") or []})
+
+        match = re.match(r"/rest/api/3/issue/([^/]+)/?$", path)
+        if match:
+            issue = next((i for i in self.backlog
+                          if i["key"] == match.group(1)), None)
+            if issue is None:
+                return self._send({"errorMessages": [f"No issue {match.group(1)}"]}, 404)
+            fields = parse_qs(parsed.query).get("fields", ["summary,issuelinks"])[0]
+            return self._send(render(issue, [f.strip() for f in fields.split(",")]))
+
+        if path.startswith("/rest/api/3/user/search"):
+            query = (parse_qs(parsed.query).get("query") or [""])[0].lower()
+            hits = [u for u in self.users
+                    if query in (u.get("displayName") or "").lower()
+                    or query in (u.get("emailAddress") or "").lower()]
+            return self._send(hits)
+
         if path.startswith("/wiki/rest/api/content/search"):
             return self._confluence()
 
@@ -421,7 +453,86 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/v1/chat/completions"):
             return self._model(body)
 
+        match = re.match(r"/rest/api/3/issue/([^/]+)/comment", self.path)
+        if match:
+            issue = next((i for i in self.backlog
+                          if i["key"] == match.group(1)), None)
+            if issue is None:
+                return self._send({"errorMessages": ["no issue"]}, 404)
+            issue.setdefault("comments", []).append({
+                "body": body.get("body"),
+                "created": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "author": {"displayName": "Test PM"},
+            })
+            return self._send({"id": "100"}, status=201)
+
+        if self.path.rstrip("/") == "/rest/api/3/issue":
+            fields = body.get("fields") or {}
+            project = ((fields.get("project") or {}).get("key")
+                       or "APS")
+            n = 100 + sum(1 for i in self.backlog if i["key"].startswith(project))
+            key = f"{project}-{n}"
+            summary = fields.get("summary") or ""
+            itype = (fields.get("issuetype") or {}).get("name") or "Story"
+            comps = [c.get("name") for c in (fields.get("components") or [])
+                     if c.get("name")]
+            desc = fields.get("description")
+            if isinstance(desc, dict):
+                texts = []
+                def walk(node):
+                    if isinstance(node, dict):
+                        if node.get("type") == "text":
+                            texts.append(node.get("text") or "")
+                        for child in node.get("content") or []:
+                            walk(child)
+                walk(desc)
+                desc = " ".join(texts)
+            self.backlog.append({
+                "key": key, "project": project, "issuetype": itype,
+                "summary": summary, "components": comps,
+                "status_name": "To Do", "status_category": "To Do",
+                "description": desc or "", "updated": stamp_now(),
+                "created": stamp_now(),
+            })
+            link_parents(self.backlog)
+            return self._send({"key": key, "id": key}, status=201)
+
         return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
+
+    def do_PUT(self):                                 # noqa: N802
+        body = self._body()
+        self.calls.append(("PUT", self.path, body))
+        match = re.match(r"/rest/api/3/issue/([^/]+)", self.path)
+        if not match:
+            return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
+        issue = next((i for i in self.backlog if i["key"] == match.group(1)), None)
+        if issue is None:
+            return self._send({"errorMessages": ["no issue"]}, 404)
+        fields = body.get("fields") or {}
+        if "summary" in fields:
+            issue["summary"] = fields["summary"]
+        if "duedate" in fields:
+            issue["duedate"] = fields["duedate"]
+        if "assignee" in fields:
+            person = fields["assignee"] or {}
+            issue["assignee"] = person.get("displayName") or person.get("accountId")
+        if "customfield_10016" in fields:
+            issue["story_points"] = fields["customfield_10016"]
+        if "description" in fields:
+            desc = fields["description"]
+            if isinstance(desc, dict):
+                texts = []
+                def walk(node):
+                    if isinstance(node, dict):
+                        if node.get("type") == "text":
+                            texts.append(node.get("text") or "")
+                        for child in node.get("content") or []:
+                            walk(child)
+                walk(desc)
+                issue["description"] = " ".join(texts)
+            else:
+                issue["description"] = desc
+        return self._send({})
 
     def _hits(self, jql):
         try:
@@ -445,23 +556,42 @@ class _Handler(BaseHTTPRequestHandler):
     def _model(self, body):
         system = next((m["content"] for m in body.get("messages", [])
                        if m.get("role") == "system"), "")
-        # The review prompts want a JSON array back; the report wants prose.
-        reply = "[]" if "JSON array" in system else (
-            "### What changed since last week\n"
-            "- Fake model reply for the end-to-end test.\n")
+        user = next((m["content"] for m in body.get("messages", [])
+                     if m.get("role") == "user"), "")
+        if "file this note" in system.lower() or "JSON object" in system:
+            reply = json.dumps({
+                "product": "IP", "workstream": "SDX", "issuetype": "Story",
+                "title": "Export the SSO audit log for tenant admins",
+                "criteria": "Given a tenant admin, when they request an audit export, then a CSV is emailed to them.",
+            })
+        elif "Draft a clearer title" in system:
+            reply = '[{"key":"APS-11","title":"Fix retry handling in the exchange client"}]'
+        elif "Draft acceptance criteria" in system:
+            reply = '[{"key":"APS-20","criteria":"Given a tenant over the limit, requests are rejected with 429."}]'
+        elif "JSON array" in system:
+            reply = "[]"
+        else:
+            reply = ("### What changed since last week\n"
+                     "- Fake model reply for the end-to-end test.\n")
+        _ = user
         return self._send({"choices": [{"message": {"role": "assistant",
                                                     "content": reply}}]})
+
+
+def stamp_now():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
 
 
 class FakeJira:
     """Run the stand-in on a spare port for the length of a test."""
 
     def __init__(self, backlog, components=None, pages=None,
-                 fields=None, sprints=None):
+                 fields=None, sprints=None, users=None):
         _Handler.backlog = link_parents(backlog)
         _Handler.components = components or {}
         _Handler.pages = pages or []
         _Handler.fields = fields if fields is not None else DEFAULT_FIELDS
+        _Handler.users = users if users is not None else list(DEFAULT_USERS)
         _Handler.sprints = sprints or {
             "1": [{"id": 10, "name": "Sprint 42", "state": "active",
                    "goal": "Ship certificate rotation"}],

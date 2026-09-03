@@ -10,11 +10,15 @@ pm init         Create a starter config at ~/.pm/config.yaml
 pm products     List, add, remove or check your products
 pm workstreams  List, add, remove or check your workstreams
 pm today        One bounded daily screen (the habit command)
-pm do N         Preview the numbered action from `pm today`
+pm do N         Preview, then write, the numbered action from `pm today`
 pm doctor       Verify config, Jira, fields, model, cache
 pm report       Weekly state-of-product report (uses the local model)
 pm lint         Deterministic Product Backlog checks (no model — pure rules)
-pm review       Model-based judgement checks (title clarity, AC quality)
+pm triage       Queue of things waiting on a decision from you
+pm refine       BA queue: draft titles, criteria and estimates
+pm review       Deprecated alias of `pm refine` (one release)
+pm note         Capture a thought offline; file it later
+pm inbox        List, create or drop captured notes
 pm ready        Team ready-agreement gate: pass/fail per ticket
 pm standup      Daily movement + work-in-progress snapshot (no model)
 ```
@@ -45,8 +49,8 @@ pm today
 
 You also need **Python 3.9+** and, for the model-backed commands (`report`,
 `review`, `ready --deep`), a local OpenAI-compatible model server — see
-**The local model** below. `pm today`, `pm lint`, `pm standup`, `pm doctor`,
-and the fast `pm ready` need no model at all.
+**The local model** below. `pm today`, `pm lint`, `pm triage`, `pm standup`, `pm doctor`,
+`pm note`, and the fast `pm ready` need no model at all.
 
 ---
 
@@ -209,9 +213,11 @@ Scoping `pm report` is safe: it updates only the selected workstream's
 
 ## Products — `pm products`
 
-A product sits above workstreams. The workstream list stays flat; each
-workstream points at a product with `product: <abbrev>`. A workstream with no
-product lands in Unassigned.
+A Jira project is the team. Components name products and workstreams. A
+product sits above workstreams as a name and abbreviation; it does not need
+its own Jira project. The workstream list stays flat; each workstream points
+at a product with `product: <abbrev>`. A workstream with no product lands in
+Unassigned.
 
 ```yaml
 products:
@@ -228,14 +234,16 @@ workstreams:
 
 ```
 pm products
-pm products add --name "Billing Platform" --abbrev BILL --project BILL
+pm products add --name "Billing Platform" --abbrev BILL
 pm products remove BILL
 pm products check
 ```
 
 `add` / `remove` edit the config in place, comments and all. You cannot remove
-a product that workstreams still name. A product may set its own `project:`
-and `scopes:`; workstreams inherit those unless they override.
+a product that workstreams still name. `pm products check` verifies each
+workstream's components exist in the team project (`jira.project`). A product
+may set `project:` only when it really lives outside that team project, and
+may set `scopes:`; workstreams inherit those unless they override.
 
 ---
 
@@ -244,7 +252,8 @@ and `scopes:`; workstreams inherit those unless they override.
 ```
 pm today                  # one bounded screen across the portfolio
 pm today --product IP
-pm do 1                   # preview the action numbered this morning
+pm do 1 --dry-run         # preview the action numbered this morning
+pm do 1                   # confirm once, then write
 ```
 
 The screen is the same shape every day: Sprint Goal (when Jira's Agile API
@@ -253,8 +262,9 @@ refinement gaps against the team's ready agreement. Numbered actions are
 written to `~/.pm/today.json` so the numbers still mean what they meant when
 you walked away.
 
-`pm do N` prints the exact payload it would send to Jira, then stops. Writes
-are not enabled in this release.
+`pm do N` prints the exact payload, asks once (`--yes` skips the prompt,
+`--dry-run` stops after the preview), writes to Jira, and appends a line to
+`~/.pm/write-log.jsonl`. Non-interactive runs must pass `--yes` or `--dry-run`.
 
 ---
 
@@ -444,23 +454,69 @@ sprint planning.
 Output: `lint_report_<date>.md`. Flags: `--severity error` (only hard problems),
 `--json` (machine-readable). Every threshold lives in the `lint:` config block.
 
-> **Lint vs. review.** `pm lint` uses cheap, reliable heuristics that never cry
-> wolf but won't catch subtler cases. For real judgement, use `pm review`.
-
-### `pm review` — model-based judgement checks
-
-The smart cousins of the lint heuristics. These ask the **local model** to make
-calls rules can't, and every finding is a **suggestion for your judgement**:
+Decisions stick, so the same finding is not re-decided every week:
 
 ```
-pm review titles      # flag ambiguous titles + a suggested rewrite
-pm review criteria    # flag weak/missing AC + what to add
-pm review all         # both (default)
+pm lint --snooze APS-11 --until next-sprint --why "cosmetic, agreed with A. Lee"
+pm lint --accept APS-40 --why "standalone spike, no parent by design"
+pm lint --assign APS-20 --to dana --why "Dana will refine the AC"
+pm lint --all
 ```
 
-Output: `review_titles_<date>.md` and/or `review_criteria_<date>.md`, each with
-the model's reasoning. Issues go to the model in batches (`review.batch_size`);
-a misfiring batch is skipped and noted, never crashing the run.
+`--assign --to` takes a person, not a role. It hides the finding from the
+default lint, lands it in that person's `pm refine` queue, and writes the
+Jira assignee after a preview. Memory lives in `state.shared_path` (a synced
+folder) when that is set, otherwise `~/.pm`.
+
+> **Lint vs. refine.** `pm lint` uses cheap, reliable heuristics that never cry
+> wolf. `pm refine` drafts the missing title, criteria and estimate so the BA
+> edits instead of starting from a blank field.
+
+### `pm triage` — waiting on you
+
+Deterministic. No model. Grouped by product, each line with the action that
+clears it.
+
+```
+pm triage
+pm triage --product IP
+pm triage --apply 2 --dry-run
+pm triage --apply 2 --yes
+```
+
+What counts is in the `triage:` block: unassigned in the Sprint, blocked
+(status, label, or a blocked-by link), comments that named you, new bugs,
+in-sprint items untouched for N days, and overdue work.
+
+### `pm refine` — the BA's queue
+
+Lint finds the gaps. This command drafts a title, acceptance criteria and an
+estimate for each one, writes an editable worksheet, and `--apply` sends back
+only the fields you left in the file. A deleted field is not written. The
+estimate is the median of closed similar stories in the same workstream, not
+a model guess.
+
+```
+pm refine -w SDX
+# edit refine_SDX_<date>.md
+pm refine --apply -w SDX
+```
+
+`pm review` is a deprecated alias for one release. Without `--apply` it still
+runs the old judgement reports.
+
+### `pm note` / `pm inbox` — capture now, file later
+
+```
+pm note "customer wants an SSO audit export"
+pm note -w SDX "check whether cert rotation needs a comms plan"
+pm inbox
+pm inbox create 1
+pm inbox drop 1
+```
+
+Capture is instant and offline. Filing suggests a product, workstream, type
+and title, then creates the issue after a preview.
 
 ### `pm ready` — Definition-of-Ready gate
 
@@ -507,7 +563,8 @@ The window and the definition of "in progress" come from the `standup_moved` and
 - **Before sprint planning:** `pm ready` (or `--deep`) to see what's good to pull
   in and what needs work first. Fix the reds, re-run.
 - **Backlog refinement:** `pm lint` for the fast fact-based sweep, then
-  `pm review` when you want the model's eyes on titles and acceptance criteria.
+  `pm refine` to draft the gaps. `pm triage` for the queue waiting on you.
+- **Between meetings:** `pm note "..."` — file it from `pm inbox` later.
 - **End of week:** `pm report` for the stakeholder snapshot.
 
 ---
@@ -544,6 +601,9 @@ pm_helper/
 │   ├── filters.py       #   plain scope options -> JQL
 │   ├── workstreams.py   #   Component + parent membership -> JQL
 │   ├── sources.py       #   Jira / Confluence / SharePoint fetchers
+│   ├── writes.py        #   the one path that writes to Jira
+│   ├── decisions.py     #   snooze / accept / assign memory
+│   ├── paths.py         #   local ~/.pm vs shared state folder
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff
 ├── docs/
@@ -559,7 +619,10 @@ pm_helper/
     ├── workstreams.py   # pm workstreams
     ├── report.py        # pm report
     ├── lint.py          # pm lint
-    ├── review.py        # pm review
+    ├── triage.py        # pm triage
+    ├── refine.py        # pm refine
+    ├── review.py        # pm review (deprecated alias)
+    ├── inbox.py         # pm note / pm inbox
     ├── ready.py         # pm ready
     └── standup.py       # pm standup
 ```
@@ -579,14 +642,15 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 for a PM running several products and the BA who refines with them.
 
 - **Products above workstreams** — shipped in 0.4.0.
-- **`pm today`** — shipped in 0.4.0 (`pm do` is preview-only).
-- **`pm capture` / `pm inbox`** — three seconds to file an idea, decide later.
-- **`pm triage`** — what is waiting on a decision from you, with the action.
-- **`pm refine`** — the BA's queue, with drafted titles, criteria and estimates.
-- **Findings that remember your decision** — snooze, accept, or hand to the BA.
+- **`pm today` / `pm do`** — shipped in 0.4.0; writes landed in 0.5.0.
+- **`pm note` / `pm inbox`** — shipped in 0.5.0.
+- **`pm triage`** — shipped in 0.5.0.
+- **`pm refine`** — shipped in 0.5.0 (`pm review` is a deprecated alias).
+- **Findings that remember your decision** — shipped in 0.5.0.
 - **`pm brief`** — meeting prep and debrief, with per-audience memory.
 - **`pm metrics`** — throughput, cycle time, aging work and a plain forecast.
-- **`pm publish` / `pm schedule`** — the weekly update goes out without you.
+- **`pm publish` / `pm schedule`** — the weekly update goes out without you
+  (Teams and/or Confluence; tranche 3).
 - **`pm doctor`** — shipped in 0.4.0, with the fetch cache.
 
 `docs/FEATURE_PROPOSALS.md` holds the earlier, code-first list of twenty; the
