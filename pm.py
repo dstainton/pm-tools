@@ -7,17 +7,21 @@ workstreams. Runs entirely against your own Jira / Confluence / SharePoint and
 your local model — nothing leaves your machine.
 
 Commands:
-  pm init              Create a starter config at ~/.pm/config.yaml.
-  pm products          List, add, remove or check your products.
-  pm workstreams       List, add, remove or check your workstreams.
-  pm today             One bounded daily screen (the habit command).
-  pm do N              Preview the action `pm today` numbered N.
-  pm doctor            Verify the setup; `--discover-fields` finds field IDs.
-  pm report            Weekly state-of-product report (uses the local model).
-  pm lint              Deterministic Product Backlog checks (no model).
-  pm review            Model-based judgement checks (title clarity, AC quality).
-  pm ready             Team ready-agreement gate: pass/fail per ticket.
-  pm standup           Daily movement + work-in-progress snapshot (no model).
+    pm init              Create a starter config at ~/.pm/config.yaml.
+    pm products          List, add, remove or check your products.
+    pm workstreams       List, add, remove or check your workstreams.
+    pm today             One bounded daily screen (the habit command).
+    pm do N              Preview, then write, the action `pm today` numbered N.
+    pm doctor            Verify the setup; `--discover-fields` finds field IDs.
+    pm report            Weekly state-of-product report (uses the local model).
+    pm lint              Deterministic Product Backlog checks (no model).
+    pm triage            Queue of things waiting on a decision from you.
+    pm refine            BA queue: draft titles, criteria, estimates.
+    pm review            Deprecated alias of `pm refine` (one release).
+    pm note              Capture a thought offline; file it later.
+    pm inbox             List, create or drop captured notes.
+    pm ready             Team ready-agreement gate: pass/fail per ticket.
+    pm standup           Daily movement + work-in-progress snapshot (no model).
 
 Common options (work on every command except init):
   --config PATH        Path to the config file. If omitted, pm searches:
@@ -37,9 +41,13 @@ Examples:
                      --product BILL
   pm workstreams check --show-jql
   pm today
-  pm do 1
+  pm do 1 --dry-run
   pm doctor
   pm lint --product BILL
+  pm lint --snooze APS-11 --until next-sprint --why "cosmetic"
+  pm triage --apply 2 --yes
+  pm refine -w SDX
+  pm note "customer wants an SSO audit export"
   pm ready --deep --workstream sdx,itk
   pm standup --days 3 --by workstream
 """
@@ -54,8 +62,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core import cache as fetch_cache                           # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
-from commands import (report, lint, review, ready, init,        # noqa: E402
-                      standup, workstreams, products, doctor, today)
+from commands import (report, lint, ready, init,                # noqa: E402
+                      standup, workstreams, products, doctor, today,
+                      triage, refine, inbox)
 
 
 def resolve_config_path(explicit):
@@ -115,9 +124,16 @@ def build_parser():
     common.add_argument("--refresh", action="store_true",
                         help="Ignore the fetch cache and query Jira again")
 
+    write_opts = argparse.ArgumentParser(add_help=False)
+    write_opts.add_argument("--yes", "-y", action="store_true",
+                            help="Confirm the Jira write without a prompt")
+    write_opts.add_argument("--dry-run", action="store_true",
+                            help="Preview the Jira write and stop")
+
     sub = parser.add_subparsers(
         dest="command", required=True,
-        metavar="{init,products,workstreams,today,do,doctor,report,lint,review,ready,standup}")
+        metavar="{init,products,workstreams,today,do,doctor,report,lint,"
+                "triage,refine,review,note,inbox,ready,standup}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
@@ -171,8 +187,9 @@ def build_parser():
                              help="Bounded daily screen across the portfolio")
     p_today.set_defaults(func=today.run_today, needs_config=True)
 
-    p_do = sub.add_parser("do", parents=[common],
-                          help="Preview the numbered action from `pm today`")
+    p_do = sub.add_parser("do", parents=[common, write_opts],
+                          help="Preview, then write, the numbered action "
+                               "from `pm today`")
     p_do.add_argument("number", type=int, help="The number from the last "
                       "`pm today` (e.g. 1)")
     p_do.set_defaults(func=today.run_do, needs_config=True)
@@ -188,20 +205,68 @@ def build_parser():
                               help="Weekly state-of-product report")
     p_report.set_defaults(func=report.run, needs_config=True)
 
-    p_lint = sub.add_parser("lint", parents=[common],
+    p_lint = sub.add_parser("lint", parents=[common, write_opts],
                             help="Deterministic backlog quality checks")
     p_lint.add_argument("--json", action="store_true",
                         help="Write findings as JSON instead of Markdown")
     p_lint.add_argument("--severity", choices=["error", "warn", "review"],
                         help="Only show findings at or above this severity")
+    p_lint.add_argument("--snooze", metavar="KEY",
+                        help="Hide findings on KEY until --until")
+    p_lint.add_argument("--accept", metavar="KEY",
+                        help="Accept findings on KEY (hidden unless --all)")
+    p_lint.add_argument("--assign", metavar="KEY",
+                        help="Hand KEY to --to <person> (and set Jira assignee)")
+    p_lint.add_argument("--until",
+                        help="With --snooze: YYYY-MM-DD, 14d, 2w, or next-sprint")
+    p_lint.add_argument("--why",
+                        help="Reason that sticks with the decision")
+    p_lint.add_argument("--to",
+                        help="Person to assign the finding to (a name, not a role)")
+    p_lint.add_argument("--rule",
+                        help="Limit the decision to one lint rule (default: *)")
+    p_lint.add_argument("--all", action="store_true",
+                        help="Show snoozed, accepted and assigned findings too")
     p_lint.set_defaults(func=lint.run, needs_config=True)
 
-    p_review = sub.add_parser("review", parents=[common],
-                              help="Model-based judgement checks")
+    p_triage = sub.add_parser("triage", parents=[common, write_opts],
+                              help="Queue of things waiting on a decision from you")
+    p_triage.add_argument("--apply", type=int, metavar="N",
+                          help="Do the numbered triage action")
+    p_triage.set_defaults(func=triage.run, needs_config=True)
+
+    p_refine = sub.add_parser("refine", parents=[common, write_opts],
+                              help="Draft titles, criteria and estimates for "
+                                   "items that fail the ready agreement")
+    p_refine.add_argument("--apply", action="store_true",
+                          help="Write the kept drafts from the worksheet")
+    p_refine.set_defaults(func=refine.run, needs_config=True)
+
+    p_review = sub.add_parser("review", parents=[common, write_opts],
+                              help="Deprecated alias of `pm refine`")
     p_review.add_argument("aspect", nargs="?", default="all",
                           choices=["titles", "criteria", "all"],
                           help="What to review (default: all)")
-    p_review.set_defaults(func=review.run, needs_config=True)
+    p_review.add_argument("--apply", action="store_true",
+                          help="Write the kept drafts from the worksheet")
+    p_review.set_defaults(func=refine.run, needs_config=True)
+
+    p_note = sub.add_parser("note", parents=[common],
+                            help="Capture a thought offline")
+    p_note.add_argument("text", nargs="*",
+                        help="The note (quote it if it has spaces)")
+    p_note.set_defaults(func=inbox.run_note, needs_config=True)
+
+    p_inbox = sub.add_parser("inbox", parents=[common, write_opts],
+                             help="List, create or drop captured notes")
+    p_inbox.add_argument("action", nargs="?", default="list",
+                         choices=["list", "create", "drop"],
+                         help="What to do (default: list)")
+    p_inbox.add_argument("target", nargs="?", type=int,
+                         help="Note number, for create / drop")
+    p_inbox.add_argument("--title", help="Override the suggested title")
+    p_inbox.add_argument("--issuetype", help="Override the suggested type")
+    p_inbox.set_defaults(func=inbox.run_inbox, needs_config=True)
 
     p_ready = sub.add_parser("ready", parents=[common],
                              help="Definition-of-Ready gate (pass/fail)")
@@ -256,9 +321,14 @@ def main():
     product_sel = getattr(args, "product", None)
     action = getattr(args, "action", None)
     skip_product_filter = (
-        args.command == "do"
+        args.command in ("do", "note")
         or (args.command in ("workstreams", "products")
             and action in ("add", "remove"))
+        or (args.command == "inbox" and action in ("create", "drop"))
+        or (args.command == "lint"
+            and (getattr(args, "snooze", None)
+                 or getattr(args, "accept", None)
+                 or getattr(args, "assign", None)))
     )
     if product_sel and not skip_product_filter:
         selected = filter_by_product(cfg, selected, product_sel)

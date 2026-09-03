@@ -40,8 +40,9 @@ jira:
   base_url: "https://<YOUR_ORG>.atlassian.net"
   email: "<YOUR_LOGIN_EMAIL>"
   api_token: "<YOUR_JIRA_API_TOKEN>"   # id.atlassian.com > Security > API tokens
-  # The project holding the work. Every workstream uses this unless it sets its
-  # own `project:`. One place to change if the backlog moves.
+  # The team project. Components on issues name products and workstreams.
+  # A product does not need its own Jira project. A workstream only sets
+  # `project:` if it lives outside this one.
   project: "APS"
   # Fields the light report fetch pulls. Usually no need to change this.
   fields: "summary,status,assignee,updated,duedate,priority,issuetype,labels"
@@ -214,26 +215,48 @@ today:
   untouched_days: 3                # in-sprint and quieter than this → NEEDS YOU
 
 # ----------------------------------------------------------------------------
+#  5i. Shared state — decisions and the inbox, so the PM and the BA see the
+#      same queues. Cache, write-log and today.json stay local (~/.pm).
+# ----------------------------------------------------------------------------
+#  Point shared_path at a synced OneDrive / SharePoint folder. Leave it
+#  empty to keep everything in ~/.pm.
+state:
+  shared_path: ""
+  # local_path: "~/.pm"            # override only if you must
+
+# ----------------------------------------------------------------------------
+#  5j. Triage — the "waiting on me" queue (`pm triage`)
+# ----------------------------------------------------------------------------
+triage:
+  unassigned_in_sprint: true
+  blocked: true                   # status, label, or a blocked-by link
+  mentions_me_within_days: 3
+  new_bugs_within_days: 1
+  in_sprint_untouched_days: 3
+  overdue: true
+
+# ----------------------------------------------------------------------------
 #  6. Products — the portfolio layer, above workstreams
 # ----------------------------------------------------------------------------
-#  A product is a name, an abbreviation, and optional defaults (Jira project,
-#  scopes). Workstreams stay a flat list and point at a product with
-#  `product: <abbrev>`. A workstream with no product lands in Unassigned.
+#  A Jira project is the team. Components represent products and workstreams.
+#  A product is a name, an abbreviation, and optional defaults (scopes). Set
+#  `project:` on a product only when it really lives outside jira.project.
+#  Workstreams stay a flat list and point at a product with `product: <abbrev>`.
+#  A workstream with no product lands in Unassigned.
 #
 #  The product abbrev is what you pass to --product. Do not reuse a
 #  workstream's abbrev as a product abbrev if you can help it — they live
 #  in different flags, but identical short names are easy to mix up.
 #
 #    pm products
-#    pm products add --name "Billing Platform" --abbrev BILL --project BILL
-#    pm products check
+#    pm products add --name "Billing Platform" --abbrev BILL
+#    pm products check          # verifies components in the team project
 #    pm lint --product IP
 # ----------------------------------------------------------------------------
 products:
 
   - name: "Integration Platform"
     abbrev: "IP"
-    project: "APS"
 
 # ----------------------------------------------------------------------------
 #  6b. Workstreams — reported and checked separately, in this order
@@ -245,7 +268,7 @@ products:
 #    abbrev             what you pass to --workstream
 #    product            the product abbrev it belongs to (optional)
 #    components         exact Jira Component name(s) — must match Jira
-#    project            only if this stream lives outside its product / jira.project
+#    project            only if this stream lives outside the team project
 #    confluence_space   space key holding its decisions / risks
 #    confluence_labels  which labels to gather from that space
 #    sharepoint_query   search term for its documents

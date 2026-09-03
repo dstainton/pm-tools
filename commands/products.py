@@ -1,17 +1,21 @@
 """`pm products` — see, change and verify the portfolio layer.
 
-A product is a name, an abbreviation, and optional per-product defaults
-(Jira project, scopes). Workstreams stay a flat list and point at a product
-with `product: <abbrev>`. A workstream with no product lands in Unassigned.
+A product is a name, an abbreviation, and optional defaults (scopes, or a
+Jira project only when the product really lives outside the team project).
+The Jira project is the team; components name products and workstreams.
+Workstreams stay a flat list and point at a product with `product: <abbrev>`.
+A workstream with no product lands in Unassigned.
 
   pm products
-  pm products add --name "Billing Platform" --abbrev BILL --project BILL
+  pm products add --name "Billing Platform" --abbrev BILL
   pm products remove BILL
   pm products check
   pm products check --show-jql
 
 `add` and `remove` edit the config in place and refuse to write a file that
 would not load. Removing a product that workstreams still name is refused.
+`check` verifies each workstream's components exist in the team project
+(`jira.project`), not a one-project-per-product mapping.
 """
 
 import sys
@@ -150,20 +154,30 @@ def _check(cfg, args):
     jira_cfg = cfg["jira"]
     problems = 0
     streams = cfg.get("_workstreams") or cfg.get("workstreams") or []
+    team = (jira_cfg or {}).get("project")
+    print(f"Team project: {team}")
+    print("A Jira project is the team; components name products "
+          "and workstreams.\n")
+    if team:
+        try:
+            sources.fetch_project(jira_cfg, team)
+        except Exception as err:                   # noqa: BLE001
+            print(f"⚠ could not open team project {team}: {err}")
+            problems += 1
 
     for product, group in product_core.group_workstreams(cfg, streams):
         label = f"{product.get('name')} ({product.get('abbrev')})"
         print(label)
         project = product.get("project")
-        if project:
-            print(f"  project: {project}")
+        if project and project != team:
+            print(f"  project override: {project} (outside the team project)")
             try:
                 sources.fetch_project(jira_cfg, project)
             except Exception as err:               # noqa: BLE001
                 print(f"  ⚠ could not open project {project}: {err}")
                 problems += 1
         elif product["abbrev"] != product_core.UNASSIGNED_ABBREV:
-            print("  project: (inherits jira.project)")
+            print(f"  components checked in team project {team}")
 
         print(f"  workstreams: {len(group)}")
         for ws in group:

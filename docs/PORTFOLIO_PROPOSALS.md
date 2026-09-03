@@ -10,8 +10,10 @@ list survive here in a different shape, and the last section says what happened
 to each.
 
 Tranche 1 is built: item 1 (products), item 10 (doctor and the cache), and
-item 2 (`pm today` / `pm do` as a preview). The rest is still a proposal.
-`pm do` does not write to Jira yet.
+item 2 (`pm today`). Tranche 2 is built: item 6 (decisions stick), item 4
+(`pm triage`), item 5 (`pm refine`), item 3 (`pm note` / `pm inbox`), and
+`pm do` now writes after a preview and one confirmation. Tranche 3
+(metrics, brief, publish) is still a proposal.
 
 ---
 
@@ -462,25 +464,23 @@ seconds.
 
 ---
 
-## Cross-cutting decisions to make before building
+## Cross-cutting decisions — settled 2026-09-03
 
-These affect several items, so they are worth settling first.
-
-1. **Jira write scope.** Items 3, 4, 5, 6 and 7 create or edit issues. Does the
-   API token have write permission, and are you comfortable with the tool using
-   it? Every write would be preview-then-confirm, logged to
-   `~/.pm/write-log.jsonl`, with `--dry-run` available everywhere and nothing
-   writing on a schedule.
-2. **Where shared state lives.** See the table in item 6. This decides whether
-   the PM/BA handoff works at all.
-3. **Product to project mapping.** Are your products separate Jira projects,
-   components within one project, or a mix? Item 1's shape is the same either
-   way, but `pm products check` needs to know what to verify.
-4. **Does the BA run `pm`, or receive its output?** If they run it, item 5 is a
-   command on their machine and item 6 needs shared state. If they receive
-   output, item 5 produces a file you send them and the loop closes more slowly.
-5. **Teams or Confluence for item 9**, and whether a webhook is available
-   without a ticket to IT.
+1. **Jira write scope — yes.** The token may write. Every write is
+   preview → one confirm → a line in `~/.pm/write-log.jsonl`. `--dry-run`
+   is available everywhere. Nothing that writes to Jira runs on a schedule.
+2. **Shared state — a synced folder.** `state.shared_path` (OneDrive /
+   SharePoint) holds decisions and the inbox so the PM and the BA see the
+   same queues. Local `~/.pm` is the default when that path is empty. Jira
+   is touched on `--assign` (the assignee field), not used as a decision store.
+3. **The BA runs `pm`.** Same config shape, shared state from (2). `pm refine`
+   is a command on their machine, not a file you email.
+4. **A Jira project is the team.** Components represent products and
+   workstreams. `jira.project` is the team project; a product does not need
+   its own Jira project. `pm products check` verifies components in that
+   project, not a one-project-per-product mapping.
+5. **Publish later: both Teams and Confluence**, with config to enable one,
+   the other, or both. Tranche 3.
 
 ## Suggested order
 

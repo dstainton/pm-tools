@@ -1,12 +1,12 @@
-"""`pm today` — one bounded daily screen, and `pm do N` to preview an action.
+"""`pm today` — one bounded daily screen, and `pm do N` to act on it.
 
 `pm today` is the habit command: a short list of things that need you, what
 moved, what is aging, and the refinement gaps, grouped by product. Numbered
 actions are written to `today.state_file` (default `~/.pm/today.json`) so
 `pm do 3` still means what it meant when you walked away.
 
-`pm do N` is preview-only in this release. It prints exactly what would be
-sent to Jira and stops. Writes wait until write scope is approved.
+`pm do N` previews the payload, asks once (or honours `--yes` / `--dry-run`),
+writes to Jira, and appends a line to the write log.
 """
 
 import datetime as dt
@@ -16,7 +16,7 @@ import sys
 
 from commands import lint, ready
 from core import products as product_core
-from core import sources, workstreams
+from core import sources, workstreams, writes
 
 
 DEFAULT_STATE = "~/.pm/today.json"
@@ -158,7 +158,7 @@ def describe_action(kind, issue, today=None):
 
 
 def preview_payload(kind, issue, today=None):
-    """The Jira write `pm do` would send, once writes are approved."""
+    """The Jira write `pm do` will send after one confirmation."""
     key = issue["key"]
     path = f"/rest/api/3/issue/{key}"
     if kind == "overdue":
@@ -174,17 +174,13 @@ def preview_payload(kind, issue, today=None):
             "body": {"fields": {"assignee": {"accountId": "(current user)"}}},
         }
     if kind == "blocked":
-        return {
-            "method": "POST",
-            "path": f"/rest/api/3/issue/{key}/comment",
-            "body": {"body": "Checking in — can we get an ETA on the blocker?"},
-        }
+        return writes.action_comment(
+            key, "Checking in — can we get an ETA on the blocker?",
+            kind="blocked-nudge", summary=issue.get("summary") or key)
     if kind == "untouched":
-        return {
-            "method": "POST",
-            "path": f"/rest/api/3/issue/{key}/comment",
-            "body": {"body": "Checking in — still the plan for this Sprint?"},
-        }
+        return writes.action_comment(
+            key, "Checking in — still the plan for this Sprint?",
+            kind="untouched-nudge", summary=issue.get("summary") or key)
     return {"method": "GET", "path": path, "body": None}
 
 
@@ -434,11 +430,11 @@ def render_screen(bundle, actions, aging, today=None):
             lines.append(
                 f"  {stream['abbrev']:<6} {stream['not_ready']} of "
                 f"{stream['total']} items still fail the team's ready "
-                f"agreement     pm ready -w {stream['abbrev']}")
+                f"agreement     pm refine -w {stream['abbrev']}")
     if not any_gaps:
         lines.append("  Every in-scope item meets the team's ready agreement.")
     lines.append("")
-    lines.append("Jira writes are preview-only. `pm do N` shows the payload.")
+    lines.append("`pm do N` previews, then writes after one confirmation.")
     return "\n".join(lines)
 
 
@@ -476,17 +472,25 @@ def run_do(cfg, args):
         sys.exit(f"No action {n}. Available: {available}. "
                  f"(List from {stored.get('date') or 'the last pm today'}.)")
 
-    preview = action.get("preview") or {}
-    print(f"Would update {action['key']} ({action.get('summary')})")
-    print(f"  {action.get('description')}")
-    print("")
-    print(f"  {preview.get('method', 'PUT')} {preview.get('path', '')}")
-    if preview.get("body") is not None:
-        print("  " + json.dumps(preview["body"], indent=2).replace("\n", "\n  "))
-    print("")
-    print("Jira writes are not enabled yet. This is a preview.")
-    print("When write scope is approved, `pm do` will send this after "
-          "one confirmation.")
+    preview = dict(action.get("preview") or {})
+    preview.setdefault("key", action.get("key"))
+    preview.setdefault("summary", action.get("summary"))
+    preview.setdefault("description", action.get("description"))
+    preview.setdefault("kind", action.get("kind"))
+    body = preview.get("body")
+    if isinstance(body, dict):
+        assignee = (body.get("fields") or {}).get("assignee") or {}
+        if assignee.get("accountId") == "(current user)":
+            me = sources.fetch_myself(cfg["jira"])
+            account = me.get("accountId")
+            if not account:
+                sys.exit("Could not resolve your Jira account id.")
+            body = dict(body)
+            fields = dict(body.get("fields") or {})
+            fields["assignee"] = {"accountId": account}
+            body["fields"] = fields
+            preview["body"] = body
+    writes.apply_action(cfg, args, preview)
 
 
 def run(cfg, args):

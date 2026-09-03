@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.5.0 - 2026-09-03
+
+### Jira writes
+
+- One write path: preview the payload, confirm once (`--yes` skips the
+  prompt, `--dry-run` stops after preview), send, append a line to
+  `~/.pm/write-log.jsonl`. Nothing on this path runs on a schedule.
+- Non-interactive runs (tests, scripts, a missing TTY) must pass `--yes`
+  or `--dry-run`. A hang waiting for input is refused.
+- `pm do N` now writes after that confirmation.
+
+### Decisions stick
+
+- `pm lint --snooze KEY --until … --why "…"` hides a finding until a date
+  (`YYYY-MM-DD`, `14d`, `2w`, or `next-sprint`).
+- `pm lint --accept KEY --why "…"` hides it until `--all`.
+- `pm lint --assign KEY --to <person> --why "…"` hides it from the default
+  lint, lands it in that person's refine queue, and writes the Jira
+  assignee. A person, not a role.
+- Memory lives in `state.shared_path` when that is set (a synced folder
+  so the PM and the BA see the same queues), otherwise `~/.pm`. Cache,
+  write-log and `today.json` stay local.
+
+### `pm triage`
+
+- Deterministic "waiting on me" queue, grouped by product, numbered
+  actions. `--apply N` uses the shared write path.
+- Tunable in `triage:`: unassigned in the Sprint, blocked (status / label
+  / blocked-by link), mentions, new bugs, untouched in-sprint work, overdue.
+
+### `pm refine`
+
+- Drafts titles and acceptance criteria (model, batches of 8) and a
+  median estimate from closed similar stories. Writes `refine_<ws>_<date>.md`.
+- `--apply` parses the file and writes only the fields you left. A deleted
+  field is not written.
+- `pm review` is a deprecated alias for one release.
+
+### `pm note` / `pm inbox`
+
+- Capture is instant and offline. `pm inbox` lists with a model filing
+  suggestion. `pm inbox create N` / `drop N`. Create uses the write path.
+
+### Team project
+
+- A Jira project is the team; components name products and workstreams.
+  `pm products check` verifies components in `jira.project`, not a
+  one-project-per-product mapping.
+
 ## 0.4.0 - 2026-09-03
 
 ### Products above workstreams

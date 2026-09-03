@@ -21,8 +21,9 @@ Severities:
 import datetime as dt
 import json
 import re
+import sys
 
-from core import sources, workstreams
+from core import decisions, sources, workstreams, writes
 
 
 SEVERITY_ORDER = {"error": 0, "warn": 1, "review": 2}
@@ -224,13 +225,83 @@ def build_markdown(cfg, results):
     return "\n".join(lines)
 
 
+def _sprint_end(cfg):
+    project = (cfg.get("jira") or {}).get("project")
+    if not project:
+        return None
+    try:
+        sprints = sources.fetch_active_sprints(cfg["jira"], project)
+    except Exception:                              # noqa: BLE001
+        return None
+    for sprint in sprints:
+        end = sprint.get("endDate") or sprint.get("end")
+        if end:
+            return str(end)[:10]
+    return None
+
+
+def _record_from_args(cfg, args):
+    """Handle --snooze / --accept / --assign. Returns True if we recorded."""
+    key = getattr(args, "snooze", None) or getattr(args, "accept", None) \
+        or getattr(args, "assign", None)
+    if not key:
+        return False
+    if getattr(args, "snooze", None):
+        verb = "snooze"
+    elif getattr(args, "accept", None):
+        verb = "accept"
+    else:
+        verb = "assign"
+    why = getattr(args, "why", None) or ""
+    if not why:
+        sys.exit(f"`pm lint --{verb}` needs --why, so the reason sticks.")
+    until = None
+    if verb == "snooze":
+        try:
+            until = decisions.parse_until(getattr(args, "until", None),
+                                          sprint_end=_sprint_end(cfg))
+        except ValueError as err:
+            sys.exit(str(err))
+    to = getattr(args, "to", None) if verb == "assign" else None
+    rule = getattr(args, "rule", None) or "*"
+    try:
+        rec = decisions.record(cfg, verb, key, why, until=until, rule=rule, to=to)
+    except ValueError as err:
+        sys.exit(str(err))
+    print(f"Remembered: {verb} {key}"
+          + (f" until {until}" if until else "")
+          + (f" → {to}" if to else "")
+          + f". {why}")
+
+    if verb == "assign":
+        person = sources.resolve_assignee(cfg["jira"], to)
+        if not person or not person.get("accountId"):
+            sys.exit(f"No Jira user matches {to!r}.")
+        action = writes.action_update_issue(
+            key, {"assignee": {"accountId": person["accountId"]}},
+            kind="assign", summary=key,
+            description=f"assign to {person['displayName']}")
+        writes.apply_action(cfg, args, action)
+    _ = rec
+    return True
+
+
 def run(cfg, args):
     """Entry point called by pm.py."""
+    recorded = _record_from_args(cfg, args)
+    if recorded and not getattr(args, "json", False) \
+            and getattr(args, "severity", None) is None:
+        # A decision was the point of this invocation; still show what's left.
+        print("")
+
     lint_cfg = cfg.get("lint", {})
     min_sev = SEVERITY_ORDER.get(getattr(args, "severity", None), 99)
+    store = decisions.load(cfg)
+    show_all = getattr(args, "all", False)
 
     results = []
     flat = []  # for --json
+    hidden = []
     for ws in cfg["_workstreams"]:
         jql = workstreams.scope_jql(cfg, ws, "lint")
         if not jql:
@@ -246,12 +317,22 @@ def run(cfg, args):
         findings = []
         for issue in issues:
             for fnd in check_issue(issue, lint_cfg, component_inherited):
-                if SEVERITY_ORDER[fnd["severity"]] <= min_sev or min_sev == 99:
-                    findings.append(fnd)
-                    flat.append({**fnd, "workstream": ws["abbrev"]})
+                if not (SEVERITY_ORDER[fnd["severity"]] <= min_sev or min_sev == 99):
+                    continue
+                if not show_all and decisions.is_hidden(store, fnd):
+                    hidden.append(fnd)
+                    continue
+                findings.append(fnd)
+                flat.append({**fnd, "workstream": ws["abbrev"]})
 
         print(f"  {len(issues)} issues checked — {len(findings)} findings.")
         results.append((ws, findings))
+
+    if hidden and not show_all:
+        counts = decisions.summarise(store, hidden)
+        print(f"  {len(hidden)} hidden ({counts['snoozed']} snoozed, "
+              f"{counts['accepted']} accepted, {counts['assigned']} assigned). "
+              f"pm lint --all to see everything again.")
 
     if getattr(args, "json", False):
         out_path = "lint_report_{}.json".format(dt.date.today().isoformat())
