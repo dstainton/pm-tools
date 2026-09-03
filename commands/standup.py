@@ -16,11 +16,9 @@ trustworthy. Run it a few minutes before standup.
 
 Scope it like any command:  pm standup --workstream SDX
 
-Config (all optional) lives under `standup:` and per workstream:
-  standup_moved_jql : scope for "what moved". Use {days} for the window.
-                      Falls back to lint_jql if not set.
-  standup_wip_jql   : scope for "in progress now".
-                      Falls back to jira_jql if not set.
+What counts as "moved" and "in progress" comes from the `standup_moved` and
+`standup_wip` scopes in config — plain options, no JQL. --days overrides the
+movement window for one run.
 """
 
 import datetime as dt
@@ -39,15 +37,9 @@ def _fmt_when(when):
     return f"{local:%a %H:%M}"
 
 
-def _moved_jql(jira_cfg, ws, days):
+def _moved_jql(cfg, ws, days):
     """Resolve the workstream scope for recent movement."""
-    return workstreams.resolve_jql(
-        jira_cfg,
-        ws,
-        "standup_moved_jql",
-        fallback_field="lint_jql",
-        substitutions={"days": days},
-    )
+    return workstreams.scope_jql(cfg, ws, "standup_moved", days=days)
 
 
 def build_markdown(cfg, results, days, group_by):
@@ -133,9 +125,8 @@ def run(cfg, args):
     for ws in cfg["_workstreams"]:
         print(f"Standup: {ws['name']} ({ws['abbrev']}) ...")
 
-        moved_jql = _moved_jql(cfg["jira"], ws, days)
-        wip_jql = workstreams.resolve_jql(
-            cfg["jira"], ws, "standup_wip_jql", fallback_field="jira_jql")
+        moved_jql = _moved_jql(cfg, ws, days)
+        wip_jql = workstreams.scope_jql(cfg, ws, "standup_wip")
 
         moved = sources.fetch_jira_changelog(cfg["jira"], moved_jql, days) \
             if moved_jql else []

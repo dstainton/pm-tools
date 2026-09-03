@@ -51,7 +51,10 @@ def run(args):
     print(f"Created a starter config at:\n  {dest}\n")
     print("Next steps:")
     print("  1. Open that file and fill in the <PLACEHOLDERS> "
-          "(Jira URL, email, API token, workstreams).")
-    print("  2. Start the local llama.cpp/Qwen server (for report/review).")
-    print("  3. Run a command from anywhere, e.g.:  pm lint --workstream SDX")
+          "(Jira URL, email, API token, project).")
+    print("  2. Name your workstreams and their Jira Component(s) — either in "
+          "that file or with:  pm workstreams add")
+    print("  3. Confirm Jira agrees with it:  pm workstreams check")
+    print("  4. Start the local llama.cpp/Qwen server (for report/review).")
+    print("  5. Run a command from anywhere, e.g.:  pm lint --workstream SDX")
     print("\nTip: pm finds this file automatically — no --config needed.")

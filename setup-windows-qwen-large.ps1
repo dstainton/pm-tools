@@ -10,7 +10,7 @@ It:
   - installs pm-helper in editable mode when pyproject.toml is present
   - downloads the latest official llama.cpp Windows x64 Vulkan build
   - verifies llama.cpp devices
-  - downloads Qwen3.8-27B Q4_K_M unless skipped
+  - downloads Qwen3.8-27B Q3_K_M unless skipped
   - optionally starts llama-server on 127.0.0.1
 
 It does NOT modify AMD drivers, BIOS/VGM settings, Windows firewall rules,
@@ -34,16 +34,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ModelRef = "ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+$ModelRef = "mradermacher/Qwen3.8-27B-GGUF:Q3_K_M"
 $ModelAlias = "qwen-local"
 
 $PmHome = Join-Path $HOME ".pm"
 $LlamaDir = Join-Path $PmHome "llama.cpp"
 $DownloadDir = Join-Path $PmHome "downloads"
 $ModelDir = Join-Path $PmHome "models"
-$ModelFile = "Qwen3.8-27B-Q4_K_M.gguf"
+$ModelFile = "Qwen3.8-27B.Q3_K_M.gguf"
 $ModelPath = Join-Path $ModelDir $ModelFile
-$ModelUrl = "https://huggingface.co/ggml-org/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-Q4_K_M.gguf?download=true"
+$ModelUrl = "https://huggingface.co/mradermacher/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B.Q3_K_M.gguf?download=true"
 
 function Write-Step {
     param([string]$Message)
@@ -96,8 +96,8 @@ $computer = Get-CimInstance Win32_ComputerSystem
 $ramGb = [math]::Round($computer.TotalPhysicalMemory / 1GB, 1)
 Write-Host "Physical RAM: $ramGb GB"
 
-if ($ramGb -lt 28) {
-    Write-Warning "Qwen3.8-27B Q4_K_M is not recommended with less than about 32 GB of system RAM."
+if ($ramGb -lt 20) {
+    Write-Warning "Qwen3.8-27B Q3_K_M is not recommended with less than about 24 GB of system RAM."
 }
 
 $video = Get-CimInstance Win32_VideoController |
@@ -138,8 +138,8 @@ $drive = Get-PSDrive -Name $systemDriveName -ErrorAction SilentlyContinue
 if ($drive) {
     $freeGb = [math]::Round($drive.Free / 1GB, 1)
     Write-Host "Free space on $($env:SystemDrive): $freeGb GB"
-    if ($freeGb -lt 25 -and -not $SkipModelDownload) {
-        Write-Warning "Less than 25 GB is free. The Qwen model download may not fit comfortably."
+    if ($freeGb -lt 18 -and -not $SkipModelDownload) {
+        Write-Warning "Less than 18 GB is free. The Qwen Q3_K_M download may not fit comfortably."
     }
 }
 
@@ -256,7 +256,7 @@ else {
 }
 
 if (-not $SkipModelDownload) {
-    Write-Step "Downloading Qwen3.8-27B Q4_K_M"
+    Write-Step "Downloading Qwen3.8-27B Q3_K_M"
 
     if (Test-Path $ModelPath) {
         $existingSizeGb = [math]::Round((Get-Item $ModelPath).Length / 1GB, 2)
@@ -295,6 +295,9 @@ else {
     }
 }
 
+# Qwen3.8 thinks by default. pm's prompts are written for instruct mode, so
+# the server turns thinking off. --jinja is required for --reasoning-budget
+# to set enable_thinking=false in the chat template.
 $serverArgs = @(
     "-m", $ModelPath,
     "--alias", $ModelAlias,
@@ -302,7 +305,9 @@ $serverArgs = @(
     "--port", "$Port",
     "--ctx-size", "$ContextSize",
     "--threads", "$Threads",
-    "-ngl", "$GpuLayers"
+    "-ngl", "$GpuLayers",
+    "--jinja",
+    "--reasoning-budget", "0"
 )
 
 Write-Step "Setup complete"

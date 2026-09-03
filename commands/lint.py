@@ -217,15 +217,16 @@ def run(cfg, args):
     results = []
     flat = []  # for --json
     for ws in cfg["_workstreams"]:
-        jql = workstreams.resolve_jql(cfg["jira"], ws, "lint_jql")
+        jql = workstreams.scope_jql(cfg, ws, "lint")
         if not jql:
-            print(f"Skipping {ws['abbrev']}: no matching workstream epics/lint scope.")
+            print(f"Skipping {ws['abbrev']}: nothing in its lint scope "
+                  f"(no components matched, and no lint filter configured).")
             results.append((ws, []))
             continue
 
         print(f"Linting: {ws['name']} ({ws['abbrev']}) ...")
         issues = sources.fetch_jira_detailed(cfg["jira"], jql)
-        component_inherited = workstreams.uses_epic_component_scope(ws)
+        component_inherited = workstreams.uses_component_scope(cfg, ws)
 
         findings = []
         for issue in issues:

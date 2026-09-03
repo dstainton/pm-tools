@@ -19,33 +19,43 @@ to PATH. See `README.md` for details.
 
 > **Existing installation:** `pm init` does not overwrite an existing
 > `~/.pm/config.yaml`. Updating the package therefore does not automatically
-> migrate your live config. Copy the revised `workstreams:` structure below
-> into your current config, preserving your existing URLs and credentials.
+> migrate your live config. Copy the `membership:`, `scopes:` and revised
+> `workstreams:` sections from the bundled `config.yaml` into your current one,
+> preserving your existing URLs and credentials. Older configs keep working, so
+> this can wait until convenient.
 
 The bundled config assumes:
 
-- Jira project: `APS`
-- workstreams are represented by Component(s) on Epics
-- Stories, Tasks, Bugs, and Sub-tasks inherit their workstream from the Epic
+- one Jira project, named once in `jira.project` (`APS` by default)
+- workstreams are identified by Component(s), normally carried on Epics
+- Stories, Tasks, Bugs and Sub-tasks inherit their workstream from their parent
+  when they carry no Component of their own
 
-For example:
+A workstream is three lines, and no JQL:
 
 ```yaml
 - name: "Secure Data Exchange"
   abbrev: "SDX"
-  jira_project: "APS"
-  epic_components: ["Secure Data Exchange"]
-  jira_jql: 'sprint in openSprints()'
-  roadmap_jql: 'statusCategory != Done'
-  lint_jql: 'statusCategory != Done'
+  components: ["Secure Data Exchange"]
 ```
 
-**Verify the exact Component names in Jira.** Update `epic_components` if your
-site uses names such as `SDX`, `APS Platform`, or another spelling.
+Add or remove one without editing the file by hand:
 
-In this mode, the JQL values above are filters inside the workstream. `pm`
-resolves the Epics first, then uses Jira's `parentEpic` JQL support to retrieve
-their children and nested Sub-tasks.
+```powershell
+pm workstreams add --name "Billing Platform" --abbrev BIL --components "Billing Platform"
+pm workstreams remove BIL
+```
+
+**Verify the exact Component names in Jira** — this is the one thing only you
+can confirm, and one command checks it:
+
+```powershell
+pm workstreams check --show-jql
+```
+
+That reports whether each Component exists in the project (suggesting close
+matches when it doesn't), how many Epics and directly tagged issues carry it, and
+roughly how much work each command will see.
 
 ## Local model
 
@@ -78,8 +88,10 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\setup-windows-qwen-large.ps1 -StartServer
 ```
 
-This uses Qwen3.8-27B Q4_K_M. Both scripts expose `qwen-local`, so the Python
-CLI does not need to change when you switch models.
+This uses Qwen3.8-27B Q3_K_M (~13.5 GB), which is the model the prompts are
+written for. Both scripts expose `qwen-local` and start the server with
+thinking off (`--reasoning-budget 0`), so the Python CLI does not need to
+change when you switch models.
 
 The server is intentionally bound to `127.0.0.1` rather than `0.0.0.0`.
 
@@ -90,8 +102,15 @@ With the model server running:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8080/v1/models
 pm --help
+pm workstreams check
 pm lint --workstream SDX
 ```
 
 If `pm lint` finds the expected SDX children even though those children do not
-have the SDX Component themselves, Epic-component inheritance is working.
+have the SDX Component themselves, inheritance is working.
+
+To check the code itself without touching Jira or the model:
+
+```powershell
+python -m unittest discover -s tests
+```

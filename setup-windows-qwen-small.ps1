@@ -245,6 +245,8 @@ else {
     Write-Host "Skipping model download by request."
 }
 
+# Qwen3 thinks by default. pm's prompts are written for instruct mode, so
+# the server turns thinking off. Same flags as the large Qwen3.8 script.
 $serverArgs = @(
     "-m", $ModelPath,
     "--alias", $ModelAlias,
@@ -252,7 +254,9 @@ $serverArgs = @(
     "--port", "$Port",
     "--ctx-size", "$ContextSize",
     "--threads", "$Threads",
-    "-ngl", "$GpuLayers"
+    "-ngl", "$GpuLayers",
+    "--jinja",
+    "--reasoning-budget", "0"
 )
 
 Write-Step "Setup complete"

@@ -6,12 +6,13 @@ Jira / Confluence / SharePoint and a **local** model — nothing leaves your
 laptop.
 
 ```
-pm init       Create a starter config at ~/.pm/config.yaml
-pm report     Weekly state-of-product report (uses the local model)
-pm lint       Deterministic backlog quality checks (no model — pure rules)
-pm review     Model-based judgement checks (title clarity, AC quality)
-pm ready      Definition-of-Ready gate: pass/fail per ticket
-pm standup    Daily movement + work-in-progress snapshot (no model)
+pm init         Create a starter config at ~/.pm/config.yaml
+pm workstreams  List, add, remove or check your workstreams
+pm report       Weekly state-of-product report (uses the local model)
+pm lint         Deterministic backlog quality checks (no model — pure rules)
+pm review       Model-based judgement checks (title clarity, AC quality)
+pm ready        Definition-of-Ready gate: pass/fail per ticket
+pm standup      Daily movement + work-in-progress snapshot (no model)
 ```
 
 Every command (except `init`) can be scoped to one or more workstreams with
@@ -28,9 +29,12 @@ pip install -e .
 # 2. Create your config in the standard spot, then fill it in.
 pm init
 #   → opens nothing; it just copies a template to ~/.pm/config.yaml.
-#   Edit that file: Jira URL, email, API token, and your workstreams.
+#   Edit that file: Jira URL, email, API token, project, and your workstreams.
 
-# 3. Run from anywhere — no python, no file path.
+# 3. Confirm Jira agrees with what you typed.
+pm workstreams check
+
+# 4. Run from anywhere — no python, no file path.
 pm lint --workstream SDX
 ```
 
@@ -120,10 +124,12 @@ new config sections into your existing file instead.
 
 - **Jira / Confluence:** your Atlassian email and an API token from
   `id.atlassian.com → Security → API tokens`.
+- **Jira project:** `jira.project` — the one project holding the work.
 - **Custom field IDs:** story points, start date, epic link — see
   **Finding your custom field IDs** below.
 - **SharePoint:** leave `enabled: false` until an admin sets up an Azure app.
-- **Workstreams:** SDX, APS, ITK are pre-filled with their query lines.
+- **Workstreams:** SDX, APS, ITK are pre-filled; each one is a name, an
+  abbreviation and its Jira Component(s). No queries to write.
 
 > **Keeping secrets out of the file:** any value can be written as
 > `${ENV:VAR_NAME}` and pm will read it from that environment variable at run
@@ -155,15 +161,26 @@ On the Windows Ryzen AI laptop, the bundled PowerShell scripts set up
 .\setup-windows-qwen-small.ps1
 .\setup-windows-qwen-small.ps1 -StartServer
 
-# Larger 27B model for use when bandwidth is not constrained:
+# The model the prompts are written for — Qwen3.8-27B Q3_K_M, about 13.5 GB:
 .\setup-windows-qwen-large.ps1
 .\setup-windows-qwen-large.ps1 -StartServer
 ```
 
-Both scripts expose the model as `qwen-local`, so `pm` does not need a config
-change when you switch between the small and large model. Other
-OpenAI-compatible local servers can still be used by changing `model.endpoint`
-and `model.name`.
+Both scripts expose the model as `qwen-local` and start llama.cpp with thinking
+**off** (`--reasoning-budget 0`). Qwen3.8 thinks by default; a Q3_K_M run that
+is allowed to think will spend its token budget inside `<think>` and give
+`pm review` empty or half-cut JSON. `pm` also sends
+`chat_template_kwargs.enable_thinking: false` and a `/no_think` prefix on every
+call, so a server started by hand still behaves.
+
+The prompts themselves are short, numbered, and end with a fill-in skeleton or a
+worked JSON example — the shape Qwen3.8 Q3_K_M follows. Sampling matches Qwen's
+instruct profile (temperature 0.4, `top_p` 0.8, `top_k` 20, `presence_penalty`
+1.5), with a cooler `json_temperature` of 0.2 for `pm review`.
+
+Other OpenAI-compatible local servers can still be used by changing
+`model.endpoint` and `model.name`. If you turn thinking back on, set
+`model.enable_thinking: true` so `pm` stops sending `/no_think`.
 
 ---
 
@@ -182,56 +199,149 @@ pm report --workstream APS           # one director snapshot
 A typo fails loudly with the list of valid names. Scoping `pm report` is safe:
 it updates only the selected workstream's "what changed" memory.
 
-### Jira workstream inheritance
+---
 
-The bundled config models all three workstreams inside the **APS Jira project**:
+## Workstreams — `pm workstreams`
 
-```text
-APS project
-  -> Epic / feature / work package
-       -> Component identifies workstream
-            -> Stories / Tasks / Bugs
-                 -> Sub-tasks
-```
-
-The Component belongs on the **Epic**. Child work does not need the same
-Component duplicated onto every Story or Task.
-
-Each workstream declares the Jira project and the Component name(s) that define
-its Epics:
+A workstream is three lines of config. No JQL, anywhere:
 
 ```yaml
 - name: "Secure Data Exchange"
   abbrev: "SDX"
-  jira_project: "APS"
-  epic_components: ["Secure Data Exchange"]
-  jira_jql: 'sprint in openSprints()'
-  roadmap_jql: 'statusCategory != Done'
-  lint_jql: 'statusCategory != Done'
+  components: ["Secure Data Exchange"]
 ```
 
-For this form of workstream, the `*_jql` values are **additional filters**, not
-complete queries. `pm` first discovers the matching Epics, then builds the
-appropriate Jira scope:
+`components` are exact Jira **Component** names, and `jira.project` says which
+project to look in (a workstream can override it with its own `project:`).
+A workstream can list several Components, and optionally say where its documents
+live (`confluence_space`, `confluence_labels`, `sharepoint_query`).
 
-- normal report, ready, and standup: descendants of those Epics
-- roadmap: the workstream Epics themselves
-- lint and review: the Epics plus their descendants
+### Adding and removing one
 
-Jira's `parentEpic` query is used so nested Sub-tasks are included along with
-Stories and Tasks. The Epic list is cached for the duration of each command.
+```
+pm workstreams                       # what's configured right now
+pm workstreams add --name "Billing Platform" --abbrev BIL \
+                   --components "Billing Platform"
+pm workstreams remove BIL
+pm workstreams check                 # does Jira agree with all of this?
+pm workstreams check --show-jql      # ...and here are the queries it built
+```
 
-If your Jira Component names differ from the values in `config.yaml`, edit
-`epic_components` to match Jira exactly. A workstream can list more than one
-Component.
+`add` and `remove` edit your config file in place, leaving every comment and
+every other setting exactly where it was, and refuse to write a file that
+wouldn't load. `check` is the one to run after any edit: it confirms the
+Component names exist in the project (and suggests close matches when they
+don't), counts the epics and directly tagged issues that carry them, and shows
+roughly how much work each command would see.
 
-**Backward compatibility:** a workstream that omits `jira_project` and
-`epic_components` remains in legacy mode, where each `*_jql` value is treated
-as a complete JQL query exactly as in earlier versions.
+```text
+Secure Data Exchange (SDX)
+  project: APS
+  components: Secure Data Exchange
+  epics carrying the component: 4
+  issues tagged directly: 1
+  report (sprint work): ~11 issue(s)
+  roadmap (the epics): ~4 issue(s)
+  ...
+```
+
+### How membership is decided
+
+The Jira model this assumes is the common one: one project, Epics carrying the
+Component that names the workstream, and children that often carry nothing.
+
+```text
+APS project
+  -> Epic  — carries the Component
+       -> Story / Task / Bug  — Component optional
+            -> Sub-task       — Component optional
+```
+
+So an issue belongs to a workstream when **either**:
+
+1. **it carries one of the workstream's Components itself** — any issue type, at
+   any level, including work that hangs off an Epic belonging to nobody or has
+   no parent at all; or
+2. **it sits under something that does** — anything beneath a workstream Epic
+   (Stories, Tasks, Bugs and their nested Sub-tasks), and the Sub-tasks of a
+   directly tagged Story or Task.
+
+Both rules are resolved from Jira on each run, with the discovery queries cached
+for the duration of the command. Because child work inherits, `pm lint` and
+`pm ready` never ask a Story for a Component it doesn't need.
+
+Two knobs, under `membership:`:
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `epic_types` | `[Epic]` | Issue type(s) that act as the workstream anchor |
+| `inherit_from_parent` | `true` | Rule 2 above; set `false` for Components only |
+| `child_component_wins` | `false` | When `true`, a child naming its own Component is judged on that alone instead of also counting under its parent's workstream |
+| `max_parent_keys` | `500` | Safety valve on how many directly tagged issues get their sub-tasks expanded |
+
+`child_component_wins: false` means a Story tagged `API Platform` under a
+`Secure Data Exchange` Epic shows up in **both** — deliberately, so mis-tagged
+work is visible somewhere rather than nowhere. Flip it to `true` if you'd rather
+the child's own Component be the last word.
+
+### What each command looks at — `scopes:`
+
+Membership says *which work is ours*; a scope says *which of it this command
+cares about*. Scopes are plain options, and `pm` writes the query:
+
+```yaml
+scopes:
+  report:        {sprint: open}
+  roadmap:       {status: open}
+  lint:          {status: open}
+  ready:         {sprint: open, status: open}
+  standup_moved: {updated_within_days: 1}
+  standup_wip:   {status: in-progress}
+```
+
+| Option | Values |
+|--------|--------|
+| `status` | `any`, `open`, `done`, `in-progress`, `todo` |
+| `sprint` | `any`, `open`, `future`, `none` |
+| `assignee` | `any`, `me`, `unassigned`, `assigned` |
+| `types` / `exclude_types` | issue type names |
+| `labels_any` / `labels_none` | label names |
+| `updated_within_days`, `created_within_days`, `due_within_days` | whole days |
+| `extra_jql` | escape hatch, if you ever need one |
+
+Each scope also picks the level it applies to, which is fixed: `report`, `ready`
+and the standup scopes look at child work, `roadmap` at the workstream Epics,
+`lint` and `review` at the Epics plus everything beneath them.
+
+Any workstream can override any scope with its own `scopes:` block — useful when
+one stream doesn't use sprints:
+
+```yaml
+- name: "Integration Toolkit"
+  abbrev: "ITK"
+  components: ["Integration Toolkit"]
+  scopes:
+    report: {sprint: any, status: open}
+```
+
+A typo is caught when the config loads, with the valid choices listed, rather
+than becoming a confusing Jira error mid-run.
+
+**Backward compatibility:** older configs still work unchanged. A workstream
+with no `components:` stays in legacy mode, where each `*_jql` value is a
+complete query; `jira_project` and `epic_components` are still read as aliases,
+and any `*_jql` value on a Component-based workstream is applied as an extra
+filter.
 
 ---
 
 ## The commands
+
+### `pm workstreams` — the setup itself
+
+Covered in **Workstreams** above: `list` (the default), `add`, `remove`, and
+`check` for confirming Jira agrees with your config. `check` exits non-zero when
+something is wrong, so it also works as a smoke test in a scheduled job.
 
 ### `pm report` — weekly state-of-product report
 
@@ -249,7 +359,7 @@ sprint planning.
 | Check | Severity | What it catches |
 |-------|----------|-----------------|
 | `bad-dates` | 🔴 error | Due before start, or due date passed but not done |
-| `missing-component` | 🟠 warn | No component set when the workstream does not inherit it from the Epic |
+| `missing-component` | 🟠 warn | No component set, in a legacy workstream that can't inherit one |
 | `missing-epic` | 🟠 warn | Story/task not linked to an epic or parent |
 | `missing-acceptance-criteria` | 🟠 warn | No AC found on a story/bug |
 | `no-estimate` | 🟠 warn | In-scope story with no story points |
@@ -311,9 +421,8 @@ shows the transition — e.g. **To Do → In Review by A. Lee (today 09:12)**. I
 ticket hopped several statuses, it collapses to first-from → last-to so you see
 the net move at a glance. Scope it like anything else: `pm standup -w SDX`.
 
-Per workstream you can set `standup_moved_jql` (use `{days}` for the window)
-and `standup_wip_jql`. In Epic-component mode these are additional filters over
-child work beneath the workstream Epics.
+The window and the definition of "in progress" come from the `standup_moved` and
+`standup_wip` scopes; `--days` overrides the window for one run.
 
 ---
 
@@ -354,21 +463,29 @@ pm_helper/
 ├── config.yaml          # template config (pm init copies it to ~/.pm)
 ├── pm.py                # entry point: routes subcommands, applies --workstream
 ├── core/                # shared plumbing (tested, reused by every command)
-│   ├── config.py        #   loads config, expands ${ENV:VAR}, validates workstreams
-│   ├── workstreams.py   #   resolves Epic Component inheritance into JQL
+│   ├── config.py        #   loads config, expands ${ENV:VAR}, validates it all
+│   ├── filters.py       #   plain scope options -> JQL
+│   ├── workstreams.py   #   Component + parent membership -> JQL
 │   ├── sources.py       #   Jira / Confluence / SharePoint fetchers
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff
+├── docs/
+│   └── FEATURE_PROPOSALS.md   # what's next, and why
 ├── setup-windows-qwen-small.ps1
 ├── setup-windows-qwen-large.ps1
+├── tests/               # unit tests + an end-to-end run against a fake Jira
 └── commands/
     ├── init.py          # pm init
+    ├── workstreams.py   # pm workstreams
     ├── report.py        # pm report
     ├── lint.py          # pm lint
     ├── review.py        # pm review
     ├── ready.py         # pm ready
     └── standup.py       # pm standup
 ```
+
+Run the tests with `python -m unittest discover -s tests` — no Jira, no model and
+no network needed; `tests/fake_jira.py` stands in for both.
 
 Each command reads its workstream list from `cfg['_workstreams']`, which `pm.py`
 has already narrowed if `--workstream` was given — so a new command gets scoping
@@ -378,22 +495,34 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 
 ## Roadmap (ideas, not commitments)
 
+`docs/FEATURE_PROPOSALS.md` holds the current thinking, in priority order, with
+a config sketch for each. The short list:
+
+- `pm doctor` — one command that proves the whole setup works end to end.
+- `pm triage` — the daily "what needs a decision from me" queue.
+- `pm metrics` — throughput, cycle time and estimate accuracy per workstream.
 - `pm duplicates` — model-flagged likely duplicate tickets.
 - `pm release-notes` — draft notes from tickets marked Done since last release.
+- `pm publish` — post the weekly report to Confluence or Teams.
 
 ---
 
 ## Honest limitations
 
-- **Component names and filters still matter.** In Jira, `jira_project` and
-  `epic_components` define the workstream boundary; the JQL strings then narrow
-  that inherited scope. Start with one workstream (`--workstream SDX`), confirm
-  the resolved items look right, then expand.
+- **Component names still matter.** `jira.project` and each workstream's
+  `components` define the boundary. `pm workstreams check` tells you when a name
+  doesn't exist in Jira, and `--show-jql` shows exactly what was built — run it
+  after any edit, then confirm one workstream (`--workstream SDX`) looks right
+  before expanding.
+- **Overlap is allowed by design.** With the default
+  `child_component_wins: false`, a child naming a different Component than its
+  Epic counts in both workstreams. Set it to `true` for a strict split.
 - **Custom field IDs matter.** If story points or start date point at the wrong
   field ID, those checks silently skip. Verify against the field list above.
 - **Deterministic vs. inference.** `pm lint` and the fast `pm ready` are rules
-  you can trust. `pm report`, `pm review`, and `pm ready --deep` use the model —
-  read them before acting. Quantized local models save memory but may be less sharp than larger models.
+  you can trust. `pm report`, `pm review`, and `pm ready --deep` use Qwen3.8
+  Q3_K_M — read them before acting. A 3-bit quant is smaller and a bit less
+  sharp than Q4; keep thinking off and `review.batch_size` at 8 or below.
 - **Speed.** `pm lint` is instant. Model command speed depends heavily on the local model and hardware; `--deep` and `review all` make several
   calls, so scope them with `--workstream` when you want a quick pass.
 
@@ -404,7 +533,8 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 1. llama.cpp — local inference and OpenAI-compatible server. https://github.com/ggml-org/llama.cpp
 2. Qwen model collection. https://huggingface.co/Qwen
 3. Atlassian — create and manage API tokens. https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
-4. Jira Cloud REST API — search (JQL) and fields. https://developer.atlassian.com/cloud/jira/platform/rest/v3/
-5. Confluence Cloud REST API — content search (CQL). https://developer.atlassian.com/cloud/confluence/rest/v2/
-6. Microsoft Graph — SharePoint sites and drive search. https://learn.microsoft.com/en-us/graph/api/resources/sharepoint
-7. Python packaging — entry points / console scripts. https://packaging.python.org/en/latest/specifications/entry-points/
+4. Jira Cloud REST API — issue search (`/rest/api/3/search/jql`) and fields. https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/
+5. Atlassian — the legacy `/rest/api/3/search` endpoint is removed; use `/search/jql` with `nextPageToken`. https://confluence.atlassian.com/jirakb/run-jql-search-query-using-jira-cloud-rest-api-1289424308.html
+6. Confluence Cloud REST API — content search (CQL). https://developer.atlassian.com/cloud/confluence/rest/v2/
+7. Microsoft Graph — SharePoint sites and drive search. https://learn.microsoft.com/en-us/graph/api/resources/sharepoint
+8. Python packaging — entry points / console scripts. https://packaging.python.org/en/latest/specifications/entry-points/

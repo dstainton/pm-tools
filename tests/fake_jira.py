@@ -1,0 +1,438 @@
+"""A tiny stand-in for Jira Cloud (and a local model), for end-to-end tests.
+
+It speaks just enough of the real thing to run `pm` for real:
+
+  POST /rest/api/3/search/jql               paged search, nextPageToken and all
+  POST /rest/api/3/search/approximate-count
+  GET  /rest/api/3/myself
+  GET  /rest/api/3/project/<KEY>/components
+  GET  /rest/api/3/issue/<KEY>/changelog
+  GET  /wiki/rest/api/content/search        Confluence pages, filtered by space
+  POST /v1/chat/completions                 an OpenAI-compatible model reply
+
+The searches are answered by evaluating the JQL `pm` generates against an
+in-memory backlog, so a test can assert that the right issues — and only the
+right issues — end up in a workstream.
+"""
+
+import datetime as dt
+import json
+import re
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, unquote, urlparse
+
+
+# ---------------------------------------------------------------------------
+#  A very small JQL reader: enough for every query pm builds
+# ---------------------------------------------------------------------------
+
+TOKEN = re.compile(r"""\s*(?:
+      (?P<str>"(?:[^"\\]|\\.)*")
+    | (?P<num>-?\d+[dhwm]?)
+    | (?P<ident>[A-Za-z_][\w.\-]*)
+    | (?P<punct>!=|>=|<=|[(),=<>])
+)""", re.VERBOSE)
+
+LIST_FIELDS = {"component", "components", "labels"}
+
+
+def tokenize(jql):
+    tokens, pos = [], 0
+    while pos < len(jql):
+        match = TOKEN.match(jql, pos)
+        if not match:
+            if jql[pos:].strip() == "":
+                break
+            raise ValueError(f"cannot tokenize JQL at: {jql[pos:pos + 30]!r}")
+        pos = match.end()
+        if match.group("str") is not None:
+            tokens.append(("str", json.loads(match.group("str"))))
+        elif match.group("num") is not None:
+            tokens.append(("num", match.group("num")))
+        elif match.group("ident") is not None:
+            tokens.append(("ident", match.group("ident")))
+        else:
+            tokens.append(("punct", match.group("punct")))
+    return tokens
+
+
+class Parser:
+    """expr := term (OR term)* ; term := pred (AND pred)* ; pred | '(' expr ')'"""
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.at = 0
+
+    def peek(self):
+        return self.tokens[self.at] if self.at < len(self.tokens) else (None, None)
+
+    def next(self):
+        token = self.peek()
+        self.at += 1
+        return token
+
+    def accept_word(self, word):
+        kind, value = self.peek()
+        if kind == "ident" and value.lower() == word:
+            self.at += 1
+            return True
+        return False
+
+    def expect(self, value):
+        kind, got = self.next()
+        if got != value:
+            raise ValueError(f"expected {value!r} in JQL, got {got!r}")
+
+    def parse(self):
+        node = self.parse_expr()
+        if self.at != len(self.tokens):
+            raise ValueError(f"trailing JQL at token {self.at}: {self.tokens[self.at:]}")
+        return node
+
+    def parse_expr(self):
+        parts = [self.parse_term()]
+        while self.accept_word("or"):
+            parts.append(self.parse_term())
+        return parts[0] if len(parts) == 1 else ("or", parts)
+
+    def parse_term(self):
+        parts = [self.parse_factor()]
+        while self.accept_word("and"):
+            parts.append(self.parse_factor())
+        return parts[0] if len(parts) == 1 else ("and", parts)
+
+    def parse_factor(self):
+        kind, value = self.peek()
+        if kind == "punct" and value == "(":
+            self.next()
+            node = self.parse_expr()
+            self.expect(")")
+            return node
+        return self.parse_predicate()
+
+    def parse_values(self):
+        self.expect("(")
+        values = []
+        while True:
+            kind, value = self.next()
+            if kind == "punct" and value == ")":
+                break
+            if kind == "punct" and value == ",":
+                continue
+            values.append(value)
+        return values
+
+    def parse_predicate(self):
+        kind, field = self.next()
+        if kind != "ident":
+            raise ValueError(f"expected a field name in JQL, got {field!r}")
+        field = field.lower()
+
+        negate = False
+        if self.accept_word("not"):
+            negate = True
+
+        kind, value = self.next()
+        if kind == "ident" and value.lower() == "in":
+            nxt_kind, nxt_value = self.peek()
+            if nxt_kind == "ident":                # a function, e.g. openSprints()
+                self.next()
+                self.expect("(")
+                self.expect(")")
+                return ("func", field, nxt_value.lower(), negate)
+            return ("in", field, self.parse_values(), negate)
+        if kind == "ident" and value.lower() == "is":
+            negate = negate or self.accept_word("not")
+            if not self.accept_word("empty"):
+                raise ValueError("expected EMPTY after IS in JQL")
+            return ("empty", field, None, negate)
+        if kind == "punct" and value in ("=", "!=", ">=", "<=", ">", "<"):
+            _kind, operand = self.next()
+            return ("cmp", field, (value, operand), negate)
+        raise ValueError(f"unsupported JQL operator {value!r} on {field!r}")
+
+
+def _issue_value(issue, field):
+    if field in ("component", "components"):
+        return issue.get("components") or []
+    if field == "parentepic":
+        return issue.get("parent_epic")
+    if field == "statuscategory":
+        return issue.get("status_category")
+    if field == "issuetype":
+        return issue.get("issuetype")
+    return issue.get(field)
+
+
+def _days_ago(text):
+    match = re.fullmatch(r"-(\d+)([dhwm]?)", str(text))
+    if not match:
+        raise ValueError(f"unsupported relative date {text!r}")
+    return int(match.group(1))
+
+
+def evaluate(node, issue, now=None):
+    now = now or dt.datetime.now(dt.timezone.utc)
+    kind = node[0]
+    if kind == "and":
+        return all(evaluate(part, issue, now) for part in node[1])
+    if kind == "or":
+        return any(evaluate(part, issue, now) for part in node[1])
+
+    _kind, field, operand, negate = node
+    value = _issue_value(issue, field)
+
+    if kind == "in":
+        if field in LIST_FIELDS:
+            hit = any(v in (value or []) for v in operand)
+        else:
+            hit = value in operand
+    elif kind == "empty":
+        hit = not value
+    elif kind == "func":
+        if field == "sprint" and operand == "opensprints":
+            hit = issue.get("sprint") == "open"
+        elif field == "sprint" and operand == "futuresprints":
+            hit = issue.get("sprint") == "future"
+        else:
+            raise ValueError(f"unsupported JQL function {operand}() on {field}")
+    else:                                            # cmp
+        operator, target = operand
+        if field in ("updated", "created", "duedate") and \
+                str(target).startswith("-"):
+            cutoff = now - dt.timedelta(days=_days_ago(target))
+            stamp = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")) \
+                if value else None
+            hit = bool(stamp and stamp >= cutoff)
+        elif operator == "=":
+            hit = str(value) == str(target)
+        elif operator == "!=":
+            hit = str(value) != str(target)
+        else:
+            hit = _compare(operator, value, target)
+    return not hit if negate else hit
+
+
+def _compare(operator, value, target):
+    if value is None:
+        return False
+    left, right = str(value), str(target)
+    if operator == ">=":
+        return left >= right
+    if operator == "<=":
+        return left <= right
+    if operator == ">":
+        return left > right
+    return left < right
+
+
+def matches(jql, issue, now=None):
+    return evaluate(Parser(tokenize(jql)).parse(), issue, now)
+
+
+# ---------------------------------------------------------------------------
+#  Turning a backlog record into a Jira-shaped response
+# ---------------------------------------------------------------------------
+
+CATEGORY_KEYS = {"To Do": "new", "In Progress": "indeterminate", "Done": "done"}
+
+
+def link_parents(issues):
+    """Fill in `parent_epic` by walking each issue up to its Epic."""
+    by_key = {i["key"]: i for i in issues}
+    for issue in issues:
+        current, epic = issue, None
+        seen = set()
+        while current and current["key"] not in seen:
+            seen.add(current["key"])
+            parent = by_key.get(current.get("parent"))
+            if parent is None:
+                break
+            if parent.get("issuetype") == "Epic":
+                epic = parent["key"]
+                break
+            current = parent
+        issue["parent_epic"] = epic
+    return issues
+
+
+def _adf(text):
+    return {"type": "doc", "version": 1, "content": [
+        {"type": "paragraph", "content": [{"type": "text", "text": text}]}]}
+
+
+def render(issue, fields, expand=None):
+    """Build the Jira JSON for one issue, honouring the requested field list."""
+    everything = {
+        "summary": issue.get("summary", ""),
+        "status": {"name": issue.get("status_name", "To Do"),
+                   "statusCategory": {
+                       "key": CATEGORY_KEYS.get(issue.get("status_category"),
+                                                "new"),
+                       "name": issue.get("status_category", "To Do")}},
+        "assignee": ({"displayName": issue["assignee"]}
+                     if issue.get("assignee") else None),
+        "issuetype": {"name": issue.get("issuetype", "Task")},
+        "components": [{"name": c} for c in issue.get("components") or []],
+        "duedate": issue.get("duedate"),
+        "updated": issue.get("updated"),
+        "priority": {"name": issue.get("priority", "Medium")},
+        "labels": issue.get("labels") or [],
+        "description": (_adf(issue["description"])
+                        if issue.get("description") else None),
+        "parent": ({"key": issue["parent"]} if issue.get("parent") else None),
+        "customfield_10016": issue.get("story_points"),
+        "customfield_10015": issue.get("start_date"),
+    }
+    out = {"key": issue["key"], "id": issue["key"],
+           "fields": {name: everything.get(name) for name in fields
+                      if name != "key"}}
+    if expand and "changelog" in expand:
+        out["changelog"] = {"histories": issue.get("changelog") or []}
+    return out
+
+
+# ---------------------------------------------------------------------------
+#  The server
+# ---------------------------------------------------------------------------
+
+class _Handler(BaseHTTPRequestHandler):
+    backlog = []
+    components = {}
+    pages = []
+    calls = []
+
+    def log_message(self, *args):                    # keep test output readable
+        return
+
+    def _send(self, payload, status=200):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _body(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(length) or b"{}")
+
+    # -- GETs --------------------------------------------------------------
+    def do_GET(self):                                # noqa: N802 — http.server API
+        self.calls.append(("GET", self.path))
+        if self.path.startswith("/rest/api/3/myself"):
+            return self._send({"displayName": "Test PM",
+                               "emailAddress": "pm@example.com"})
+
+        match = re.match(r"/rest/api/3/project/([^/]+)/components", self.path)
+        if match:
+            names = self.components.get(match.group(1), [])
+            return self._send([{"name": n} for n in names])
+
+        match = re.match(r"/rest/api/3/issue/([^/]+)/changelog", self.path)
+        if match:
+            issue = next((i for i in self.backlog
+                          if i["key"] == match.group(1)), None)
+            return self._send({"values": (issue or {}).get("changelog") or []})
+
+        if self.path.startswith("/wiki/rest/api/content/search"):
+            return self._confluence()
+
+        return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
+
+    def _confluence(self):
+        query = unquote(parse_qs(urlparse(self.path).query).get("cql", [""])[0])
+        space = re.search(r'space\s*=\s*"?([\w-]+)"?', query)
+        labels = re.findall(r'"([\w-]+)"', query.split("label", 1)[-1]) \
+            if "label" in query else []
+
+        hits = []
+        for page in self.pages:
+            if space and page.get("space") != space.group(1):
+                continue
+            if labels and not set(labels) & set(page.get("labels") or []):
+                continue
+            hits.append({
+                "id": page["id"],
+                "title": page["title"],
+                "body": {"view": {"value": f"<p>{page.get('body', '')}</p>"}},
+                "version": {"when": page.get("when", "2026-09-01T00:00:00.000Z")},
+                "_links": {"webui": page.get("webui", f"/pages/{page['id']}")},
+            })
+        return self._send({"results": hits})
+
+    # -- POSTs -------------------------------------------------------------
+    def do_POST(self):                               # noqa: N802 — http.server API
+        body = self._body()
+        self.calls.append(("POST", self.path, body))
+
+        if self.path.startswith("/rest/api/3/search/approximate-count"):
+            return self._send({"count": len(self._hits(body["jql"]))})
+
+        if self.path.startswith("/rest/api/3/search/jql"):
+            return self._search(body)
+
+        if self.path.startswith("/v1/chat/completions"):
+            return self._model(body)
+
+        return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
+
+    def _hits(self, jql):
+        try:
+            node = Parser(tokenize(jql)).parse()
+        except ValueError as err:
+            raise AssertionError(f"fake Jira could not read JQL: {err}\n{jql}")
+        return [i for i in self.backlog if evaluate(node, i)]
+
+    def _search(self, body):
+        hits = self._hits(body["jql"])
+        page_size = int(body.get("maxResults") or 50)
+        start = int(body.get("nextPageToken") or 0)
+        page = hits[start:start + page_size]
+        payload = {"issues": [render(i, body.get("fields") or ["key"],
+                                    body.get("expand")) for i in page],
+                   "isLast": start + page_size >= len(hits)}
+        if start + page_size < len(hits):
+            payload["nextPageToken"] = str(start + page_size)
+        return self._send(payload)
+
+    def _model(self, body):
+        system = next((m["content"] for m in body.get("messages", [])
+                       if m.get("role") == "system"), "")
+        # The review prompts want a JSON array back; the report wants prose.
+        reply = "[]" if "JSON array" in system else (
+            "### What changed since last week\n"
+            "- Fake model reply for the end-to-end test.\n")
+        return self._send({"choices": [{"message": {"role": "assistant",
+                                                    "content": reply}}]})
+
+
+class FakeJira:
+    """Run the stand-in on a spare port for the length of a test."""
+
+    def __init__(self, backlog, components=None, pages=None):
+        _Handler.backlog = link_parents(backlog)
+        _Handler.components = components or {}
+        _Handler.pages = pages or []
+        _Handler.calls = []
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever,
+                                       daemon=True)
+
+    @property
+    def url(self):
+        return f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    @property
+    def calls(self):
+        return _Handler.calls
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
