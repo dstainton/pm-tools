@@ -348,7 +348,7 @@ sprint planning.
 | Check | Severity | What it catches |
 |-------|----------|-----------------|
 | `bad-dates` | 🔴 error | Due before start, or due date passed but not done |
-| `missing-component` | 🟠 warn | No component set when the workstream does not inherit it from the Epic |
+| `missing-component` | 🟠 warn | No component set, in a legacy workstream that can't inherit one |
 | `missing-epic` | 🟠 warn | Story/task not linked to an epic or parent |
 | `missing-acceptance-criteria` | 🟠 warn | No AC found on a story/bug |
 | `no-estimate` | 🟠 warn | In-scope story with no story points |
