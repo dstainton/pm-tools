@@ -412,7 +412,7 @@ what's *in progress now* and who owns it.
 ```
 pm standup                    # yesterday's movement + today's WIP
 pm standup --days 3           # widen the window (e.g. after a weekend)
-pm standup --by workstream    # group WIP by workstream instead of by owner
+pm standup --by workstream    # group WIP by workstream instead of by assignee
 pm standup --print            # also echo the snapshot to the terminal
 ```
 
@@ -511,6 +511,11 @@ for a PM running several products and the BA who refines with them.
 
 `docs/FEATURE_PROPOSALS.md` holds the earlier, code-first list of twenty; the
 last section of the portfolio document says what happened to each of them.
+
+`docs/TERMINOLOGY.md` checks every word the tool uses against the November 2020
+Scrum Guide — what to rename, what to keep in Jira's vocabulary on purpose, and
+the three Scrum concepts `pm` has no notion of yet (Sprint Goal, Definition of
+Done, Product Goal).
 
 ---
 

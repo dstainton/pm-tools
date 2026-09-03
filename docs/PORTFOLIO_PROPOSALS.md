@@ -28,10 +28,12 @@ expensive, and they are not the parts a normal backlog tool optimises:
 | Re-deciding | The same 40 lint warnings every week, each one re-evaluated from scratch. |
 | Capture | The best idea of the week happened between meetings and never made it into Jira. |
 
-**The BA.** Turns intent into refined, estimable tickets. Their day is
-concrete: which tickets are not ready, and what exactly is missing. They do not
-want a report — they want a queue and a starting draft. Today `pm lint` tells
-them 40 things are wrong and leaves them with 40 blank fields to fill.
+**The BA.** In Scrum terms a member of the Developers, and in practice the
+person who does most of the refinement. They turn intent into refined,
+estimable Product Backlog items. Their day is concrete: which items are not
+ready, and what exactly is missing. They do not want a report — they want a
+queue and a starting draft. Today `pm lint` tells them 40 things are wrong and
+leaves them with 40 blank fields to fill.
 
 `pm` currently produces good documents. Neither of these people needs another
 document; they need a next action and a shorter list.
@@ -295,16 +297,19 @@ expiry, and shrinks the reports to what is genuinely new.
 
 ```
 pm lint --snooze APS-11 --until next-sprint --why "cosmetic, agreed with A. Lee"
-pm lint --accept APS-40 --why "standalone spike, no epic by design"
-pm lint --assign APS-20 --to ba
+pm lint --accept APS-40 --why "standalone spike, no parent by design"
+pm lint --assign APS-20 --to dana
 pm lint
-  4 new findings · 11 hidden (3 snoozed, 2 accepted, 6 with the BA)
+  4 new findings · 11 hidden (3 snoozed, 2 accepted, 6 assigned)
   pm lint --all      to see everything again
 ```
 
-`--assign --to ba` is also the PM-to-BA handoff: it lands in the BA's
-`pm refine` queue and is tracked until it closes, so the PM stops re-reporting
-it and the BA stops rediscovering it.
+`--assign --to <person>` is how a finding moves to whoever will refine it: it
+lands in that person's `pm refine` queue and is tracked until it closes, so it
+stops being re-reported and re-discovered. Deliberately a person rather than a
+role — encoding a PM-to-BA pipeline would build the stage gate that the
+Definition-of-Ready critique in `docs/TERMINOLOGY.md` warns about, and
+refinement is a Scrum Team activity.
 
 **Where the memory lives** is the one real design question, and it needs your
 answer before this is built:
@@ -370,8 +375,8 @@ from the changelog the standup already fetches.
 - throughput: items reaching Done per week
 - cycle time: first In Progress to Done, median and 85th percentile
 - aging work in progress: how long each in-flight item has been in flight
-- sprint scope change: what was added after the sprint started
-- estimate accuracy: committed points versus completed
+- sprint scope change: what was added after the Sprint started
+- forecast accuracy: what the Developers forecast versus what was Done
 - a plain forecast: at the current rate, the open SDX work lands around 12 Oct
 
 ```
@@ -511,11 +516,24 @@ are numbers behind them.
 
 The team says **refinement**, not grooming, so the tool should too: item 5 is
 `pm refine`, its output is `refine_<workstream>_<date>.md`, and the label item
-13 of the earlier list would apply is `needs-refinement`. The wider point is
-that `pm` should never make someone translate between its words and theirs —
-worth checking against the rest of the vocabulary (`workstream`, `scope`,
-`membership`, `Definition of Ready`) before the next tranche hard-codes any of
-it into a command name or a Jira label.
+13 of the earlier list would apply is `needs-refinement`.
+
+That rename prompted a full audit against the November 2020 Scrum Guide, which
+is now `docs/TERMINOLOGY.md`. It changes three things about this list:
+
+- Item 6 assigns findings to a **person**, not to a role, because a PM-to-BA
+  pipeline is the stage gate Scrum warns against.
+- The Sprint Goal, the Definition of Done and the Product Goal are all missing
+  from the tool entirely. The Sprint Goal in particular belongs at the top of
+  item 2's screen — a daily snapshot that never says whether the Sprint Goal is
+  at risk is a status report, not a Scrum artifact.
+- `pm ready` rests on a Definition of Ready, which is **not** part of Scrum. The
+  capability stays; the framing becomes a team working agreement, and the one
+  criterion Scrum does imply — can this be Done inside one Sprint — becomes the
+  one that always blocks.
+
+These sit alongside the ten rather than replacing any of them, and the Sprint
+Goal is cheap enough that it should ride along with item 2.
 
 ## What I would not build
 

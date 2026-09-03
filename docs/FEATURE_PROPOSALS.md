@@ -219,7 +219,7 @@ delivery metrics, and they are pure arithmetic:
 - throughput: issues reaching Done per week, per workstream
 - cycle time: first `In Progress` to `Done`, median and 85th percentile
 - aging work in progress: how long each in-flight item has been in flight
-- estimate accuracy: story points completed per sprint versus committed
+- forecast accuracy: story points Done per Sprint versus forecast
 - scope change: items added to an open sprint after it started
 
 ```
@@ -301,9 +301,9 @@ Nothing writes without both the flag and `--yes`, and a dry run prints the exact
 change list first. Touches a new `update_issue` in `core/sources.py`. Higher
 risk than anything else here, hence the double opt-in.
 
-#### 14. `pm sprint-review` — committed versus delivered
+#### 14. `pm sprint-review` — forecast versus delivered
 
-At sprint end: what was in the sprint at the start, what finished, what carried
+At Sprint end: what was in the Sprint at the start, what finished, what carried
 over, and what was added mid-flight. All from the changelog, all deterministic,
 and the one report that makes the weekly write-up credible over time.
 
