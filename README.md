@@ -689,9 +689,9 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 
 ## Roadmap (ideas, not commitments)
 
-`docs/PLAN.md` is the plan for the next body of work: rename the product to
-pm-tools, a pipx install, and `pm update` (upgrade the tool, migrate the
-config, never replace it). Tool gaps come after that.
+`docs/PLAN.md` is the plan for the next body of work. A new user installs
+with one command, then `pm init` and `pm doctor`. `pm update` exists for
+the install after that, and it migrates config without replacing it.
 
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those
