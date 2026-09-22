@@ -1,29 +1,29 @@
-"""`pm standup` — a quick daily movement snapshot.
+"""`pm daily` — the Daily Scrum movement snapshot.
 
-Answers the two questions a standup actually needs, per workstream:
+Answers the two questions the Daily Scrum actually needs, per workstream:
 
   * What MOVED since yesterday?  (status transitions from the Jira changelog:
     "To Do -> In Progress", "In Review -> Done", and so on)
   * What is IN PROGRESS right now, and who owns it?
 
 No model needed — this is all facts straight from Jira, so it is fast and
-trustworthy. Run it a few minutes before standup.
+trustworthy. Run it a few minutes before the Daily Scrum.
 
-  pm standup                    Yesterday's movement + today's WIP.
-  pm standup --days 3           Widen the "moved" window (e.g. after a weekend).
-  pm standup --by workstream    Group WIP by workstream instead of by owner.
-  pm standup --print            Also echo the snapshot to the terminal.
+  pm daily                    Yesterday's movement + today's WIP.
+  pm daily --days 3           Widen the "moved" window (e.g. after a weekend).
+  pm daily --by workstream    Group WIP by workstream instead of by owner.
+  pm daily --print            Also echo the snapshot to the terminal.
 
-Scope it like any command:  pm standup --workstream SDX
+Scope it like any command:  pm daily --workstream SDX
 
-What counts as "moved" and "in progress" comes from the `standup_moved` and
-`standup_wip` scopes in config — plain options, no JQL. --days overrides the
+What counts as "moved" and "in progress" comes from the `daily_moved` and
+`daily_wip` scopes in config — plain options, no JQL. --days overrides the
 movement window for one run.
 """
 
 import datetime as dt
 
-from core import sources, workstreams
+from core import output, sources, workstreams
 
 
 def _fmt_when(when):
@@ -39,14 +39,14 @@ def _fmt_when(when):
 
 def _moved_jql(cfg, ws, days):
     """Resolve the workstream scope for recent movement."""
-    return workstreams.scope_jql(cfg, ws, "standup_moved", days=days)
+    return workstreams.scope_jql(cfg, ws, "daily_moved", days=days)
 
 
 def build_markdown(cfg, results, days, group_by):
     today = dt.date.today().isoformat()
     window = "since yesterday" if days == 1 else f"in the last {days} days"
     lines = [
-        "# Daily Standup",
+        "# Daily Scrum",
         f"_Movement {window}, and work in progress now. "
         f"Generated {today} — facts from Jira, no model._",
         "",
@@ -136,10 +136,10 @@ def run(cfg, args):
 
     results = []
     for ws in cfg["_workstreams"]:
-        print(f"Standup: {ws['name']} ({ws['abbrev']}) ...")
+        print(f"Daily Scrum: {ws['name']} ({ws['abbrev']}) ...")
 
         moved_jql = _moved_jql(cfg, ws, days)
-        wip_jql = workstreams.scope_jql(cfg, ws, "standup_wip")
+        wip_jql = workstreams.scope_jql(cfg, ws, "daily_wip")
 
         moved = sources.fetch_jira_changelog(cfg["jira"], moved_jql, days) \
             if moved_jql else []
@@ -149,10 +149,12 @@ def run(cfg, args):
         results.append((ws, moved, wip))
 
     report = build_markdown(cfg, results, days, group_by)
-    out_path = f"standup_{dt.date.today().isoformat()}.md"
+    out_path = output.place(
+        cfg, f"daily_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
-    print(f"\nDone. Standup written to: {out_path}")
+    print(f"\nDone. Daily Scrum written to: {out_path}")
 
     if getattr(args, "print", False):
         print("\n" + "=" * 60 + "\n")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Product Manager Helper CLI — `pm`.
+Product Manager tools (`pm`).
 
 One tool, several commands, all sharing a single config.yaml and your defined
 workstreams. Runs entirely against your own Jira / Confluence / SharePoint and
@@ -25,7 +25,7 @@ Commands:
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
     pm ready             Team ready-agreement gate: pass/fail per ticket.
-    pm standup           Daily movement + work-in-progress snapshot (no model).
+    pm daily             Daily Scrum movement + work in progress (no model).
 
 Common options (work on every command except init):
   --config PATH        Path to the config file. If omitted, pm searches:
@@ -57,7 +57,7 @@ Examples:
   pm report --publish --dry-run
   pm schedule add today --at 08:30
   pm ready --deep --workstream sdx,itk
-  pm standup --days 3 --by workstream
+  pm daily --days 3 --by workstream
 """
 
 import argparse
@@ -71,9 +71,9 @@ from core import cache as fetch_cache                           # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
 from commands import (report, lint, ready, init,                # noqa: E402
-                      standup, workstreams, products, doctor, today,
+                      daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
-                      schedule)
+                      schedule, update)
 
 
 def resolve_config_path(explicit):
@@ -113,7 +113,7 @@ def resolve_config_path(explicit):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="pm", description="Product Manager Helper CLI")
+        prog="pm", description="pm-tools CLI")
 
     # Options shared by the config-driven subcommands (everything but init).
     common = argparse.ArgumentParser(add_help=False)
@@ -132,6 +132,9 @@ def build_parser():
                         help="Reuse cached Jira fetches even if they are stale")
     common.add_argument("--refresh", action="store_true",
                         help="Ignore the fetch cache and query Jira again")
+    common.add_argument("--out", default=None, metavar="DIR",
+                        help="Write this run's files under DIR instead of "
+                             "output.directory")
 
     write_opts = argparse.ArgumentParser(add_help=False)
     write_opts.add_argument("--yes", "-y", action="store_true",
@@ -143,7 +146,7 @@ def build_parser():
         dest="command", required=True,
         metavar="{init,products,workstreams,today,do,doctor,report,lint,"
                 "triage,refine,review,note,inbox,metrics,brief,publish,"
-                "schedule,ready,standup}")
+                "schedule,ready,daily,update}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
@@ -209,6 +212,8 @@ def build_parser():
     p_doctor.add_argument("--discover-fields", action="store_true",
                           help="List custom-field IDs that look like story "
                                "points, start date, or acceptance criteria")
+    p_doctor.add_argument("--yes", "-y", action="store_true",
+                          help="With --discover-fields, write blank field IDs")
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
     p_report = sub.add_parser("report", parents=[common, write_opts],
@@ -223,6 +228,9 @@ def build_parser():
                         help="Write findings as JSON instead of Markdown")
     p_lint.add_argument("--severity", choices=["error", "warn", "review"],
                         help="Only show findings at or above this severity")
+    p_lint.add_argument("--fail-on", choices=["error", "warn", "review"],
+                        help="Exit non-zero if a finding is at or above "
+                             "this severity")
     p_lint.add_argument("--snooze", metavar="KEY",
                         help="Hide findings on KEY until --until")
     p_lint.add_argument("--accept", metavar="KEY",
@@ -319,26 +327,47 @@ def build_parser():
                          help="One day a week, e.g. fri@16:00")
     p_sched.add_argument("--for", dest="for_audience",
                          help="With `add brief`, the audience name")
+    p_sched.add_argument("--fail-on", choices=["error", "warn", "review"],
+                         help="With `add lint`, pass --fail-on through")
+    p_sched.add_argument("--fail-under", type=float, default=None,
+                         metavar="N",
+                         help="With `add ready`, pass --fail-under through")
     p_sched.set_defaults(func=schedule.run, needs_config=True)
 
     p_ready = sub.add_parser("ready", parents=[common],
                              help="Definition-of-Ready gate (pass/fail)")
     p_ready.add_argument("--deep", action="store_true",
                          help="Also run the model reviews as blocking checks")
+    p_ready.add_argument("--fail-under", type=float, default=None,
+                         metavar="N",
+                         help="Exit non-zero when fewer than N percent of "
+                              "items are ready")
     p_ready.set_defaults(func=ready.run, needs_config=True)
 
-    p_standup = sub.add_parser("standup", parents=[common],
-                               help="Daily movement + work-in-progress snapshot")
-    p_standup.add_argument("--days", type=int, default=1,
-                           help="How many days back to count as 'moved' "
-                                "(default: 1)")
-    p_standup.add_argument("--by", choices=["assignee", "workstream"],
-                           default="assignee",
-                           help="Group in-progress work by owner (default) "
-                                "or by workstream")
-    p_standup.add_argument("--print", action="store_true",
-                           help="Also echo the snapshot to the terminal")
-    p_standup.set_defaults(func=standup.run, needs_config=True)
+    p_daily = sub.add_parser("daily", parents=[common],
+                             help="Daily Scrum movement and work in progress")
+    p_daily.add_argument("--days", type=int, default=1,
+                         help="How many days back to count as 'moved' "
+                              "(default: 1)")
+    p_daily.add_argument("--by", choices=["assignee", "workstream"],
+                         default="assignee",
+                         help="Group in-progress work by assignee (default) "
+                              "or by workstream")
+    p_daily.add_argument("--print", action="store_true",
+                         help="Also echo the snapshot to the terminal")
+    p_daily.set_defaults(func=daily.run, needs_config=True)
+
+    p_update = sub.add_parser(
+        "update", help="Upgrade pm-tools and migrate the config")
+    p_update.add_argument("--config", default=None,
+                          help="Config file to migrate (default: ~/.pm/config.yaml)")
+    p_update.add_argument("--code-only", action="store_true",
+                          help="Upgrade the program and leave the config untouched")
+    p_update.add_argument("--config-only", action="store_true",
+                          help="Migrate the config and leave the program as it is")
+    p_update.add_argument("--dry-run", action="store_true",
+                          help="Show what would change and write nothing")
+    p_update.set_defaults(func=update.run, needs_config=False)
 
     return parser
 

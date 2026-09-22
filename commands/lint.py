@@ -5,7 +5,7 @@ so you can trust the output completely and run it before every sprint planning.
 
 Rules (all tunable in config under `lint:`):
   * missing-component            field hygiene (idea 3)
-  * missing-epic                 field hygiene (idea 3)
+  * missing-parent                field hygiene (idea 3)
   * vague-title                  cheap heuristic version of idea 1
   * missing-acceptance-criteria  keyword version of idea 2
   * no-estimate                  unestimated in-scope stories
@@ -23,7 +23,7 @@ import json
 import re
 import sys
 
-from core import decisions, sources, workstreams, writes
+from core import decisions, output, sources, workstreams, writes
 
 
 SEVERITY_ORDER = {"error": 0, "warn": 1, "review": 2}
@@ -91,8 +91,8 @@ def check_issue(issue, lint_cfg, component_inherited=False):
         add("missing-component", "warn", "No component set.")
 
     # --- Missing epic / parent --------------------------------------------
-    if "epic" in required and not is_epic and not issue["epic"]:
-        add("missing-epic", "warn", "Not linked to an epic/parent.")
+    if "parent" in required and not is_epic and not issue["epic"]:
+        add("missing-parent", "warn", "Not linked to a parent.")
 
     # --- Vague title -------------------------------------------------------
     title = (issue["summary"] or "").strip()
@@ -102,11 +102,17 @@ def check_issue(issue, lint_cfg, component_inherited=False):
         add("vague-title", "review",
             f"Title is only {len(title.split())} word(s); may be too vague.")
     else:
-        vague = [t.lower() for t in lint_cfg.get("vague_title_terms", [])]
-        hits = [t for t in vague if t in tokens]
-        if hits:
+        alone = [t.lower() for t in lint_cfg.get("vague_title_alone", [])]
+        normalized = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+        if normalized in alone:
             add("vague-title", "review",
-                f"Title contains vague term(s): {', '.join(sorted(hits))}.")
+                f"Title is only the vague word {normalized!r}.")
+        else:
+            vague = [t.lower() for t in lint_cfg.get("vague_title_terms", [])]
+            hits = [t for t in vague if t in tokens]
+            if hits:
+                add("vague-title", "review",
+                    f"Title contains vague term(s): {', '.join(sorted(hits))}.")
 
     # --- Missing acceptance criteria (stories/bugs) -----------------------
     story_types = [t.lower() for t in lint_cfg.get("story_types",
@@ -144,12 +150,13 @@ def check_issue(issue, lint_cfg, component_inherited=False):
 
     # --- Stale in-progress -------------------------------------------------
     stale_days = lint_cfg.get("stale_days", 14)
-    updated = parse_datetime(issue["updated"])
-    if in_progress and updated:
-        age = (dt.datetime.now(dt.timezone.utc) - updated).days
+    touched = parse_datetime(issue.get("status_changed")) or \
+        parse_datetime(issue.get("updated"))
+    if in_progress and touched:
+        age = (dt.datetime.now(dt.timezone.utc) - touched).days
         if age > stale_days:
             add("stale", "warn",
-                f"In progress but untouched for {age} days.")
+                f"In progress but no status change for {age} days.")
 
     return findings
 
@@ -162,7 +169,7 @@ def build_markdown(cfg, results):
     """results: list of (workstream, findings) tuples."""
     today = dt.date.today().isoformat()
     lines = [
-        "# Backlog Lint Report",
+        "# Product Backlog Lint",
         f"_Deterministic checks run on {today}. No model involved — every "
         "finding is a rule, not an opinion._",
         "",
@@ -335,14 +342,23 @@ def run(cfg, args):
               f"pm lint --all to see everything again.")
 
     if getattr(args, "json", False):
-        out_path = "lint_report_{}.json".format(dt.date.today().isoformat())
+        out_path = output.place(
+            cfg, "lint_report_{}.json".format(dt.date.today().isoformat()),
+            getattr(args, "out", None))
         with open(out_path, "w", encoding="utf-8") as fh:
             json.dump(flat, fh, indent=2)
         print(f"\nDone. Findings written to: {out_path}")
-        return
+    else:
+        report = build_markdown(cfg, results)
+        out_path = output.place(
+            cfg, "lint_report_{}.md".format(dt.date.today().isoformat()),
+            getattr(args, "out", None))
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(report)
+        print(f"\nDone. Lint report written to: {out_path}")
 
-    report = build_markdown(cfg, results)
-    out_path = "lint_report_{}.md".format(dt.date.today().isoformat())
-    with open(out_path, "w", encoding="utf-8") as fh:
-        fh.write(report)
-    print(f"\nDone. Lint report written to: {out_path}")
+    fail_on = getattr(args, "fail_on", None)
+    if fail_on:
+        threshold = SEVERITY_ORDER[fail_on]
+        if any(SEVERITY_ORDER[f["severity"]] <= threshold for f in flat):
+            sys.exit(1)

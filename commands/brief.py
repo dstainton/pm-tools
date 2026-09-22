@@ -13,7 +13,7 @@ import re
 import sys
 
 from commands import today as today_cmd
-from core import model, paths, sources, state, workstreams, writes
+from core import model, output, paths, sources, state, workstreams, writes
 from core import products as product_core
 
 
@@ -159,7 +159,9 @@ def run_prep(cfg, args):
     print(f"Preparing the brief for {audience} ...")
     sections, snapshot, last = gather(cfg, audience)
     text = render_prep(audience, sections, last)
-    path = f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md"
+    path = output.place(
+        cfg, f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
     state.save_state(_state_path(cfg, audience), snapshot)
@@ -258,7 +260,9 @@ def run_debrief(cfg, args):
         cfg["model"], DEBRIEF_PROMPT,
         f"{_catalogue(cfg)}\n\nNotes:\n{text}\n\nReturn the JSON object now.")
     extracted = _parse_debrief(raw)
-    out = f"debrief_{_slug(audience)}_{dt.date.today().isoformat()}.md"
+    out = output.place(
+        cfg, f"debrief_{_slug(audience)}_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
     body = render_debrief(audience, notes, extracted)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(body)

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-Set up a small local Qwen model for pm-helper on Windows.
+Set up a small local Qwen model for pm-tools on Windows.
 
 .DESCRIPTION
 Installs or reuses llama.cpp, downloads Qwen3-4B Q4_K_M (~2.5 GB),
@@ -73,7 +73,7 @@ function Require-Command {
     return $cmd
 }
 
-Write-Host "pm-helper small local Qwen setup" -ForegroundColor Green
+Write-Host "pm-tools small local Qwen setup" -ForegroundColor Green
 Write-Host "Model:    $ModelRepo / $ModelFile"
 Write-Host "Download: approximately 2.5 GB"
 Write-Host "Endpoint: http://127.0.0.1:$Port/v1"
@@ -96,7 +96,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python did not run successfully."
 }
 
-Write-Host "pm-helper talks to llama.cpp with its existing requests dependency; no OpenAI SDK is required."
+Write-Host "pm-tools talks to llama.cpp with its existing requests dependency; no OpenAI SDK is required."
 
 Write-Step "Checking llama.cpp"
 
@@ -113,7 +113,7 @@ else {
 
     $releaseApi = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
     $headers = @{
-        "User-Agent" = "pm-helper-qwen-small-setup"
+        "User-Agent" = "pm-tools-qwen-small-setup"
     }
 
     try {

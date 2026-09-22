@@ -115,9 +115,9 @@ class MembershipTests(unittest.TestCase):
 
 
 class ScopeTests(unittest.TestCase):
-    def test_standup_window_comes_from_days(self):
+    def test_daily_window_comes_from_days(self):
         jql = workstreams.scope_jql(base_cfg(), component_ws(),
-                                    "standup_moved", days=3)
+                                    "daily_moved", days=3)
         self.assertIn("updated >= -3d", jql)
 
     def test_workstream_scope_override_is_applied(self):
@@ -167,9 +167,9 @@ class LegacyConfigTests(unittest.TestCase):
     def test_direct_jql_days_placeholder(self):
         cfg = base_cfg()
         cfg["jira"].pop("project")
-        ws = {"abbrev": "OLD", "standup_moved_jql": "updated >= -{days}d"}
+        ws = {"abbrev": "OLD", "daily_moved_jql": "updated >= -{days}d"}
         self.assertEqual(
-            workstreams.scope_jql(cfg, ws, "standup_moved", days=5),
+            workstreams.scope_jql(cfg, ws, "daily_moved", days=5),
             "updated >= -5d")
 
     def test_old_epic_component_keys_still_resolve(self):

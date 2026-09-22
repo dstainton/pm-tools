@@ -59,7 +59,7 @@ class CompileScopeTests(unittest.TestCase):
 
 class ScopeOptionTests(unittest.TestCase):
     def test_defaults_apply_when_nothing_is_configured(self):
-        options = filters.scope_options({}, {}, "standup_wip")
+        options = filters.scope_options({}, {}, "daily_wip")
         self.assertEqual(options, {"status": "in-progress"})
 
     def test_layers_override_in_order(self):

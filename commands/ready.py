@@ -19,7 +19,9 @@ pull in", red means "needs work first, here's exactly what".
 
 import datetime as dt
 
-from core import sources, workstreams
+import sys
+
+from core import output, sources, workstreams
 from commands import lint, review
 
 
@@ -29,7 +31,7 @@ CRITERION_RULES = {
     "clear-title": ["vague-title"],
     "has-acceptance-criteria": ["missing-acceptance-criteria"],
     "has-estimate": ["no-estimate"],
-    "linked-to-epic": ["missing-epic"],
+    "linked-to-parent": ["missing-parent"],
     "has-component": ["missing-component"],
     "sane-dates": ["bad-dates"],
 }
@@ -208,7 +210,18 @@ def run(cfg, args):
         results.append((ws, verdicts))
 
     report = build_markdown(cfg, results, deep)
-    out_path = f"ready_report_{dt.date.today().isoformat()}.md"
+    out_path = output.place(
+        cfg, f"ready_report_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
     print(f"\nDone. Readiness report written to: {out_path}")
+
+    fail_under = getattr(args, "fail_under", None)
+    if fail_under is not None:
+        total = sum(len(verdicts) for _ws, verdicts in results)
+        ready_n = sum(1 for _ws, verdicts in results
+                      for verdict in verdicts if verdict["ready"])
+        percent = 100.0 if total == 0 else (100.0 * ready_n / total)
+        if percent < fail_under:
+            sys.exit(1)

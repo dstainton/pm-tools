@@ -1,9 +1,9 @@
-# Product Manager Helper (`pm`)
+# pm-tools (`pm`)
 
-A small command-line tool that helps a PM stay on top of a backlog and keep
-directors informed. One config, several commands, all running against your own
-Jira / Confluence / SharePoint and a **local** model — nothing leaves your
-laptop.
+A command-line tool that helps a PM stay on top of a backlog and keep
+stakeholders informed. One config, several commands, all running against your
+own Jira / Confluence / SharePoint and a **local** model — nothing leaves
+your laptop.
 
 ```
 pm init         Create a starter config at ~/.pm/config.yaml
@@ -24,10 +24,11 @@ pm brief        Meeting prep for one audience, or a debrief
 pm publish      Send a Markdown file to Confluence and/or Teams
 pm schedule     Register read-only commands on a timer
 pm ready        Team ready-agreement gate: pass/fail per ticket
-pm standup      Daily movement + work-in-progress snapshot (no model)
+pm daily        Daily Scrum movement + work in progress (no model)
+pm update       Upgrade pm-tools and migrate the config (never replaces it)
 ```
 
-Every command (except `init`) can be scoped to one or more products with
+Every command (except `init` and `update`) can be scoped to one or more products with
 `--product` and to one or more workstreams with `--workstream`. The two
 compose. `--cached` reuses a stale fetch cache; `--refresh` ignores it.
 
@@ -35,67 +36,62 @@ compose. `--cached` reuses a stale fetch cache; `--refresh` ignores it.
 
 ## Quick start
 
+Python 3.9 or newer. You do not clone the repo.
+
+On Windows, from PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/dstainton/pm-tools/main/install.ps1 | iex
 ```
-# 1. Install once, from inside this folder. Turns `python pm.py` into `pm`.
-pip install -e .
 
-# 2. Create your config in the standard spot, then fill it in.
+On macOS or Linux:
+
+```bash
+pipx install git+https://github.com/dstainton/pm-tools.git
 pm init
-#   → opens nothing; it just copies a template to ~/.pm/config.yaml.
-#   Edit that file: Jira URL, email, API token, project, and your workstreams.
+```
 
-# 3. Confirm Jira agrees with what you typed.
+`pm init` copies a template to `~/.pm/config.yaml` and stops. Open that file
+and fill in the Jira URL, email, API token, project, and your products and
+workstreams. Then:
+
+```text
 pm doctor
-
-# 4. The habit command, from anywhere — no python, no file path.
 pm today
 ```
 
-You also need **Python 3.9+** and, for the model-backed commands (`report`,
-`review`, `ready --deep`), a local OpenAI-compatible model server — see
-**The local model** below. `pm today`, `pm lint`, `pm triage`, `pm standup`, `pm doctor`,
-`pm note`, and the fast `pm ready` need no model at all.
+`pm doctor` checks what you typed and does not rewrite the file. `pm today`
+is the habit command, from any directory.
+
+You also need a local OpenAI-compatible model server for `pm report`,
+`pm refine`, and `pm ready --deep` — see **The local model** below.
+`pm today`, `pm lint`, `pm triage`, `pm daily`, `pm doctor`, `pm note`,
+and the fast `pm ready` need no model at all.
+
+A later upgrade is `pm update`. It upgrades the program and adds new config
+keys. It does not replace `~/.pm/config.yaml`. `pm init --force` is the only
+command that replaces that file.
+
+Developing pm-tools itself is a separate path: `pip install -e .` inside a
+clone. An editable install does not get `pm update`'s code upgrade; pull
+the repository yourself.
 
 ---
 
 ## Installing as a real command
 
-The friction of typing `python pm.py …` goes away once you install the project.
-`pip` reads `pyproject.toml`, sees this:
+`pipx` reads `pyproject.toml` and installs two commands that call the same
+program:
 
 ```toml
 [project.scripts]
 pm = "pm:main"
+pm-tools = "pm:main"
 ```
 
-…and drops a small `pm` launcher onto your PATH. From inside the `pm_helper`
-folder:
-
-```
-pip install -e .
-```
-
-The `-e` means **editable**: pip links to your files in place, so every edit to
-the code or config takes effect immediately — no reinstalling. Remove it any
-time with `pip uninstall pm-helper`.
-
-### Windows: if `pm` isn't found after install
-
-`pip` puts the launcher in your Python **Scripts** folder. If that folder isn't
-on PATH you'll see `pm: command not found`. Two fixes:
-
-- **Best — use pipx**, which handles PATH for you and isolates the tool:
-  ```
-  python -m pip install --user pipx
-  python -m pipx ensurepath        # then reopen your terminal
-  pipx install -e .                # run from the pm_helper folder
-  ```
-- **Or add Scripts to PATH manually.** Find the folder with:
-  ```
-  python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
-  ```
-  Add it to PATH (System Settings → Environment Variables) and reopen the
-  terminal.
+Remove it with `pipx uninstall pm-tools`. An older checkout of this repo may
+still be installed under the name `pm-helper`; uninstall that with
+`pip uninstall pm-helper` if `pm` points at it.
 
 ### Optional: a standalone .exe (no Python needed)
 
@@ -131,9 +127,10 @@ pm init --force         # replace an existing one
 pm init --path FILE     # write somewhere specific instead
 ```
 
-After `pm init`, open the file and fill in the `<PLACEHOLDERS>`. If you already
-have `~/.pm/config.yaml`, upgrading the package does **not** overwrite it; copy
-new config sections into your existing file instead.
+After `pm init`, open the file and fill in the `<PLACEHOLDERS>`. If the file
+already exists, `pm init` leaves it alone. `pm update` upgrades the program
+and adds new settings. It does not replace the file. `pm init --force` is
+the only command that does.
 
 - **Jira / Confluence:** your Atlassian email and an API token from
   `id.atlassian.com → Security → API tokens`.
@@ -148,9 +145,9 @@ new config sections into your existing file instead.
 > `${ENV:VAR_NAME}` and pm will read it from that environment variable at run
 > time. Handy for the API token.
 
-The report's `report_state.json` (the "what changed" memory) is written to the
-folder you run `pm report` from. Pick a home — e.g. always run it from `~/.pm` —
-so the week-to-week history stays in one place.
+The report's `report_state.json` (the "what changed" memory) is written under
+`output.directory` (default `~/.pm/out`), so it stays in one place no matter
+which folder you run `pm report` from.
 
 ---
 
@@ -384,8 +381,8 @@ scopes:
   roadmap:       {status: open}
   lint:          {status: open}
   ready:         {sprint: open, status: open}
-  standup_moved: {updated_within_days: 1}
-  standup_wip:   {status: in-progress}
+  daily_moved:   {updated_within_days: 1}
+  daily_wip:     {status: in-progress}
 ```
 
 | Option | Values |
@@ -399,7 +396,7 @@ scopes:
 | `extra_jql` | escape hatch, if you ever need one |
 
 Each scope also picks the level it applies to, which is fixed: `report`, `ready`
-and the standup scopes look at child work, `roadmap` at the workstream Epics,
+and the daily scopes look at child work, `roadmap` at the workstream Epics,
 `lint` and `review` at the Epics plus everything beneath them.
 
 Any workstream can override any scope with its own `scopes:` block — useful when
@@ -440,7 +437,7 @@ to write a concise section. Ends with a reference table of real links. Output:
 `weekly_report_<date>.md`. Remembers last week in `report_state.json` — keep
 that file between runs.
 
-### `pm lint` — backlog quality checks
+### `pm lint` — Product Backlog checks
 
 **No model. Pure rules**, so you can trust every finding and run it before every
 sprint planning.
@@ -449,7 +446,7 @@ sprint planning.
 |-------|----------|-----------------|
 | `bad-dates` | 🔴 error | Due before start, or due date passed but not done |
 | `missing-component` | 🟠 warn | No component set, in a legacy workstream that can't inherit one |
-| `missing-epic` | 🟠 warn | Story/task not linked to an epic or parent |
+| `missing-parent` | 🟠 warn | Story/task not linked to a parent |
 | `missing-acceptance-criteria` | 🟠 warn | No AC found on a story/bug |
 | `no-estimate` | 🟠 warn | In-scope story with no story points |
 | `stale` | 🟠 warn | "In Progress" but untouched for *N* days |
@@ -574,29 +571,29 @@ pm ready --deep       # also run the model reviews as blocking checks
 Output: `ready_report_<date>.md` with a percent-ready summary, a **🔴 Not ready**
 table naming exactly which criteria each ticket fails, and a **🟢 Ready** list.
 Choose which criteria block readiness in the `ready:` config block — available:
-`clear-title`, `has-acceptance-criteria`, `has-estimate`, `linked-to-epic`,
+`clear-title`, `has-acceptance-criteria`, `has-estimate`, `linked-to-parent`,
 `has-component`, `sane-dates`. Anything not listed becomes an advisory note.
 
-### `pm standup` — daily movement snapshot
+### `pm daily` — Daily Scrum snapshot
 
-**No model.** The two things a standup actually needs, per workstream: what
+**No model.** The two things the Daily Scrum actually needs, per workstream: what
 *moved* since yesterday (real status transitions from the Jira changelog), and
 what's *in progress now* and who owns it.
 
 ```
-pm standup                    # yesterday's movement + today's WIP
-pm standup --days 3           # widen the window (e.g. after a weekend)
-pm standup --by workstream    # group WIP by workstream instead of by assignee
-pm standup --print            # also echo the snapshot to the terminal
+pm daily                      # yesterday's movement + today's WIP
+pm daily --days 3             # widen the window (e.g. after a weekend)
+pm daily --by workstream      # group WIP by workstream instead of by assignee
+pm daily --print              # also echo the snapshot to the terminal
 ```
 
-Output: `standup_<date>.md`. The "moved" list reads each issue's changelog and
+Output: `daily_<date>.md` under `output.directory` (default `~/.pm/out`). The "moved" list reads each issue's changelog and
 shows the transition — e.g. **To Do → In Review by A. Lee (today 09:12)**. If a
 ticket hopped several statuses, it collapses to first-from → last-to so you see
-the net move at a glance. Scope it like anything else: `pm standup -w SDX`.
+the net move at a glance. Scope it like anything else: `pm daily -w SDX`.
 
-The window and the definition of "in progress" come from the `standup_moved` and
-`standup_wip` scopes; `--days` overrides the window for one run.
+The window and the definition of "in progress" come from the `daily_moved` and
+`daily_wip` scopes; `--days` overrides the window for one run.
 
 ---
 
@@ -636,8 +633,9 @@ that check.
 ## Layout
 
 ```
-pm_helper/
-├── pyproject.toml       # packaging — this is what creates the `pm` command
+pm-tools/
+├── pyproject.toml       # packaging — this creates the `pm` and `pm-tools` commands
+├── install.ps1          # Windows first install
 ├── config.yaml          # template config (pm init copies it to ~/.pm)
 ├── pm.py                # entry point: routes subcommands, applies --workstream
 ├── core/                # shared plumbing (tested, reused by every command)
@@ -675,7 +673,8 @@ pm_helper/
     ├── publish.py       # pm publish
     ├── schedule.py      # pm schedule
     ├── ready.py         # pm ready
-    └── standup.py       # pm standup
+    ├── daily.py         # pm daily
+    └── update.py        # pm update
 ```
 
 Run the tests with `python -m unittest discover -s tests` — no Jira, no model and

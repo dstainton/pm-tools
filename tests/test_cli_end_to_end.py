@@ -161,6 +161,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
+config_version: 1
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -198,7 +199,7 @@ sharepoint:
 
 lint:
   stale_days: 14
-  required_fields: [epic]
+  required_fields: [parent]
   min_title_words: 3
   vague_title_terms: [fix, stuff, misc, tbd, wip]
   story_types: [story, bug]
@@ -216,7 +217,7 @@ ready:
     - has-estimate
     - sane-dates
 
-standup:
+daily:
   lookback_days: 1
 
 cache:
@@ -293,6 +294,7 @@ workstreams:
 #  Output
 # ----------------------------------------------------------------------------
 output:
+  directory: "."
   file: "weekly_report_{{date}}.md"
   audience: "directors"
   state_file: "report_state.json"
@@ -467,14 +469,14 @@ class LintTests(CliTestCase):
         keys = {f["key"] for f in self._findings()}
         self.assertNotIn("APS-1", keys)
         missing_epic = {f["key"] for f in self._findings()
-                        if f["rule"] == "missing-epic"}
+                        if f["rule"] == "missing-parent"}
         self.assertEqual(missing_epic, {"APS-40"})   # the only orphan
 
 
-class StandupTests(CliTestCase):
+class DailyTests(CliTestCase):
     def test_movement_and_work_in_progress(self):
-        self.run_pm("standup", "-w", "SDX")
-        report = self.read_output(r"standup_.*\.md")
+        self.run_pm("daily", "-w", "SDX")
+        report = self.read_output(r"daily_.*\.md")
         self.assertIn("APS-10", report)
         self.assertIn("To Do → In Review", report)
         self.assertIn("A. Lee", report)
@@ -482,8 +484,8 @@ class StandupTests(CliTestCase):
         self.assertNotIn("APS-20", report)           # moved 40 days ago
 
     def test_widening_the_window_picks_up_older_moves(self):
-        self.run_pm("standup", "--days", "60", "-w", "APS")
-        report = self.read_output(r"standup_.*\.md")
+        self.run_pm("daily", "--days", "60", "-w", "APS")
+        report = self.read_output(r"daily_.*\.md")
         self.assertIn("APS-20", report)
         self.assertIn("Backlog → To Do", report)
 

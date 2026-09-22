@@ -39,8 +39,8 @@ LEGACY_FIELDS = {
     "lint": ["lint_jql"],
     "review": ["review_jql", "lint_jql"],
     "ready": ["ready_jql", "jira_jql"],
-    "standup_moved": ["standup_moved_jql", "lint_jql"],
-    "standup_wip": ["standup_wip_jql", "jira_jql"],
+    "daily_moved": ["daily_moved_jql", "lint_jql"],
+    "daily_wip": ["daily_wip_jql", "jira_jql"],
 }
 
 DEFAULT_MEMBERSHIP = {
@@ -247,7 +247,7 @@ def scope_jql(cfg, ws, scope_name, overrides=None, days=None):
     """Return the executable JQL for one workstream and one command scope.
 
     `overrides` are run-time scope options (for example a different status);
-    `days` is the shorthand for the standup window, which also feeds the
+    `days` is the shorthand for the daily window, which also feeds the
     `{days}` placeholder legacy configs use.
 
     Returns None when this workstream has nothing in scope, which every command

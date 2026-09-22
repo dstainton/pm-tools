@@ -34,7 +34,7 @@ SCOPE_LABELS = {
     "roadmap": "roadmap (the epics)",
     "lint": "lint / review",
     "ready": "ready",
-    "standup_wip": "standup (in progress)",
+    "daily_wip": "daily (in progress)",
 }
 
 

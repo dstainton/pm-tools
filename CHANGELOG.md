@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.7.0 - 2026-09-22
+
+### pm-tools
+
+- The package name is `pm-tools`. The daily command is still `pm`. `pm-tools`
+  calls the same program.
+- First install is `install.ps1` on Windows, or `pipx install` of the GitHub
+  repo elsewhere, then `pm init`. The Qwen setup scripts no longer install
+  the CLI.
+- `pm update` upgrades the installed program, then migrates `~/.pm/config.yaml`.
+  It never replaces that file. `config_version: 1` is the shape `pm init`
+  writes. There is no migration from older shapes, because this is the first
+  install.
+- `pm init` on an existing file leaves it alone and points at `pm update`.
+  `pm init --force` is the only replace path.
+
+### The first config
+
+- Reports, lint, ready, daily, refine, metrics, and brief files go to
+  `output.directory` (`~/.pm/out`), including `report_state.json`.
+- `pm daily` replaces `pm standup`. Scopes are `daily_moved` and `daily_wip`.
+- Lint says `missing-parent`. The ready criterion is `linked-to-parent`.
+- `pm lint --fail-on` and `pm ready --fail-under` exit non-zero. The default
+  is still success. `pm schedule add` can pass those flags through.
+- Missing config sections are filled in memory. A section of the wrong type
+  is named when the file loads.
+- `pm doctor` fails when `config_version` is behind the installed template.
+  `pm doctor --discover-fields --yes` writes a field ID only when that ID
+  is blank.
+- `--workstream` and `--product` accept the full name as well as the abbreviation.
+- SharePoint search queries escape apostrophes. A Jira 429 waits for
+  `Retry-After` and tries once more.
+- Stale in-progress items use the last status change when a changelog is
+  present. `refactor` and `test` are vague only as a whole title.
+- Items that drop out of the weekly report keep their reference tag.
+- Confluence search is still the v1 content API.
+
 ## 0.6.0 - 2026-09-03
 
 ### `pm metrics`
