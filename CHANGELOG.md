@@ -32,6 +32,8 @@
 - `--workstream` and `--product` accept the full name as well as the abbreviation.
 - SharePoint search queries escape apostrophes. A Jira 429 waits for
   `Retry-After` and tries once more.
+- Commands print UTF-8, so a Windows console on cp1252 does not stop at an
+  arrow or a warning mark.
 - Stale in-progress items use the last status change when a changelog is
   present. `refactor` and `test` are vague only as a whole title.
 - Items that drop out of the weekly report keep their reference tag.

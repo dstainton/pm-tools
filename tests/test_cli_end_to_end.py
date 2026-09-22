@@ -327,10 +327,15 @@ class CliTestCase(unittest.TestCase):
         return path
 
     def run_pm(self, *args, config="config.yaml", expect=0):
+        # cp1252 is the Windows console default. The child must still print
+        # arrows; the parent reads those bytes as UTF-8.
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "cp1252"
         proc = subprocess.run(
             [sys.executable, PM, *args, "--config",
              os.path.join(self.dir, config)],
-            cwd=self.dir, capture_output=True, text=True, timeout=120)
+            cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env, timeout=120)
         output = proc.stdout + proc.stderr
         self.assertEqual(proc.returncode, expect,
                          f"`pm {' '.join(args)}` exited "
@@ -914,6 +919,15 @@ class ScheduleTests(CliTestCase):
         self.run_pm("schedule", "remove", "today")
         empty = self.run_pm("schedule")
         self.assertIn("No scheduled commands", empty)
+
+
+class FakeJiraTimeTests(unittest.TestCase):
+    def test_offset_without_a_colon_is_comparable(self):
+        from tests.fake_jira import _parse_jira_time
+        stamp = _parse_jira_time("2026-09-22T09:12:03.000+0000")
+        cutoff = dt.datetime(2026, 9, 22, 9, 12, 3, tzinfo=dt.timezone.utc)
+        self.assertEqual(stamp, cutoff)
+        self.assertGreater(stamp, cutoff - dt.timedelta(days=1))
 
 
 if __name__ == "__main__":

@@ -139,7 +139,7 @@ class UpdateCommandTests(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         proc = subprocess.run(
             [sys.executable, os.path.join(root, "pm.py"), "--help"],
-            capture_output=True, text=True, timeout=30)
+            capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(proc.returncode, 0)
         self.assertIn("update", proc.stdout)
         with open(os.path.join(root, "pyproject.toml"), encoding="utf-8") as fh:

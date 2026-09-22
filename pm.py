@@ -372,7 +372,32 @@ def build_parser():
     return parser
 
 
+def configure_stdio():
+    """Print UTF-8, including on a Windows console that is still cp1252.
+
+    An arrow or a warning mark would otherwise abort the command mid-line.
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+            ctypes.windll.kernel32.SetConsoleCP(65001)
+        except (AttributeError, OSError):
+            pass
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main():
+    configure_stdio()
     parser = build_parser()
     args = parser.parse_args()
 
