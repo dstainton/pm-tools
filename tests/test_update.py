@@ -142,6 +142,22 @@ class UpdateCommandTests(unittest.TestCase):
             capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(proc.returncode, 0)
         self.assertIn("update", proc.stdout)
+        self.assertIn("usage: pm", proc.stdout)
+        today = subprocess.run(
+            [sys.executable, os.path.join(root, "pm.py"), "today", "--help"],
+            capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertIn("full name", today.stdout)
+        review = subprocess.run(
+            [sys.executable, os.path.join(root, "pm.py"), "review", "--help"],
+            capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertIn("--apply", review.stdout)
+        import pm
+        saved = sys.argv[:]
+        try:
+            sys.argv = ["pm-tools", "--help"]
+            self.assertEqual(pm._prog_name(), "pm-tools")
+        finally:
+            sys.argv = saved
         with open(os.path.join(root, "pyproject.toml"), encoding="utf-8") as fh:
             text = fh.read()
         self.assertIn('name = "pm-tools"', text)

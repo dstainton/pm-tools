@@ -37,14 +37,16 @@ reads uses Scrum's word.** Today `pm` mixes them in both directions.
 
 ### Wrong or outdated — change
 
+Rows whose action says "Shipped in 0.7.0" are done. The others are still open.
+
 | We say | Scrum says | Where | Action |
 |--------|-----------|-------|--------|
-| `pm standup`, "Daily Standup" | **Daily Scrum** | command, `standup:` config, `standup_moved` / `standup_wip` scopes, report title, README | Rename to `pm daily`; keep `standup` as an alias |
+| `pm daily`, "Daily Scrum" | **Daily Scrum** | command, `daily:` config, `daily_moved` / `daily_wip` scopes, report title | Shipped in 0.7.0. No `standup` alias: nothing was installed yet |
 | "committed points", "committed versus delivered" | **forecast** — in 2020 Scrum, "commitment" means the three commitments (Product Goal, Sprint Goal, Definition of Done); Developers *forecast* the work | both proposal docs | Say forecast. Fixed in this change |
 | "Owner: A. Lee" | collides with **Product Owner** | `core/sources.py` report meta, README's `--by` description | Say "Assignee" — which is also Jira's actual field name |
 | `audience: "directors"` | **stakeholders** | `config.yaml`, report header | Change the default, keep it configurable |
 | "backlog quality checks" | **Product Backlog** — the tool checks the Product Backlog, never the Sprint Backlog | README, `pm lint` report title | Be specific |
-| `missing-epic`, `linked-to-epic` | Epic is a Jira type, not Scrum — and `epic_types` is already configurable, so a site anchoring on Feature or Initiative gets a rule name that misdescribes it | lint rule, ready criterion | Rename to `missing-parent` / `linked-to-parent`, accept the old names as aliases |
+| `missing-parent`, `linked-to-parent` | Epic is a Jira type, not Scrum — and `epic_types` is already configurable, so a site anchoring on Feature or Initiative gets a rule name that misdescribes it | lint rule, ready criterion | Shipped in 0.7.0. The old names are not accepted |
 | `--assign --to ba` | Scrum has three accountabilities: **Product Owner, Scrum Master, Developers**. A Business Analyst is part of the Developers | proposal item 6 | Assign to a *person*, not a role — see below |
 
 ### Keep Jira's word, on purpose
@@ -182,14 +184,11 @@ to "assignee" in the README; "backlog" to "Product Backlog" where the Product
 Backlog is what is meant; describing the BA as a Scrum Team member rather than a
 pipeline stage. Applied in this change.
 
-**Cheap, with aliases — one release of overlap.** `pm standup` becomes
-`pm daily`, with `standup` accepted silently. The `standup:` config block and
-the `standup_moved` / `standup_wip` scopes gain `daily_*` names, with the old
-keys still read. `missing-epic` becomes `missing-parent` and `linked-to-epic`
-becomes `linked-to-parent`, with the old names accepted in
-`ready.blocking_criteria` and `lint.required_fields`. Report titles change to
-"Daily Scrum" and "Product Backlog Lint". Nobody's config breaks; the
-`CHANGELOG` carries the deprecations.
+**Shipped in 0.7.0, with no aliases.** `pm daily` replaced `pm standup`. The
+config block is `daily:`, and the scopes are `daily_moved` and `daily_wip`.
+`missing-parent` and `linked-to-parent` replaced `missing-epic` and
+`linked-to-epic`. Report titles are "Daily Scrum" and "Product Backlog Lint".
+Nothing had been installed, so the old names are not still read.
 
 **Needs your decision.** Reframing `pm ready` as a working agreement and a
 refinement worklist. Adding the Definition of Done and the

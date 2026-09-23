@@ -17,7 +17,8 @@ Commands:
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
     pm refine            BA queue: draft titles, criteria, estimates.
-    pm review            Deprecated alias of `pm refine` (one release).
+    pm review            Without --apply, the old model judgement. With --apply,
+                         the refine worksheet. Deprecated.
     pm note              Capture a thought offline; file it later.
     pm inbox             List, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
@@ -26,17 +27,21 @@ Commands:
     pm schedule          Register read-only commands on a timer.
     pm ready             Team ready-agreement gate: pass/fail per ticket.
     pm daily             Daily Scrum movement + work in progress (no model).
+    pm update            Upgrade pm-tools and migrate the config. Never
+                         replaces it.
 
-Common options (work on every command except init):
+Common options (every command except init and update):
   --config PATH        Path to the config file. If omitted, pm searches:
                        1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm/config.yaml,
                        4) the config.yaml shipped next to this file.
-  --product NAMES      Only run for these product(s), by abbreviation.
-  --workstream NAMES   Only run for these workstream(s), by abbreviation.
+  --product NAMES      Only these products, by abbreviation or full name.
+  --workstream NAMES   Only these workstreams, by abbreviation or full name.
                        Comma-separated, case-insensitive. e.g. --workstream SDX
-                       or --workstream sdx,itk. Omit to run all of them.
+                       or --workstream "Secure Data Exchange". Omit for all.
   --cached             Reuse the fetch cache even if it is past its TTL.
   --refresh            Ignore the fetch cache and talk to Jira again.
+  --out DIR            Write this run's files under DIR instead of
+                       output.directory (default ~/.pm/out).
 
 Examples:
   pm init
@@ -111,23 +116,31 @@ def resolve_config_path(explicit):
     )
 
 
+def _prog_name():
+    """`pm` or `pm-tools`, matching the command that was invoked."""
+    name = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+    if name in ("pm", "pm-tools"):
+        return name
+    return "pm"
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="pm", description="pm-tools CLI")
+        prog=_prog_name(), description="pm-tools CLI")
 
-    # Options shared by the config-driven subcommands (everything but init).
+    # Options shared by the config-driven subcommands (not init or update).
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", default=None,
                         help="Path to the config file (default: auto-discover; "
                              "see --help notes)")
     common.add_argument("--product", "-p", default=None, metavar="NAMES",
-                        help="Only run for these product abbrev(s), "
-                             "comma-separated (e.g. IP or ip,bill). "
-                             "Default: all products.")
+                        help="Only these products, by abbreviation or full "
+                             "name, comma-separated (e.g. IP or "
+                             "\"Integration Platform\"). Default: all.")
     common.add_argument("--workstream", "-w", default=None, metavar="NAMES",
-                        help="Only run for these workstream abbrev(s), "
-                             "comma-separated (e.g. SDX or sdx,itk). "
-                             "Default: all workstreams.")
+                        help="Only these workstreams, by abbreviation or full "
+                             "name, comma-separated (e.g. SDX or "
+                             "\"Secure Data Exchange\"). Default: all.")
     common.add_argument("--cached", action="store_true",
                         help="Reuse cached Jira fetches even if they are stale")
     common.add_argument("--refresh", action="store_true",
@@ -263,7 +276,9 @@ def build_parser():
     p_refine.set_defaults(func=refine.run, needs_config=True)
 
     p_review = sub.add_parser("review", parents=[common, write_opts],
-                              help="Deprecated alias of `pm refine`")
+                              help="Without --apply, the old model judgement; "
+                                   "with --apply, a refine worksheet "
+                                   "(deprecated)")
     p_review.add_argument("aspect", nargs="?", default="all",
                           choices=["titles", "criteria", "all"],
                           help="What to review (default: all)")

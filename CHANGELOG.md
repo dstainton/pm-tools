@@ -34,6 +34,8 @@
   `Retry-After` and tries once more.
 - Commands print UTF-8, so a Windows console on cp1252 does not stop at an
   arrow or a warning mark.
+- Help and the README name `--out`, full product and workstream names, and
+  what `pm review` and `pm doctor --discover-fields --yes` actually do.
 - Stale in-progress items use the last status change when a changelog is
   present. `refactor` and `test` are vague only as a whole title.
 - Items that drop out of the weekly report keep their reference tag.

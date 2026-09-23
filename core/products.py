@@ -98,7 +98,7 @@ def group_workstreams(cfg, workstreams):
 def filter_by_product(cfg, workstreams, selector):
     """Narrow a workstream list to those in the named product(s).
 
-    `selector` is a comma-separated string of product abbreviations
+    `selector` is a comma-separated string of abbreviations or full names
     (case-insensitive). Unknown names fail with the list of valid ones.
     """
     if not selector:

@@ -23,7 +23,8 @@ config_version: 1
 #  token budget inside <think> and return empty or half-cut JSON.
 #
 #  Official Qwen instruct profile, with a cooler temperature so a 3-bit quant
-#  stays on the schema. json_temperature is used only by `pm review` / `--deep`.
+#  stays on the schema. json_temperature is used by `pm refine`, `pm review`,
+#  and `pm ready --deep`.
 #  The small Qwen3-4B setup script uses the same alias, so swapping models does
 #  not require a config change.
 model:

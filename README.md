@@ -16,7 +16,7 @@ pm report       Weekly state-of-product report (uses the local model)
 pm lint         Deterministic Product Backlog checks (no model — pure rules)
 pm triage       Queue of things waiting on a decision from you
 pm refine       BA queue: draft titles, criteria and estimates
-pm review       Deprecated alias of `pm refine` (one release)
+pm review       Without --apply, the old model judgement; with --apply, refine (deprecated)
 pm note         Capture a thought offline; file it later
 pm inbox        List, create or drop captured notes
 pm metrics      Delivery numbers per product and workstream (no model)
@@ -28,9 +28,11 @@ pm daily        Daily Scrum movement + work in progress (no model)
 pm update       Upgrade pm-tools and migrate the config (never replaces it)
 ```
 
-Every command (except `init` and `update`) can be scoped to one or more products with
-`--product` and to one or more workstreams with `--workstream`. The two
-compose. `--cached` reuses a stale fetch cache; `--refresh` ignores it.
+Every command except `init` and `update` can be scoped with `--product`
+and `--workstream`. Each accepts an abbreviation or the full name,
+comma-separated and case-insensitive. The two compose. `--cached` reuses a
+stale fetch cache; `--refresh` ignores it. `--out DIR` writes that run's
+files under DIR instead of `output.directory` (default `~/.pm/out`).
 
 ---
 
@@ -153,7 +155,8 @@ which folder you run `pm report` from.
 
 ## The local model
 
-Only needed for `pm report`, `pm review`, and `pm ready --deep`.
+Only needed for `pm report`, `pm refine`, `pm review` (without `--apply`),
+and `pm ready --deep`.
 
 The default config expects a local OpenAI-compatible endpoint at:
 
@@ -179,14 +182,15 @@ On the Windows Ryzen AI laptop, the bundled PowerShell scripts set up
 Both scripts expose the model as `qwen-local` and start llama.cpp with thinking
 **off** (`--reasoning-budget 0`). Qwen3.8 thinks by default; a Q3_K_M run that
 is allowed to think will spend its token budget inside `<think>` and give
-`pm review` empty or half-cut JSON. `pm` also sends
+`pm refine` or `pm review` empty or half-cut JSON. `pm` also sends
 `chat_template_kwargs.enable_thinking: false` and a `/no_think` prefix on every
 call, so a server started by hand still behaves.
 
 The prompts themselves are short, numbered, and end with a fill-in skeleton or a
 worked JSON example — the shape Qwen3.8 Q3_K_M follows. Sampling matches Qwen's
 instruct profile (temperature 0.4, `top_p` 0.8, `top_k` 20, `presence_penalty`
-1.5), with a cooler `json_temperature` of 0.2 for `pm review`.
+1.5), with a cooler `json_temperature` of 0.2 for `pm refine`, `pm review`,
+and `pm ready --deep`.
 
 Other OpenAI-compatible local servers can still be used by changing
 `model.endpoint` and `model.name`. If you turn thinking back on, set
@@ -197,14 +201,16 @@ Other OpenAI-compatible local servers can still be used by changing
 ## Scoping — `--product` and `--workstream`
 
 Every command runs the whole portfolio by default. Narrow it with `--product`
-(`-p`) and/or `--workstream` (`-w`). Both take comma-separated abbreviations,
-case-insensitive, and a typo fails with the list of valid names.
+(`-p`) and/or `--workstream` (`-w`). Both take comma-separated abbreviations
+or full names, case-insensitive, and a typo fails with the list of valid
+abbreviations.
 
 ```
-pm lint   --product IP              # every workstream in Integration Platform
-pm lint   --workstream SDX          # just Secure Data Exchange
-pm ready  -p IP -w sdx,itk          # two streams inside that product
-pm report --product IP              # one stakeholder snapshot
+pm lint   --product IP                         # every workstream in Integration Platform
+pm lint   --workstream SDX                     # just Secure Data Exchange
+pm lint   --workstream "Secure Data Exchange"  # the same stream, by full name
+pm ready  -p IP -w sdx,itk                     # two streams inside that product
+pm report --product IP                         # one stakeholder snapshot
 ```
 
 Scoping `pm report` is safe: it updates only the selected workstream's
@@ -274,12 +280,16 @@ you walked away.
 ```
 pm doctor
 pm doctor --discover-fields
+pm doctor --discover-fields --yes
 ```
 
 One command that names its own fix: config, Jira login, projects, custom-field
 IDs, membership (including unclaimed open work), the local model, and the
-cache. `--discover-fields` prints a YAML snippet to paste; it does not write
-the file.
+cache. `--discover-fields` prints a YAML snippet and does not write the
+file. `pm doctor --discover-fields --yes` fills `story_points_field`,
+`start_date_field`, and `acceptance_criteria_field` only when those values
+are blank. It leaves a value you already set, and it does not write
+`epic_link_field`.
 
 Repeated fetches are cached under `~/.pm/cache` for five minutes. `pm today`
 depends on this to stay fast. `--cached` reuses a hit even if it is stale
@@ -503,8 +513,8 @@ pm refine -w SDX
 pm refine --apply -w SDX
 ```
 
-`pm review` is a deprecated alias for one release. Without `--apply` it still
-runs the old judgement reports.
+`pm review` is deprecated. Without `--apply` it still runs the old judgement
+reports. With `--apply` it writes the refine worksheet.
 
 ### `pm note` / `pm inbox` — capture now, file later
 
@@ -640,19 +650,26 @@ pm-tools/
 ├── pm.py                # entry point: routes subcommands, applies --workstream
 ├── core/                # shared plumbing (tested, reused by every command)
 │   ├── config.py        #   loads config, expands ${ENV:VAR}, validates it all
+│   ├── config_edit.py   #   comment-preserving edits to the config file
 │   ├── products.py      #   product lookup, Unassigned, --product filter
 │   ├── cache.py         #   local fetch cache (--cached / --refresh)
 │   ├── filters.py       #   plain scope options -> JQL
 │   ├── workstreams.py   #   Component + parent membership -> JQL
 │   ├── sources.py       #   Jira / Confluence / SharePoint fetchers
+│   ├── http.py          #   one retry when Jira answers 429
 │   ├── writes.py        #   the one path that writes to Jira
 │   ├── decisions.py     #   snooze / accept / assign memory
 │   ├── metrics.py       #   throughput, cycle time, forecast
+│   ├── output.py        #   places files under output.directory
 │   ├── paths.py         #   local ~/.pm vs shared state folder
+│   ├── migrations.py    #   config_version steps for pm update
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff
 ├── docs/
-│   └── FEATURE_PROPOSALS.md   # what's next, and why
+│   ├── PLAN.md                # shipped install work, and tranche 2
+│   ├── FEATURE_PROPOSALS.md   # earlier code-first proposals
+│   ├── PORTFOLIO_PROPOSALS.md # the ten features that shipped
+│   └── TERMINOLOGY.md         # Scrum Guide vocabulary check
 ├── setup-windows-qwen-small.ps1
 ├── setup-windows-qwen-large.ps1
 ├── tests/               # unit tests + an end-to-end run against a fake Jira
@@ -688,9 +705,11 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 
 ## Roadmap (ideas, not commitments)
 
-`docs/PLAN.md` is the plan for the next body of work. A new user installs
-with one command, then `pm init` and `pm doctor`. `pm update` exists for
-the install after that, and it migrates config without replacing it.
+`docs/PLAN.md` tranches 0 and 1 shipped in 0.7.0: the pm-tools name, first
+install, `pm update`, `pm daily`, and files under `~/.pm/out`. Tranche 2 is
+still open: coverage, Product Goal, Definition of Done, sprint metrics, and
+release notes. That waits until after the first real install, because new
+config keys become migrations.
 
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those
@@ -711,9 +730,9 @@ ten have shipped.
 last section of the portfolio document says what happened to each of them.
 
 `docs/TERMINOLOGY.md` checks every word the tool uses against the November 2020
-Scrum Guide — what to rename, what to keep in Jira's vocabulary on purpose, and
-the three Scrum concepts `pm` has no notion of yet (Sprint Goal, Definition of
-Done, Product Goal).
+Scrum Guide. The Daily Scrum rename and `missing-parent` shipped in 0.7.0
+with no alias. Sprint Goal risk, Definition of Done, and Product Goal are
+still open.
 
 ---
 
