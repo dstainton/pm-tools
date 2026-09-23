@@ -11,11 +11,71 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# pipx install returns non-zero when the package is already present. The
+# script handles that itself. PowerShell 7 would otherwise stop the script.
+if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 
 function Refresh-Path {
     $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
     $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $env:Path = "$user;$machine"
+}
+
+function Get-PipxBinDir {
+    $value = & pipx environment --value PIPX_BIN_DIR 2>$null
+    if ($LASTEXITCODE -eq 0 -and $value) {
+        return ($value | Select-Object -Last 1).ToString().Trim()
+    }
+    $text = & pipx environment 2>$null | Out-String
+    $found = [regex]::Matches($text, "PIPX_BIN_DIR\s*[=:]\s*(.+)")
+    if ($found.Count -gt 0) {
+        return $found[$found.Count - 1].Groups[1].Value.Trim()
+    }
+    throw "Could not find pipx's bin directory. Run: pipx environment"
+}
+
+function Remove-OldPmHelper {
+    param([string]$PipxPm)
+
+    # The old pm-helper package installs pm.exe into Python's Scripts folder.
+    # That folder is ahead of pipx on PATH, so `pm` stays the old command
+    # after pipx has installed the new one. Uninstall the package, then
+    # delete a Scripts\pm.exe that pip left behind.
+    & python -m pip uninstall -y pm-helper | Out-Host
+
+    $pipxFull = [System.IO.Path]::GetFullPath($PipxPm)
+    $candidates = @()
+    $where = & where.exe pm 2>$null
+    if ($where) { $candidates += $where }
+    $cmd = Get-Command pm -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { $candidates += $cmd.Source }
+
+    $shadowed = $false
+    foreach ($path in ($candidates | Select-Object -Unique)) {
+        if (-not $path) { continue }
+        $full = [System.IO.Path]::GetFullPath($path.ToString().Trim())
+        if ([string]::Equals($full, $pipxFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+        $dirName = [System.IO.Path]::GetFileName([System.IO.Path]::GetDirectoryName($full))
+        $inPythonScripts = ($dirName -eq "Scripts") -and ($full -match '\\Python[^\\]*\\Scripts\\pm\.exe$')
+        if ($inPythonScripts -and (Test-Path -LiteralPath $full)) {
+            Remove-Item -LiteralPath $full -Force
+            Write-Host "Removed leftover command: $full"
+            $shadowed = $true
+            continue
+        }
+        Write-Host "Another pm is ahead of the one just installed:"
+        Write-Host "  $full"
+        Write-Host "Remove that command and open a new PowerShell. Until then, run:"
+        Write-Host "  $pipxFull"
+        $shadowed = $true
+    }
+    if ($shadowed) {
+        Write-Host "Open a new PowerShell window before running pm."
+    }
 }
 
 Write-Host "pm-tools install" -ForegroundColor Green
@@ -53,25 +113,39 @@ if ($FromPath) {
 Write-Host "Installing pm-tools from $source"
 & pipx install $source
 if ($LASTEXITCODE -ne 0) {
-    Refresh-Path
-    $existing = Get-Command pm -ErrorAction SilentlyContinue
-    if (-not $existing) {
-        throw "pipx install failed and pm is not on PATH."
+    Write-Host "pm-tools is already installed. Upgrading that install."
+    & pipx upgrade pm-tools
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Reinstalling pm-tools."
+        & pipx install --force $source
+        if ($LASTEXITCODE -ne 0) {
+            throw "pipx could not install pm-tools."
+        }
     }
-    Write-Host "pm is already installed; leaving that install in place."
 }
 
 Refresh-Path
-$pm = Get-Command pm -ErrorAction SilentlyContinue
-if (-not $pm) {
-    throw "pm was installed but is not on PATH. Open a new terminal and run: pm init"
+$bin = Get-PipxBinDir
+$pmExe = Join-Path $bin "pm.exe"
+if (-not (Test-Path -LiteralPath $pmExe)) {
+    throw "pipx installed pm-tools but $pmExe is missing."
 }
+
+$helpText = & $pmExe -h 2>&1 | Out-String
+if ($helpText -notmatch "doctor" -or $helpText -notmatch "pm-tools") {
+    throw "The command at $pmExe is not the current pm-tools.`n$helpText"
+}
+
+Remove-OldPmHelper -PipxPm $pmExe
 
 $config = Join-Path $env:USERPROFILE ".pm-tools\config.yaml"
 if (-not (Test-Path $config)) {
-    & pm init
+    & $pmExe init
     if ($LASTEXITCODE -ne 0) {
-        throw "pm init failed."
+        throw "pm init failed. The command that ran was: $pmExe"
+    }
+    if (-not (Test-Path $config)) {
+        throw "pm init did not create $config. An older pm writes $env:USERPROFILE\.pm\config.yaml instead."
     }
 }
 else {

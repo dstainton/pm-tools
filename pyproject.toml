@@ -14,7 +14,8 @@
 #  will not git-pull an editable checkout; you pull it yourself.
 #
 #  Uninstall: pipx uninstall pm-tools
-#  (an older checkout may still be named pm-helper: pip uninstall pm-helper)
+#  An older pm-helper can leave Scripts\pm.exe ahead of pipx on PATH:
+#      python -m pip uninstall -y pm-helper
 # ============================================================================
 
 [build-system]

@@ -99,9 +99,21 @@ pm = "pm:main"
 pm-tools = "pm:main"
 ```
 
-Remove it with `pipx uninstall pm-tools`. An older checkout of this repo may
-still be installed under the name `pm-helper`; uninstall that with
-`pip uninstall pm-helper` if `pm` points at it.
+Remove it with `pipx uninstall pm-tools`.
+
+An older `pm-helper` install leaves `pm.exe` in Python's Scripts folder
+(`%LOCALAPPDATA%\Programs\Python\Python313\Scripts\pm.exe` on Windows).
+That folder is ahead of pipx on PATH, so `pm` stays the old "Product
+Manager Helper" command (`standup`, `~/.pm/config.yaml`) after the new
+package is installed. Remove it with:
+
+```powershell
+python -m pip uninstall -y pm-helper
+```
+
+If `pm -h` still shows that old command, delete the Scripts `pm.exe` and
+open a new PowerShell. `pm-tools -h` is the new program either way. The
+Windows install script does this cleanup itself.
 
 ### Optional: a standalone .exe (no Python needed)
 
