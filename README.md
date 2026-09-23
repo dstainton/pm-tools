@@ -764,6 +764,12 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 `pm release-notes`, and `pm inbox edit`. `config_version` 2 adds
 `ready.max_points` and leaves products alone.
 
+`docs/INFERENCE_PLAN.md` is the proposed next body of work (tranche 3, not
+started): a review of every place a rule guesses with a string comparison,
+measured model-call counts per command, and the answer to "should a background
+service pre-evaluate?" — a model-result cache and `pm warm` on the existing
+`pm schedule`, not a daemon.
+
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those
 ten have shipped.
