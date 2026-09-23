@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Windows `install.ps1` upgrades an existing pipx install instead of leaving
+  it in place. It runs the `pm.exe` pipx installed, not whatever `pm` is
+  first on PATH. An older `pm.exe` in Python's Scripts folder, left by
+  `pm-helper`, is uninstalled so `pm` is not the old Product Manager Helper
+  command.
+
 ## 0.9.0 - 2026-09-23
 
 ### Tranche 3

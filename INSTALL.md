@@ -12,6 +12,10 @@ irm https://raw.githubusercontent.com/dstainton/pm-tools/main/install.ps1 | iex
 
 That installs pipx if it is missing, installs pm-tools from GitHub, and runs
 `pm init` when `~/.pm-tools/config.yaml` does not exist. It does not download a model.
+If pipx already has pm-tools, the script upgrades it. It runs the `pm.exe`
+pipx just installed, and removes an older `pm.exe` left in Python's Scripts
+folder by `pm-helper`. `pm -h` should list `doctor` and `today`. If it still
+lists `standup`, open a new PowerShell. `pm-tools -h` is the same program.
 
 ## macOS or Linux
 
