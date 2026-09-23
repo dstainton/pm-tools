@@ -30,6 +30,7 @@ from core.paths import config_file
 
 
 SECRET_KEYS = ("api_token", "client_secret", "webhook")
+GIT_SPEC = "git+https://github.com/dstainton/pm-tools.git"
 _SECRET_RE = re.compile(
     r"^(\s*(?:" + "|".join(SECRET_KEYS) + r"):\s*)(.*)$", re.M)
 
@@ -61,6 +62,22 @@ def _is_inside(path, folder):
     return path == folder or path.startswith(folder + os.sep)
 
 
+def git_spec(url):
+    """A pip spec that reinstalls the latest commit, not a cached wheel.
+
+    `direct_url.json` stores `https://...git`. pipx and pip want `git+https`.
+    A commit pin is not included: `pm update` should fetch the branch tip.
+    """
+    if not url:
+        return GIT_SPEC
+    cleaned = url.split("#", 1)[0].strip()
+    if cleaned.startswith("git+"):
+        return cleaned
+    if cleaned.startswith(("https://", "http://", "ssh://")):
+        return "git+" + cleaned
+    return GIT_SPEC
+
+
 def classify_install():
     """How this process was installed, and the command that upgrades it.
 
@@ -90,10 +107,13 @@ def classify_install():
     pipx = "/pipx/" in prefix.lower() or "pipx" in prefix.lower()
 
     if pipx and not editable:
+        # `pipx upgrade` runs `pip install --upgrade`. When the version in
+        # pyproject.toml does not change, pip leaves the old files in place
+        # and reports the package unchanged. `--force` reinstalls the git tip.
         return {
             "kind": "pipx",
             "detail": "Installed with pipx.",
-            "command": ["pipx", "upgrade", "pm-tools"],
+            "command": ["pipx", "install", "--force", git_spec(url)],
         }
     if editable:
         root = location
@@ -107,7 +127,8 @@ def classify_install():
         return {
             "kind": "pip-git",
             "detail": f"Installed from {url}.",
-            "command": [sys.executable, "-m", "pip", "install", "--upgrade", url],
+            "command": [sys.executable, "-m", "pip", "install",
+                        "--force-reinstall", git_spec(url)],
         }
     return {
         "kind": "unknown",

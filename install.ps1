@@ -113,14 +113,12 @@ if ($FromPath) {
 Write-Host "Installing pm-tools from $source"
 & pipx install $source
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "pm-tools is already installed. Upgrading that install."
-    & pipx upgrade pm-tools
+    # `pipx upgrade` leaves the old files in place when the version number
+    # does not change. Reinstall so the git tip is what actually runs.
+    Write-Host "pm-tools is already installed. Reinstalling it from $source."
+    & pipx install --force $source
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Reinstalling pm-tools."
-        & pipx install --force $source
-        if ($LASTEXITCODE -ne 0) {
-            throw "pipx could not install pm-tools."
-        }
+        throw "pipx could not install pm-tools."
     }
 }
 

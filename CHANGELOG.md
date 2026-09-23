@@ -1,20 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.9.1 - 2026-09-23
 
-- Windows `install.ps1` upgrades an existing pipx install instead of leaving
-  it in place. It runs the `pm.exe` pipx installed, not whatever `pm` is
-  first on PATH. An older `pm.exe` in Python's Scripts folder, left by
-  `pm-helper`, is uninstalled so `pm` is not the old Product Manager Helper
-  command.
-- A `${ENV:VAR}` inside a block with `enabled: false` may be unset. The
-  Teams webhook in the template no longer stops `pm products` when
-  `PM_TEAMS_WEBHOOK` is not set. Turning Teams on still requires it.
+- `pm update` reinstalls a pipx install from git. `pipx upgrade` was leaving
+  the old 0.9.0 files in place when the version number did not change, so
+  the Teams-webhook fix never reached `pm products`.
+- Windows `install.ps1` reinstalls with `pipx install --force` when pm-tools
+  is already installed, for the same reason.
 
 ## 0.9.0 - 2026-09-23
 
 ### Tranche 3
 
+- Windows `install.ps1` runs the `pm.exe` pipx installed, not whatever `pm`
+  is first on PATH. An older `pm.exe` in Python's Scripts folder, left by
+  `pm-helper`, is removed.
+- A `${ENV:VAR}` inside a block with `enabled: false` may be unset. The
+  Teams webhook in the template no longer stops `pm products` when
+  `PM_TEAMS_WEBHOOK` is not set. Turning Teams on still requires it.
 - `pm metrics` classifies Done and in-flight from the project's status
   category, using the status id on the changelog. A workflow named Complete
   or Shipped counts. The old English name lists remain only when the status

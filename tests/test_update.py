@@ -190,3 +190,39 @@ class UpdateCommandTests(unittest.TestCase):
             text = fh.read()
         self.assertIn('name = "pm-tools"', text)
         self.assertIn('pm-tools = "pm:main"', text)
+
+
+class GitUpgradeTests(unittest.TestCase):
+    def test_git_spec_adds_the_git_prefix(self):
+        self.assertEqual(
+            update.git_spec("https://github.com/dstainton/pm-tools.git"),
+            "git+https://github.com/dstainton/pm-tools.git")
+        self.assertEqual(update.git_spec(""), update.GIT_SPEC)
+        self.assertEqual(
+            update.git_spec("git+https://github.com/dstainton/pm-tools.git"),
+            "git+https://github.com/dstainton/pm-tools.git")
+
+    def test_pipx_reinstalls_from_git_instead_of_upgrade(self):
+        import json
+
+        class FakeDist:
+            def locate_file(self, name):
+                return "/home/user/.local/pipx/venvs/pm-tools/"
+
+            def read_text(self, name):
+                if name == "direct_url.json":
+                    return json.dumps({
+                        "url": "https://github.com/dstainton/pm-tools.git",
+                        "vcs_info": {"vcs": "git", "commit_id": "old"},
+                    })
+                return None
+
+        with patch("importlib.metadata.distribution", return_value=FakeDist()), \
+                patch.object(update.sys, "prefix",
+                             "/home/user/.local/pipx/venvs/pm-tools"):
+            info = update.classify_install()
+        self.assertEqual(info["kind"], "pipx")
+        self.assertEqual(
+            info["command"],
+            ["pipx", "install", "--force",
+             "git+https://github.com/dstainton/pm-tools.git"])
