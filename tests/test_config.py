@@ -47,6 +47,51 @@ class LoadTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self._load(text)
 
+    def test_unset_env_in_a_disabled_block_is_empty(self):
+        text = BASE + """\
+publish:
+  teams:
+    enabled: false
+    webhook: "${ENV:PM_TEAMS_WEBHOOK}"
+  sharepoint_like:
+    enabled: false
+    nested:
+      secret: "prefix-${ENV:PM_NESTED_SECRET}"
+"""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("PM_TEAMS_WEBHOOK", "PM_NESTED_SECRET")}
+        with patch.dict(os.environ, env, clear=True):
+            cfg = self._load(text)
+        self.assertEqual(cfg["publish"]["teams"]["webhook"], "")
+        self.assertEqual(cfg["publish"]["sharepoint_like"]["nested"]["secret"],
+                         "prefix-")
+
+    def test_set_env_in_a_disabled_block_still_expands(self):
+        text = BASE + """\
+publish:
+  teams:
+    enabled: false
+    webhook: "${ENV:PM_TEAMS_WEBHOOK}"
+"""
+        with patch.dict(os.environ, {"PM_TEAMS_WEBHOOK": "https://teams.example"}):
+            cfg = self._load(text)
+        self.assertEqual(cfg["publish"]["teams"]["webhook"],
+                         "https://teams.example")
+
+    def test_enabled_block_still_requires_the_env_var(self):
+        text = BASE + """\
+publish:
+  teams:
+    enabled: true
+    webhook: "${ENV:PM_TEAMS_WEBHOOK_MISSING}"
+"""
+        env = {k: v for k, v in os.environ.items()
+               if k != "PM_TEAMS_WEBHOOK_MISSING"}
+        with patch.dict(os.environ, env, clear=True):
+            with self.assertRaises(SystemExit) as caught:
+                self._load(text)
+        self.assertIn("PM_TEAMS_WEBHOOK_MISSING", str(caught.exception))
+
     def test_components_without_a_project_fails(self):
         text = BASE.replace('  project: "APS"\n', "")
         with self.assertRaises(SystemExit) as caught:

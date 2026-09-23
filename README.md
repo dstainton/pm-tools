@@ -165,7 +165,9 @@ the only command that does.
 
 > **Keeping secrets out of the file:** any value can be written as
 > `${ENV:VAR_NAME}` and pm will read it from that environment variable at run
-> time. Handy for the API token.
+> time. Handy for the API token. A placeholder inside a block with
+> `enabled: false` (the Teams webhook in the template) may be unset. Turn
+> the block on and the variable has to be set.
 
 The report's `report_state.json` (the "what changed" memory) is written under
 `output.directory` (default `~/.pm-tools/out`), so it stays in one place no matter
