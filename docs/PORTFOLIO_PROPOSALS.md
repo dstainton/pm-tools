@@ -17,8 +17,10 @@ built: item 8 (`pm metrics`), item 7 (`pm brief`), item 9 (`pm publish`
 and `pm schedule`).
 
 Where this document says `pm standup`, the command is now `pm daily` (0.7.0,
-no alias). Remaining tool work is tranche 2 of `docs/PLAN.md`, which is a
-different list from the tranches above.
+no alias). `docs/PLAN.md` tranche 2 shipped in 0.8.0 (`pm coverage`,
+`pm release-notes`, `pm inbox edit`, and the rest of that list). That
+tranche is a different list from the tranches above. Section 2.8 of the
+plan is still not built.
 
 ---
 
@@ -514,9 +516,9 @@ are numbers behind them.
 | 13 write-back | Absorbed into items 3, 4, 5 as preview-then-confirm |
 | 15 multi-project membership | Absorbed into item 1 |
 | 9 risk/decision register | Folded into item 7's brief; standalone `pm risks` deferred |
-| 3 `pm coverage` | Deferred, but item 10 now reports unclaimed work |
+| 3 `pm coverage` | Shipped in 0.8.0. Doctor still reports unclaimed work |
 | 4 output paths, 5 exit codes | Small; ride along with items 2 and 9 |
-| 10 duplicates, 11 release notes, 14 sprint review | Still worth doing, below these ten |
+| 10 duplicates, 11 release notes, 14 sprint review | Release notes and `pm metrics --sprint` shipped in 0.8.0. `pm duplicates` is still not built |
 | 16 deeper hierarchies, 17 concurrency, 18 CI, 19 keyring, 20 model resilience | Unchanged, still below the line — though CI gets more valuable with every item above |
 
 ## A note on vocabulary

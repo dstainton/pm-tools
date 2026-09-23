@@ -53,6 +53,7 @@ SECTION_DEFAULTS = {
             "clear-title", "has-acceptance-criteria", "has-estimate",
             "linked-to-parent", "sane-dates",
         ],
+        "max_points": 8,
     },
     "daily": {"lookback_days": 1},
     "cache": {
@@ -137,6 +138,8 @@ def validate(cfg):
     _validate_products(cfg)
     _validate_workstreams(cfg)
     _validate_membership(cfg)
+    _validate_ready(cfg)
+    _validate_definition_of_done("Config", cfg.get("definition_of_done"))
     filters.validate_config_scopes(cfg)
 
 
@@ -166,6 +169,11 @@ def _validate_products(cfg):
         seen[key] = True
         if not product.get("name"):
             sys.exit(f"Product {label} needs a `name`.")
+        goal = product.get("product_goal")
+        if goal is not None and not isinstance(goal, str):
+            sys.exit(f"Product {label}: `product_goal:` must be text.")
+        _validate_definition_of_done(
+            f"Product {label}", product.get("definition_of_done"))
         scopes = product.get("scopes")
         if scopes is not None and not isinstance(scopes, dict):
             sys.exit(f"Product {label}: `scopes:` must be a mapping of "
@@ -239,6 +247,38 @@ def _validate_membership(cfg):
     if unknown:
         sys.exit(f"Unknown membership setting(s): {', '.join(unknown)}. "
                  f"Valid: {', '.join(sorted(ws_core.DEFAULT_MEMBERSHIP))}.")
+
+
+def _validate_ready(cfg):
+    block = cfg.get("ready")
+    if block is None:
+        return
+    points = block.get("max_points", 8)
+    if isinstance(points, bool) or not isinstance(points, (int, float)):
+        sys.exit("`ready.max_points` must be a number (default 8).")
+    if points <= 0:
+        sys.exit("`ready.max_points` must be greater than zero.")
+    criteria = block.get("blocking_criteria")
+    if criteria is not None and not isinstance(criteria, list):
+        sys.exit("`ready.blocking_criteria` must be a list.")
+
+
+def _validate_definition_of_done(label, raw):
+    """A printed checklist: text, or text plus an optional Jira label."""
+    if raw is None:
+        return
+    if not isinstance(raw, list):
+        sys.exit(f"{label}: `definition_of_done:` must be a list.")
+    for item in raw:
+        if isinstance(item, str) and item.strip():
+            continue
+        if isinstance(item, dict) and str(item.get("text") or "").strip():
+            mark = item.get("label")
+            if mark is not None and not isinstance(mark, str):
+                sys.exit(f"{label}: Definition of Done `label:` must be text.")
+            continue
+        sys.exit(f"{label}: Definition of Done lines are text, or "
+                 f"`text:` plus an optional `label:`.")
 
 
 def filter_workstreams(cfg, selector):

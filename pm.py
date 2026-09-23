@@ -20,12 +20,14 @@ Commands:
     pm review            Without --apply, the old model judgement. With --apply,
                          the refine worksheet. Deprecated.
     pm note              Capture a thought offline; file it later.
-    pm inbox             List, create or drop captured notes.
+    pm coverage          Open issues no workstream claims, and unused components.
+    pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
+    pm release-notes     Done issues since a date or in a fixVersion.
     pm brief             Meeting prep for one audience, or a debrief.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
-    pm ready             Team ready-agreement gate: pass/fail per ticket.
+    pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement + work in progress (no model).
     pm update            Upgrade pm-tools and migrate the config. Never
                          replaces it.
@@ -58,6 +60,9 @@ Examples:
   pm refine -w SDX
   pm note "customer wants an SSO audit export"
   pm metrics --weeks 8
+  pm metrics --sprint
+  pm coverage
+  pm release-notes --since 2026-08-01
   pm brief --for "Monthly portfolio review"
   pm report --publish --dry-run
   pm schedule add today --at 08:30
@@ -78,7 +83,7 @@ from core.products import filter_by_product                    # noqa: E402
 from commands import (report, lint, ready, init,                # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
-                      schedule, update)
+                      schedule, update, coverage, release_notes)
 
 
 def resolve_config_path(explicit):
@@ -159,7 +164,7 @@ def build_parser():
         dest="command", required=True,
         metavar="{init,products,workstreams,today,do,doctor,report,lint,"
                 "triage,refine,review,note,inbox,metrics,brief,publish,"
-                "schedule,ready,daily,update}")
+                "schedule,ready,daily,coverage,release-notes,update}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
@@ -181,6 +186,8 @@ def build_parser():
     p_prod.add_argument("--abbrev", help="Short name, for `add` / `remove`")
     p_prod.add_argument("--project",
                         help="Jira project this product lives in")
+    p_prod.add_argument("--goal",
+                        help="Product Goal sentence, for `add`")
     p_prod.add_argument("--show-jql", action="store_true",
                         help="With `check`, print the JQL pm generates")
     p_prod.set_defaults(func=products.run, needs_config=True)
@@ -292,21 +299,32 @@ def build_parser():
                         help="The note (quote it if it has spaces)")
     p_note.set_defaults(func=inbox.run_note, needs_config=True)
 
-    p_inbox = sub.add_parser("inbox", parents=[common, write_opts],
-                             help="List, create or drop captured notes")
+    p_inbox = sub.add_parser(
+        "inbox", parents=[common, write_opts],
+        help="List, edit, create or drop captured notes",
+        description="List, edit, create or drop captured notes. "
+                    "edit writes inbox.json only.")
     p_inbox.add_argument("action", nargs="?", default="list",
-                         choices=["list", "create", "drop"],
+                         choices=["list", "edit", "create", "drop"],
                          help="What to do (default: list)")
     p_inbox.add_argument("target", nargs="?", type=int,
-                         help="Note number, for create / drop")
-    p_inbox.add_argument("--title", help="Override the suggested title")
+                         help="Note number, for edit / create / drop")
+    p_inbox.add_argument("--title", help="Title to store or to file")
+    p_inbox.add_argument("--criteria",
+                         help="Acceptance criteria to store or to file")
     p_inbox.add_argument("--issuetype", help="Override the suggested type")
     p_inbox.set_defaults(func=inbox.run_inbox, needs_config=True)
 
-    p_metrics = sub.add_parser("metrics", parents=[common],
-                               help="Delivery metrics per product and workstream")
+    p_metrics = sub.add_parser(
+        "metrics", parents=[common],
+        help="Delivery metrics per product and workstream",
+        description="Delivery metrics per product and workstream. "
+                    "--sprint reports the open sprint.")
     p_metrics.add_argument("--weeks", type=int, default=None,
                            help="How many weeks back (default: metrics.weeks or 8)")
+    p_metrics.add_argument("--sprint", action="store_true",
+                           help="Open sprint: forecast at start, points done, "
+                                "points added, items carried in")
     p_metrics.add_argument("--json", action="store_true",
                            help="Write the numbers as JSON")
     p_metrics.set_defaults(func=metrics.run, needs_config=True)
@@ -349,8 +367,11 @@ def build_parser():
                          help="With `add ready`, pass --fail-under through")
     p_sched.set_defaults(func=schedule.run, needs_config=True)
 
-    p_ready = sub.add_parser("ready", parents=[common],
-                             help="Definition-of-Ready gate (pass/fail)")
+    p_ready = sub.add_parser(
+        "ready", parents=[common],
+        help="Team working agreement (pass/fail)",
+        description="Team working agreement: pass/fail per ticket. "
+                    "too-big-for-a-sprint blocks only when it is listed.")
     p_ready.add_argument("--deep", action="store_true",
                          help="Also run the model reviews as blocking checks")
     p_ready.add_argument("--fail-under", type=float, default=None,
@@ -371,6 +392,27 @@ def build_parser():
     p_daily.add_argument("--print", action="store_true",
                          help="Also echo the snapshot to the terminal")
     p_daily.set_defaults(func=daily.run, needs_config=True)
+
+    p_cover = sub.add_parser(
+        "coverage", parents=[common],
+        help="Open issues no workstream claims, overlaps, and unused "
+             "components",
+        description="Open issues no workstream claims, issues two or more "
+                    "workstreams claim, and components no workstream names. "
+                    "Exits 1 when unclaimed work exists.")
+    p_cover.set_defaults(func=coverage.run, needs_config=True)
+
+    p_notes = sub.add_parser(
+        "release-notes", parents=[common],
+        help="Done issues since a date or in a fixVersion",
+        description="Done issues since a date or in a fixVersion, grouped by "
+                    "product and workstream. The model drafts prose when it "
+                    "is up and does not choose the issues.")
+    p_notes.add_argument("--since", metavar="YYYY-MM-DD",
+                         help="Include issues resolved on or after this date")
+    p_notes.add_argument("--version", metavar="NAME",
+                         help="Include issues in this fixVersion")
+    p_notes.set_defaults(func=release_notes.run, needs_config=True)
 
     p_update = sub.add_parser(
         "update", help="Upgrade pm-tools and migrate the config")
@@ -446,7 +488,7 @@ def main():
         args.command in ("do", "note", "publish", "schedule")
         or (args.command in ("workstreams", "products")
             and action in ("add", "remove"))
-        or (args.command == "inbox" and action in ("create", "drop"))
+        or (args.command == "inbox" and action in ("edit", "create", "drop"))
         or (args.command == "brief" and getattr(args, "debrief", None))
         or (args.command == "lint"
             and (getattr(args, "snooze", None)

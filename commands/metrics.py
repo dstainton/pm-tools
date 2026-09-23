@@ -127,7 +127,107 @@ def as_json(groups, weeks):
     return payload
 
 
+def gather_sprint(cfg):
+    """One row per workstream for the project's open sprint."""
+    streams = cfg.get("_workstreams") or []
+    groups = product_core.group_workstreams(cfg, streams)
+    seen = {}
+    out = []
+    sprint_name = ""
+    for product, group in groups:
+        rows = []
+        for ws in group:
+            project = workstreams.project_of(cfg, ws)
+            if project not in seen:
+                sprints = (sources.fetch_active_sprints(cfg["jira"], project)
+                           if project else [])
+                seen[project] = sprints[0] if sprints else None
+            sprint = seen.get(project)
+            if sprint and not sprint_name:
+                sprint_name = sprint.get("name") or ""
+            if not sprint:
+                rows.append({
+                    "workstream": ws.get("abbrev"),
+                    "name": "",
+                    "forecast": None,
+                })
+                continue
+            jql = workstreams.scope_jql(
+                cfg, ws, "lint",
+                overrides={"status": "any", "sprint": "open"})
+            issues = (sources.fetch_jira_history(cfg["jira"], jql)
+                      if jql else [])
+            snap = core.sprint_snapshot(issues, sprint)
+            snap["workstream"] = ws.get("abbrev")
+            rows.append(snap)
+        out.append((product, rows))
+    return sprint_name, out
+
+
+def render_sprint(sprint_name, groups):
+    title = sprint_name or "Open sprint"
+    lines = [
+        f"# {title}",
+        "_Open sprint. Forecast at the start, points done, points added "
+        "after the start, and items carried in. Facts from the changelog._",
+        "",
+    ]
+    any_sprint = False
+    for product, rows in groups:
+        lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
+        lines.append("")
+        lines.append("| Workstream | Forecast at start | Points done | "
+                     "Points added | Carried in |")
+        lines.append("|-----------|------------------:|------------:|"
+                     "-------------:|-----------:|")
+        for row in rows:
+            if row.get("forecast") is None:
+                lines.append(f"| {row['workstream']} | — | — | — | — |")
+                continue
+            any_sprint = True
+            lines.append(
+                f"| {row['workstream']} | {row['forecast']:.0f} | "
+                f"{row['done']:.0f} | {row['added_points']:.0f} | "
+                f"{row['carried']} |")
+        lines.append("")
+    if not any_sprint:
+        lines.append("_No open sprint._")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def run_sprint(cfg, args):
+    print("Measuring the open sprint ...")
+    sprint_name, groups = gather_sprint(cfg)
+    if getattr(args, "json", False):
+        payload = {"sprint": sprint_name, "products": []}
+        for product, rows in groups:
+            payload["products"].append({
+                "abbrev": product.get("abbrev"),
+                "name": product.get("name"),
+                "workstreams": rows,
+            })
+        path = output.place(
+            cfg, f"sprint_metrics_{dt.date.today().isoformat()}.json",
+            getattr(args, "out", None))
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, default=str)
+        print(f"\nDone. Sprint metrics written to: {path}")
+        return
+    text = render_sprint(sprint_name, groups)
+    path = output.place(
+        cfg, f"sprint_metrics_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    print(text)
+    print(f"\nDone. Sprint metrics written to: {path}")
+
+
 def run(cfg, args):
+    if getattr(args, "sprint", False):
+        run_sprint(cfg, args)
+        return
     opts = settings(cfg, args)
     print(f"Measuring the last {opts['weeks']} weeks ...")
     groups = gather(cfg, opts["weeks"])

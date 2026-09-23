@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.8.0 - 2026-09-23
+
+### Tranche 2
+
+- `pm coverage` lists open issues no workstream claims, open issues two or
+  more workstreams claim, and Jira components no workstream names. It exits
+  1 when unclaimed work exists. `pm schedule add coverage` is allowed.
+- `pm today` adds a Sprint Goal risk line when the active sprint has an end
+  date: "Sprint ends in N days. Not started: K. Blocked: M." It does not
+  name an issue as being on the goal path.
+- Optional `product_goal:` on a product. `pm products add --goal` sets it.
+  `pm report` and `pm brief` print the sentence under the product heading.
+  Empty means the line is omitted. The migration does not add it to existing
+  products.
+- `ready.blocking_criteria` may include `too-big-for-a-sprint`. It is off
+  unless listed. The threshold is `ready.max_points` (default 8). An item
+  with no estimate does not also fail that rule.
+- `pm ready` calls the result a team working agreement. The pass/fail table
+  stays.
+- Optional `definition_of_done:` on the config or on a product. `pm report`
+  prints it in the Increment section. A line may set `label:`, and then
+  `pm ready` warns when a Done item lacks that label. Other lines are
+  reminders. There is no `pm done` command.
+- `pm metrics --sprint` reports forecast points at the start, points done,
+  points added after the start, and items carried in.
+- `pm release-notes --since DATE` and `--version NAME` list done issues,
+  grouped by product and workstream. The model drafts prose when it is up
+  and does not choose the issues. Otherwise the command says the model was
+  skipped.
+- `pm inbox edit N` corrects the title, workstream, or acceptance criteria
+  in `inbox.json` before create. Stored edits win over the model suggestion.
+
+### Config
+
+- `config_version` 2. `pm update` inserts `ready.max_points: 8` when that
+  key is missing and leaves the token, products, and workstreams alone.
+  A `max_points` you already set is not replaced.
+
 ## 0.7.0 - 2026-09-22
 
 ### pm-tools

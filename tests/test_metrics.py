@@ -69,3 +69,31 @@ class ArithmeticTests(unittest.TestCase):
         change = metrics.sprint_scope_change(issues, sprint)
         self.assertEqual(change["added"], 1)
         self.assertEqual(change["keys"], ["X"])
+
+    def test_sprint_snapshot_splits_forecast_done_added_and_carried(self):
+        sprint = {"name": "Sprint 42", "start": "2026-08-27"}
+        carried = issue(
+            "C", status="In Progress", category="indeterminate", points=5,
+            updated="2026-08-20T09:00:00.000+0000")
+        carried["created"] = "2026-08-01T09:00:00.000+0000"
+        added = issue(
+            "A", status="To Do", category="new", points=3,
+            transitions=[tr(2, "", "Sprint 42", field="sprint",
+                            today=dt.date(2026, 9, 3))])
+        added["created"] = "2026-09-01T09:00:00.000+0000"
+        finished = issue(
+            "D", points=2,
+            transitions=[tr(1, "In Progress", "Done",
+                            today=dt.date(2026, 9, 3))])
+        finished["created"] = "2026-08-20T09:00:00.000+0000"
+        before = issue(
+            "B", points=8,
+            transitions=[tr(40, "In Progress", "Done",
+                            today=dt.date(2026, 9, 3))])
+        before["created"] = "2026-07-01T09:00:00.000+0000"
+        snap = metrics.sprint_snapshot([carried, added, finished, before], sprint)
+        self.assertEqual(snap["forecast"], 7)
+        self.assertEqual(snap["done"], 2)
+        self.assertEqual(snap["added_points"], 3)
+        self.assertEqual(snap["carried"], 2)
+        self.assertEqual(snap["added"], 1)

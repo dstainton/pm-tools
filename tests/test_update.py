@@ -142,6 +142,8 @@ class UpdateCommandTests(unittest.TestCase):
             capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(proc.returncode, 0)
         self.assertIn("update", proc.stdout)
+        self.assertIn("coverage", proc.stdout)
+        self.assertIn("release-notes", proc.stdout)
         self.assertIn("usage: pm", proc.stdout)
         today = subprocess.run(
             [sys.executable, os.path.join(root, "pm.py"), "today", "--help"],

@@ -12,7 +12,8 @@ import re
 from core import config_edit
 
 
-# (from_version, function). Empty at the first install.
+# (from_version, function). Version 1 is the first install. Each later
+# release that adds a key appends one step.
 MIGRATIONS = []
 
 _VERSION_RE = re.compile(r"^config_version:\s*(\d+)\s*(?:#.*)?$")
@@ -106,6 +107,42 @@ def insert_missing_block(text, key, body_lines, before_key=None):
             insert_at = before
     block = ["", f"{key}:"] + list(body_lines)
     return _with_newline(lines[:insert_at] + block + lines[insert_at:], text)
+
+
+def _block_has_key(text, block, key):
+    lines = text.splitlines()
+    start, end = config_edit.find_block(lines, block)
+    if start is None:
+        return False
+    pattern = re.compile(rf"^\s+{re.escape(key)}\s*:")
+    return any(pattern.match(line) for line in lines[start + 1:end])
+
+
+def _insert_under(text, block, line):
+    """Insert `line` as the first child of a top-level block."""
+    lines = text.splitlines()
+    start, _end = config_edit.find_block(lines, block)
+    if start is None:
+        return text
+    lines.insert(start + 1, line)
+    return _with_newline(lines, text)
+
+
+def to_version_2(text):
+    """Add `ready.max_points` when it is missing. Leave everything else.
+
+    Product Goal and Definition of Done stay absent until someone sets
+    them. An existing `max_points` is not replaced.
+    """
+    if not has_top_level(text, "ready"):
+        text = insert_missing_block(
+            text, "ready", ["  max_points: 8"], before_key="daily")
+    elif not _block_has_key(text, "ready", "max_points"):
+        text = _insert_under(text, "ready", "  max_points: 8")
+    return set_version(text, 2)
+
+
+MIGRATIONS.append((1, to_version_2))
 
 
 def apply_migrations(text, migrations, target):
