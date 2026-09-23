@@ -1,14 +1,19 @@
 # ============================================================================
-#  Product Manager Helper (pm) — Configuration
+#  pm-tools — Configuration
 # ----------------------------------------------------------------------------
-#  Fill in the placeholders marked <LIKE_THIS>. One config drives every command
-#  (pm report, pm lint, pm review, pm ready). Keep this file private — it holds
-#  API tokens.
+#  Fill in the placeholders marked <LIKE_THIS>. One config drives every command.
+#  Keep this file private — it holds API tokens.
 #
 #  New here? Run `pm init` to copy this template to ~/.pm/config.yaml, then edit
 #  that copy. Tip: instead of pasting tokens, set them as environment variables
 #  and reference them with ${ENV:VAR_NAME}. See the README.
+#
+#  config_version is the shape of this file. `pm update` raises it when a
+#  newer pm-tools needs a new setting. Do not copy this file over a config
+#  you have already filled in.
 # ============================================================================
+
+config_version: 1
 
 # ----------------------------------------------------------------------------
 #  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
@@ -91,15 +96,17 @@ sharepoint:
 lint:
   # A ticket "In Progress" but untouched longer than this is flagged stale.
   stale_days: 14
-  # Which fields must be present. Options: component, epic.
+  # Which fields must be present. Options: component, parent.
   # Component is intentionally NOT required on child work: workstream membership
-  # is inherited from the Epic's Component(s).
-  required_fields: [epic]
+  # is inherited from the parent's Component(s).
+  required_fields: [parent]
   # Titles shorter than this many words are flagged for review.
   min_title_words: 3
   # Titles containing any of these words are flagged as vague.
-  vague_title_terms: [fix, update, change, stuff, misc, tbd, wip, test,
-                      various, temp, placeholder, todo, refactor]
+  vague_title_terms: [fix, update, change, stuff, misc, tbd, wip,
+                      various, temp, placeholder, todo]
+  # These flag only when they are the whole title ("test", "Refactor").
+  vague_title_alone: [refactor, test]
   # Which issue types are treated as "stories" for AC / estimate checks.
   story_types: [story, bug]
   # Require acceptance criteria on story-type issues?
@@ -124,20 +131,20 @@ review:
 #  Which criteria must be met for a ticket to count as "Ready". Any criterion
 #  listed here BLOCKS readiness; remove one to make it advisory-only.
 #  Available: clear-title, has-acceptance-criteria, has-estimate,
-#             linked-to-epic, has-component, sane-dates
+#             linked-to-parent, has-component, sane-dates
 ready:
   blocking_criteria:
     - clear-title
     - has-acceptance-criteria
     - has-estimate
-    - linked-to-epic
+    - linked-to-parent
     - sane-dates
     # has-component is left out on purpose — advisory only by default.
 
 # ----------------------------------------------------------------------------
-#  5d. Standup (used by `pm standup`) — daily movement snapshot
+#  5d. Daily Scrum (used by `pm daily`)
 # ----------------------------------------------------------------------------
-standup:
+daily:
   # Default "moved since" window in days. Override at run time with --days.
   lookback_days: 1
 
@@ -190,8 +197,8 @@ scopes:
   lint:          {status: open}                 # epics + everything beneath
   review:        {status: open}
   ready:         {sprint: open, status: open}
-  standup_moved: {updated_within_days: 1}       # --days overrides this
-  standup_wip:   {status: in-progress}
+  daily_moved:   {updated_within_days: 1}       # --days overrides this
+  daily_wip:     {status: in-progress}
 
 # ----------------------------------------------------------------------------
 #  5g. Cache — reused Jira fetches, so `pm today` stays fast
@@ -335,8 +342,9 @@ workstreams:
 #  7. Output (used by `pm report`)
 # ----------------------------------------------------------------------------
 output:
+  directory: "~/.pm/out"
   file: "weekly_report_{date}.md"
   audience: "stakeholders"
   # Remembers last week's items so the report can show what changed.
-  # Created automatically after the first run; keep it between runs.
+  # Resolved under directory. Created after the first run; keep it between runs.
   state_file: "report_state.json"

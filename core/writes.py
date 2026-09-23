@@ -75,10 +75,10 @@ def execute(cfg, action):
         auth = (jira["email"], jira["api_token"])
     timeout = 60
     if method == "PUT":
-        resp = requests.put(url, json=action.get("body") or {},
+        resp = sources.send("PUT", url, json=action.get("body") or {},
                             auth=auth, headers=headers, timeout=timeout)
     elif method == "POST":
-        resp = requests.post(url, json=action.get("body") or {},
+        resp = sources.send("POST", url, json=action.get("body") or {},
                              auth=auth, headers=headers, timeout=timeout)
     else:
         sys.exit(f"Unsupported write method {method}.")

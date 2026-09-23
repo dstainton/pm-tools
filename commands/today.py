@@ -228,7 +228,7 @@ def gather(cfg):
     blocking = set(ready_cfg.get("blocking_criteria",
                                  list(ready.CRITERION_RULES.keys())))
     stale_days = int(lint_cfg.get("stale_days", 14) or 14)
-    days = int((cfg.get("standup") or {}).get("lookback_days", 1) or 1)
+    days = int((cfg.get("daily") or {}).get("lookback_days", 1) or 1)
 
     streams = cfg.get("_workstreams") or cfg.get("workstreams") or []
     groups = product_core.group_workstreams(cfg, streams)
@@ -268,7 +268,7 @@ def gather(cfg):
                 "total": len(issues),
             })
 
-            moved_jql = workstreams.scope_jql(cfg, ws, "standup_moved", days=days)
+            moved_jql = workstreams.scope_jql(cfg, ws, "daily_moved", days=days)
             for card in (sources.fetch_jira_changelog(cfg["jira"], moved_jql, days)
                          if moved_jql else []):
                 moved.append(_tag_issue(card, ws, product))

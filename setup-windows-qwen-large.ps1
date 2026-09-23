@@ -1,13 +1,12 @@
 ﻿<#
 .SYNOPSIS
-Set up pm-helper and a local Qwen3.8-27B OpenAI-compatible server on Windows.
+Set up a local Qwen3.8-27B OpenAI-compatible server on Windows for pm-tools.
 
 .DESCRIPTION
 This script is intended for a Windows x64 AMD Ryzen AI laptop.
 
 It:
   - verifies Python
-  - installs pm-helper in editable mode when pyproject.toml is present
   - downloads the latest official llama.cpp Windows x64 Vulkan build
   - verifies llama.cpp devices
   - downloads Qwen3.8-27B Q3_K_M unless skipped
@@ -82,7 +81,7 @@ function Invoke-Checked {
     }
 }
 
-Write-Host "pm-helper local Qwen setup" -ForegroundColor Green
+Write-Host "pm-tools local Qwen setup" -ForegroundColor Green
 Write-Host "Model: $ModelRef"
 Write-Host "Endpoint after start: http://127.0.0.1:$Port/v1"
 
@@ -115,16 +114,7 @@ Write-Step "Checking Python"
 $python = Require-Command "python" "Install an approved Python 3 release and ensure python.exe is on PATH."
 Invoke-Checked $python.Source "--version"
 
-Write-Step "Installing the Python application dependencies"
-
-if (Test-Path (Join-Path (Get-Location) "pyproject.toml")) {
-    Write-Host "Installing pm-helper from the current repository in editable mode..."
-    Invoke-Checked $python.Source "-m" "pip" "install" "-e" "."
-}
-else {
-    Write-Warning "No pyproject.toml found in the current directory. Skipping 'pip install -e .'."
-    Write-Warning "Run this script from the pm_helper repository if you want it to install the CLI too."
-}
+Write-Host "pm-tools itself is installed separately. See install.ps1."
 
 Write-Step "Preparing local runtime directories"
 
@@ -147,7 +137,7 @@ Write-Step "Downloading the latest official llama.cpp Windows x64 Vulkan build"
 
 $releaseApi = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
 $headers = @{
-    "User-Agent" = "pm-helper-qwen-setup"
+    "User-Agent" = "pm-tools-qwen-setup"
 }
 
 try {

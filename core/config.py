@@ -13,6 +13,90 @@ import yaml
 from core import filters, products as product_core, workstreams as ws_core
 
 
+# Filled in memory when a block or key is absent. This does not write the file.
+SECTION_DEFAULTS = {
+    "model": {
+        "endpoint": "http://127.0.0.1:8080/v1/chat/completions",
+        "name": "qwen-local",
+        "temperature": 0.4,
+        "json_temperature": 0.2,
+        "top_p": 0.8,
+        "top_k": 20,
+        "presence_penalty": 1.5,
+        "max_tokens": 2048,
+        "timeout": 600,
+        "enable_thinking": False,
+    },
+    "output": {
+        "directory": "~/.pm/out",
+        "file": "weekly_report_{date}.md",
+        "audience": "stakeholders",
+        "state_file": "report_state.json",
+    },
+    "lint": {
+        "stale_days": 14,
+        "required_fields": ["parent"],
+        "min_title_words": 3,
+        "vague_title_terms": ["fix", "update", "change", "stuff", "misc",
+                              "tbd", "wip", "various", "temp", "placeholder",
+                              "todo"],
+        "vague_title_alone": ["refactor", "test"],
+        "story_types": ["story", "bug"],
+        "require_acceptance_criteria": True,
+        "acceptance_criteria_markers": ["acceptance criteria", "given ",
+                                        "when ", "then ", "ac:"],
+        "require_estimate": True,
+    },
+    "review": {"batch_size": 8},
+    "ready": {
+        "blocking_criteria": [
+            "clear-title", "has-acceptance-criteria", "has-estimate",
+            "linked-to-parent", "sane-dates",
+        ],
+    },
+    "daily": {"lookback_days": 1},
+    "cache": {
+        "enabled": True,
+        "path": "~/.pm/cache",
+        "ttl_seconds": 300,
+    },
+    "today": {
+        "state_file": "~/.pm/today.json",
+        "max_needs_you": 5,
+        "max_moved": 8,
+        "max_aging": 3,
+        "untouched_days": 3,
+    },
+    "triage": {
+        "unassigned_in_sprint": True,
+        "blocked": True,
+        "mentions_me_within_days": 3,
+        "new_bugs_within_days": 1,
+        "in_sprint_untouched_days": 3,
+        "overdue": True,
+    },
+    "metrics": {"weeks": 8},
+}
+
+
+def apply_defaults(cfg):
+    """Fill missing sections in memory and reject a section of the wrong type."""
+    version = cfg.get("config_version")
+    if version is not None and not isinstance(version, int):
+        sys.exit("`config_version:` must be a whole number.")
+    for key, defaults in SECTION_DEFAULTS.items():
+        block = cfg.get(key)
+        if block is None:
+            cfg[key] = {k: (list(v) if isinstance(v, list) else v)
+                        for k, v in defaults.items()}
+            continue
+        if not isinstance(block, dict):
+            sys.exit(f"`{key}:` must be a mapping.")
+        for name, value in defaults.items():
+            block.setdefault(name, list(value) if isinstance(value, list) else value)
+    return cfg
+
+
 def load_config(path):
     """Read the YAML config and expand any ${ENV:VAR} placeholders."""
     with open(path, "r", encoding="utf-8") as fh:
@@ -36,6 +120,9 @@ def load_config(path):
         return node
 
     data = walk(data)
+    if not isinstance(data, dict):
+        sys.exit("Config must be a YAML mapping.")
+    apply_defaults(data)
     validate(data)
     return data
 
@@ -166,13 +253,24 @@ def filter_workstreams(cfg, selector):
         return cfg["workstreams"]
 
     wanted = [s.strip().lower() for s in selector.split(",") if s.strip()]
-    by_abbrev = {ws["abbrev"].lower(): ws for ws in cfg["workstreams"]}
+    by_abbrev = {}
+    by_name = {}
+    for ws in cfg["workstreams"]:
+        by_abbrev[ws["abbrev"].lower()] = ws
+        if ws.get("name"):
+            by_name.setdefault(ws["name"].lower(), ws)
 
-    unknown = [w for w in wanted if w not in by_abbrev]
+    resolved, unknown = [], []
+    for wanted_name in wanted:
+        if wanted_name in by_abbrev:
+            resolved.append(by_abbrev[wanted_name])
+        elif wanted_name in by_name:
+            resolved.append(by_name[wanted_name])
+        else:
+            unknown.append(wanted_name)
     if unknown:
         available = ", ".join(ws["abbrev"] for ws in cfg["workstreams"])
         sys.exit(f"Unknown workstream(s): {', '.join(unknown)}. "
                  f"Available: {available}.")
 
-    # Preserve the order given on the command line.
-    return [by_abbrev[w] for w in wanted]
+    return resolved

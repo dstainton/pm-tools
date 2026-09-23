@@ -12,11 +12,14 @@ date, acceptance criteria or Epic Link, and prints a YAML snippet to paste.
 It does not write the config — that is still a human edit.
 """
 
+import os
 import re
 import sys
 
 from core import cache as cache_core
+from core import config_edit
 from core import filters
+from core import migrations
 from core import model as model_core
 from core import products as product_core
 from core import sources
@@ -65,6 +68,20 @@ def _field_by_id(fields, field_id):
         if field.get("id") == field_id:
             return field
     return None
+
+
+def _check_version(cfg):
+    try:
+        installed = migrations.template_version()
+    except OSError:
+        return _warn("config version", "bundled template is missing")
+    have = cfg.get("config_version")
+    if not isinstance(have, int):
+        have = 0
+    if have < installed:
+        return _fail("config version",
+                     f"{have} is behind {installed} — run pm update")
+    return _ok("config version", str(have))
 
 
 def _check_config(cfg):
@@ -205,10 +222,12 @@ FIELD_HINTS = (
 )
 
 
-def _discover_fields(fields):
-    print("\nField discovery (paste into the jira: block; nothing was written):\n")
+def _discover_fields(cfg, fields, write):
+    print("\nField discovery:\n")
     suggested = {}
     for key, pattern in FIELD_HINTS:
+        if key == "epic_link_field":
+            continue
         matches = [f for f in fields if pattern.search(f.get("name") or "")]
         print(f"  {key}:")
         if not matches:
@@ -223,11 +242,42 @@ def _discover_fields(fields):
             print(f'    {key}: "{value}"')
     print("\n  Current Jira Cloud hierarchy uses parent, not Epic Link.")
     print('  Leave epic_link_field: "parent" unless you still need the legacy field.')
+    if not suggested:
+        return
+    path = cfg.get("_config_path")
+    if not path or not os.path.exists(path):
+        print("\n  No config file to update.")
+        return
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    preview = text
+    notes = []
+    for key, value in suggested.items():
+        preview, status = config_edit.set_jira_field_if_blank(preview, key, value)
+        if status == "written":
+            notes.append(f"{key} -> {value}")
+        elif status == "kept":
+            notes.append(f"{key} already set; left unchanged")
+    for note in notes:
+        print(f"  {note}")
+    if not write:
+        print("\n  Nothing was written. Re-run with --yes to fill blank IDs.")
+        return
+    if preview == text:
+        print("\n  No blank field IDs to write.")
+        return
+    folder = os.path.dirname(path) or "."
+    tmp = os.path.join(folder, f".{os.path.basename(path)}.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(preview)
+    os.replace(tmp, path)
+    print(f"\n  Wrote blank field IDs in {path}.")
 
 
 def run(cfg, args):
     print("pm doctor\n")
     problems = 0
+    problems += _check_version(cfg)
     problems += _check_config(cfg)
 
     status, _me = _check_jira(cfg)
@@ -252,7 +302,7 @@ def run(cfg, args):
 
     if getattr(args, "discover_fields", False):
         if fields:
-            _discover_fields(fields)
+            _discover_fields(cfg, fields, getattr(args, "yes", False))
         else:
             print("\nCannot discover fields — the field list did not load.")
 

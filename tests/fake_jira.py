@@ -206,8 +206,7 @@ def evaluate(node, issue, now=None):
         if field in ("updated", "created", "duedate") and \
                 str(target).startswith("-"):
             cutoff = now - dt.timedelta(days=_days_ago(target))
-            stamp = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")) \
-                if value else None
+            stamp = _parse_jira_time(value)
             hit = bool(stamp and stamp >= cutoff)
         elif operator == "=":
             hit = str(value) == str(target)
@@ -216,6 +215,28 @@ def evaluate(node, issue, now=None):
         else:
             hit = _compare(operator, value, target)
     return not hit if negate else hit
+
+
+def _parse_jira_time(value):
+    """Parse a Jira timestamp such as 2026-09-22T09:12:03.000+0000.
+
+    Python 3.9's fromisoformat rejects an offset written without a colon.
+    strptime's %z accepts both +0000 and +00:00 from 3.7 on.
+    """
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+0000")
+    text = re.sub(r"([+-]\d{2}):(\d{2})$", r"\1\2", text)
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%d"):
+        try:
+            stamp = dt.datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=dt.timezone.utc)
+        return stamp
+    return None
 
 
 def _compare(operator, value, target):

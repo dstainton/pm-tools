@@ -9,6 +9,7 @@ import datetime as dt
 import json
 
 from core import metrics as core
+from core import output
 from core import products as product_core
 from core import sources, workstreams
 
@@ -131,13 +132,17 @@ def run(cfg, args):
     print(f"Measuring the last {opts['weeks']} weeks ...")
     groups = gather(cfg, opts["weeks"])
     if getattr(args, "json", False):
-        path = f"metrics_{dt.date.today().isoformat()}.json"
+        path = output.place(
+            cfg, f"metrics_{dt.date.today().isoformat()}.json",
+            getattr(args, "out", None))
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(as_json(groups, opts["weeks"]), fh, indent=2, default=str)
         print(f"\nDone. Metrics written to: {path}")
         return
     text = render(groups, opts["weeks"])
-    path = f"metrics_{dt.date.today().isoformat()}.md"
+    path = output.place(
+        cfg, f"metrics_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
     print(text)

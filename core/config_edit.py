@@ -115,6 +115,34 @@ def add_list_entry(text, key, entry, render, before_key=None, create=False):
     return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
 
 
+def set_jira_field_if_blank(text, key, value):
+    """Set one `jira:` scalar when it is missing or empty.
+
+    Returns (text, status) where status is `written`, `kept`, or `missing`.
+    A non-empty value is never replaced.
+    """
+    lines = text.splitlines()
+    start, end = find_block(lines, "jira")
+    if start is None:
+        return text, "missing"
+    pattern = re.compile(rf"^(\s*){re.escape(key)}:\s*(.*?)(\s+#.*)?$")
+    for index in range(start + 1, end):
+        match = pattern.match(lines[index])
+        if not match:
+            continue
+        raw = match.group(2).strip().strip("\"'")
+        if raw:
+            return text, "kept"
+        comment = match.group(3) or ""
+        lines[index] = f'{match.group(1)}{key}: "{value}"{comment}'
+        body = "\n".join(lines)
+        return body + "\n", "written"
+    # Key is absent: insert it at the end of the block.
+    indent = "  "
+    lines.insert(end, f'{indent}{key}: "{value}"')
+    return "\n".join(lines) + "\n", "written"
+
+
 def remove_list_entry(text, key, abbrev):
     """Return `text` with the named entry removed from the list."""
     lines = text.splitlines()

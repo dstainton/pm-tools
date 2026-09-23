@@ -20,7 +20,7 @@ SAFE = {
     "report": [],
     "metrics": ["--weeks", "8"],
     "lint": [],
-    "standup": [],
+    "daily": [],
     "doctor": [],
     "brief": None,   # needs --for at add time
     "ready": [],
@@ -139,6 +139,10 @@ def _add(cfg, args):
         extra += ["--product", args.product]
     if getattr(args, "workstream", None):
         extra += ["--workstream", args.workstream]
+    if getattr(args, "fail_on", None) and name == "lint":
+        extra += ["--fail-on", args.fail_on]
+    if getattr(args, "fail_under", None) is not None and name == "ready":
+        extra += ["--fail-under", str(args.fail_under)]
     try:
         when = parse_when(at=getattr(args, "at", None),
                           weekly=getattr(args, "weekly", None))

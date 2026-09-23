@@ -118,8 +118,11 @@ def _drafts(cfg, issues):
     return titles, criteria
 
 
-def _worksheet_path(ws):
-    return f"refine_{ws['abbrev']}_{dt.date.today().isoformat()}.md"
+def _worksheet_path(cfg, ws, args):
+    from core import output
+    return output.place(
+        cfg, f"refine_{ws['abbrev']}_{dt.date.today().isoformat()}.md",
+        getattr(args, "out", None))
 
 
 def build_worksheet(cfg, ws, rows, titles, criteria, estimate):
@@ -245,7 +248,7 @@ def run(cfg, args):
     selected = cfg.get("_workstreams") or []
     if apply:
         for ws in selected:
-            path = _worksheet_path(ws)
+            path = _worksheet_path(cfg, ws, args)
             if not os.path.exists(path):
                 sys.exit(f"No worksheet at {path}. Run `pm refine -w "
                          f"{ws['abbrev']}` first, edit the file, then --apply.")
@@ -298,7 +301,7 @@ def run(cfg, args):
         titles, criteria = _drafts(cfg, issues)
         estimate = _median_estimate(_closed_points(cfg, ws))
         text = build_worksheet(cfg, ws, rows, titles, criteria, estimate)
-        path = _worksheet_path(ws)
+        path = _worksheet_path(cfg, ws, args)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
         for issue, findings, _v in rows:

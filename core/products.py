@@ -106,12 +106,24 @@ def filter_by_product(cfg, workstreams, selector):
 
     wanted = [s.strip().lower() for s in selector.split(",") if s.strip()]
     available = {}
+    by_name = {}
     for product in listed_products(cfg):
         if product.get("abbrev"):
-            available[product["abbrev"].lower()] = product
-    available[UNASSIGNED_ABBREV.lower()] = unassigned_product()
+            available[product["abbrev"].lower()] = product["abbrev"].lower()
+        if product.get("name"):
+            by_name.setdefault(product["name"].lower(),
+                               (product.get("abbrev") or "").lower())
+    available[UNASSIGNED_ABBREV.lower()] = UNASSIGNED_ABBREV.lower()
 
-    unknown = [name for name in wanted if name not in available]
+    resolved_abbrevs = []
+    unknown = []
+    for name in wanted:
+        if name in available:
+            resolved_abbrevs.append(available[name])
+        elif name in by_name and by_name[name]:
+            resolved_abbrevs.append(by_name[name])
+        else:
+            unknown.append(name)
     if unknown:
         names = ", ".join(p["abbrev"] for p in listed_products(cfg))
         if UNASSIGNED_ABBREV.lower() in {
@@ -124,7 +136,7 @@ def filter_by_product(cfg, workstreams, selector):
         sys.exit(f"Unknown product(s): {', '.join(unknown)}. "
                  f"Available: {names}.")
 
-    wanted_set = set(wanted)
+    wanted_set = set(resolved_abbrevs)
     picked = [ws for ws in workstreams
               if product_abbrev_of(ws).lower() in wanted_set]
     if not picked:

@@ -10,7 +10,7 @@ narrowed if --workstream was given.
 
 import datetime as dt
 
-from core import sources, model, state, workstreams
+from core import output, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -82,7 +82,9 @@ def run(cfg, args):
     """Entry point called by pm.py."""
     selected = cfg["_workstreams"]
 
-    state_path = cfg["output"].get("state_file", "report_state.json")
+    state_path = output.place(
+        cfg, cfg["output"].get("state_file", "report_state.json"),
+        getattr(args, "out", None))
     previous = state.load_state(state_path)
     new_state = dict(previous)   # keep untouched workstreams' memory intact
 
@@ -141,7 +143,9 @@ def run(cfg, args):
         report = report.rstrip() + "\n\n" + metrics_cmd.render(groups, 8)
     except Exception:                              # noqa: BLE001
         pass
-    out_path = cfg["output"]["file"].format(date=dt.date.today().isoformat())
+    out_path = output.place(
+        cfg, cfg["output"]["file"].format(date=dt.date.today().isoformat()),
+        getattr(args, "out", None))
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
 

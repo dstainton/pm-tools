@@ -30,7 +30,8 @@ def save_state(path, state):
 
 def snapshot_items(items):
     """Reduce this week's items to the bare facts we compare next week."""
-    return {it["uid"]: {"title": it["title"], "watch": it["watch"]}
+    return {it["uid"]: {"title": it["title"], "watch": it["watch"],
+                        "ref": it.get("ref")}
             for it in items}
 
 
@@ -72,6 +73,8 @@ def build_change_block(new, changed, dropped, first_run):
     if dropped:
         lines.append("Dropped out of scope this week (likely done or moved on):")
         for _uid, snap in dropped:
-            lines.append(f"  - {snap.get('title', '(unknown item)')}")
+            ref = snap.get("ref")
+            tag = f"[{ref}] " if ref else ""
+            lines.append(f"  - {tag}{snap.get('title', '(unknown item)')}")
 
     return "\n".join(lines) if lines else "No changes detected since last week."

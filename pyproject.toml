@@ -1,16 +1,20 @@
 # ============================================================================
-#  Packaging for the Product Manager Helper CLI.
+#  Packaging for pm-tools.
 #
-#  This is what turns `python pm.py lint` into just `pm lint`.
+#  This is what turns `python pm.py lint` into `pm lint` (and `pm-tools lint`).
 #
-#  Install (from inside the pm_helper folder):
+#  First install (no clone):
+#      pipx install git+https://github.com/dstainton/pm-tools.git
+#      pm init
+#
+#  Development, from a clone:
 #      pip install -e .
 #
-#  The -e means "editable": pip links to these files in place, so any edit you
-#  make to the code or config takes effect immediately with no reinstall.
+#  The -e means "editable": pip links to these files in place. `pm update`
+#  will not git-pull an editable checkout; you pull it yourself.
 #
-#  After installing, `pm` works from ANY directory. Uninstall with:
-#      pip uninstall pm-helper
+#  Uninstall: pipx uninstall pm-tools
+#  (an older checkout may still be named pm-helper: pip uninstall pm-helper)
 # ============================================================================
 
 [build-system]
@@ -18,24 +22,25 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pm-helper"
-version = "0.6.0"
-description = "Product Manager Helper CLI — products, today, triage, refine, inbox, metrics, brief, publish, doctor, workstreams, report, lint, ready, standup"
+name = "pm-tools"
+version = "0.7.0"
+description = "pm-tools — products, today, triage, refine, inbox, metrics, brief, publish, doctor, workstreams, report, lint, ready, daily"
 requires-python = ">=3.9"
 dependencies = [
     "requests",
     "pyyaml",
 ]
 
-# This line is the magic: it creates a `pm` command that calls main() in pm.py.
 [project.scripts]
 pm = "pm:main"
+pm-tools = "pm:main"
 
-# Tell setuptools which files make up the package (the flat layout you have).
 [tool.setuptools]
 py-modules = ["pm"]
 packages = ["core", "commands"]
 
-# Ship the config.yaml template inside the package so `pm init` can copy it.
 [tool.setuptools.package-data]
 "*" = ["config.yaml"]
+
+[tool.setuptools.data-files]
+"share/pm-tools" = ["config.yaml"]

@@ -17,12 +17,7 @@ import os
 import shutil
 import sys
 
-
-def bundled_template_path():
-    """The config.yaml that ships alongside the code, used as the template."""
-    here = os.path.dirname(os.path.abspath(__file__))     # .../commands
-    root = os.path.dirname(here)                           # package root
-    return os.path.join(root, "config.yaml")
+from core.migrations import bundled_template_path
 
 
 def run(args):
@@ -41,11 +36,16 @@ def run(args):
     # Don't clobber an existing config unless asked.
     if os.path.exists(dest) and not getattr(args, "force", False):
         print(f"A config already exists at:\n  {dest}\n\n"
-              f"Leaving it untouched. To replace it, run:\n"
-              f"  pm init --force")
+              f"Leaving it untouched. To add new settings, run:\n"
+              f"  pm update\n\n"
+              f"`pm init --force` is the only command that replaces this file.")
         return
 
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    if os.path.exists(dest):
+        print("Replacing the existing config. "
+              "`pm init --force` is the only command that does this.\n")
+
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
     shutil.copyfile(template, dest)
 
     print(f"Created a starter config at:\n  {dest}\n")

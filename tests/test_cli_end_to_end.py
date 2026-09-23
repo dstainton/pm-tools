@@ -161,6 +161,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
+config_version: 1
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -198,7 +199,7 @@ sharepoint:
 
 lint:
   stale_days: 14
-  required_fields: [epic]
+  required_fields: [parent]
   min_title_words: 3
   vague_title_terms: [fix, stuff, misc, tbd, wip]
   story_types: [story, bug]
@@ -216,7 +217,7 @@ ready:
     - has-estimate
     - sane-dates
 
-standup:
+daily:
   lookback_days: 1
 
 cache:
@@ -293,6 +294,7 @@ workstreams:
 #  Output
 # ----------------------------------------------------------------------------
 output:
+  directory: "."
   file: "weekly_report_{{date}}.md"
   audience: "directors"
   state_file: "report_state.json"
@@ -325,10 +327,15 @@ class CliTestCase(unittest.TestCase):
         return path
 
     def run_pm(self, *args, config="config.yaml", expect=0):
+        # cp1252 is the Windows console default. The child must still print
+        # arrows; the parent reads those bytes as UTF-8.
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "cp1252"
         proc = subprocess.run(
             [sys.executable, PM, *args, "--config",
              os.path.join(self.dir, config)],
-            cwd=self.dir, capture_output=True, text=True, timeout=120)
+            cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env, timeout=120)
         output = proc.stdout + proc.stderr
         self.assertEqual(proc.returncode, expect,
                          f"`pm {' '.join(args)}` exited "
@@ -467,14 +474,14 @@ class LintTests(CliTestCase):
         keys = {f["key"] for f in self._findings()}
         self.assertNotIn("APS-1", keys)
         missing_epic = {f["key"] for f in self._findings()
-                        if f["rule"] == "missing-epic"}
+                        if f["rule"] == "missing-parent"}
         self.assertEqual(missing_epic, {"APS-40"})   # the only orphan
 
 
-class StandupTests(CliTestCase):
+class DailyTests(CliTestCase):
     def test_movement_and_work_in_progress(self):
-        self.run_pm("standup", "-w", "SDX")
-        report = self.read_output(r"standup_.*\.md")
+        self.run_pm("daily", "-w", "SDX")
+        report = self.read_output(r"daily_.*\.md")
         self.assertIn("APS-10", report)
         self.assertIn("To Do → In Review", report)
         self.assertIn("A. Lee", report)
@@ -482,8 +489,8 @@ class StandupTests(CliTestCase):
         self.assertNotIn("APS-20", report)           # moved 40 days ago
 
     def test_widening_the_window_picks_up_older_moves(self):
-        self.run_pm("standup", "--days", "60", "-w", "APS")
-        report = self.read_output(r"standup_.*\.md")
+        self.run_pm("daily", "--days", "60", "-w", "APS")
+        report = self.read_output(r"daily_.*\.md")
         self.assertIn("APS-20", report)
         self.assertIn("Backlog → To Do", report)
 
@@ -912,6 +919,15 @@ class ScheduleTests(CliTestCase):
         self.run_pm("schedule", "remove", "today")
         empty = self.run_pm("schedule")
         self.assertIn("No scheduled commands", empty)
+
+
+class FakeJiraTimeTests(unittest.TestCase):
+    def test_offset_without_a_colon_is_comparable(self):
+        from tests.fake_jira import _parse_jira_time
+        stamp = _parse_jira_time("2026-09-22T09:12:03.000+0000")
+        cutoff = dt.datetime(2026, 9, 22, 9, 12, 3, tzinfo=dt.timezone.utc)
+        self.assertEqual(stamp, cutoff)
+        self.assertGreater(stamp, cutoff - dt.timedelta(days=1))
 
 
 if __name__ == "__main__":

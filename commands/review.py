@@ -20,7 +20,7 @@ call misfires, skip that batch rather than sink the run.
 
 import datetime as dt
 
-from core import sources, model, workstreams
+from core import output, sources, model, workstreams
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +251,9 @@ def run(cfg, args):
             results.append((ws, findings, lookup))
 
         report = build_markdown(cfg, asp, results, any_errors)
-        out_path = f"review_{asp}_{dt.date.today().isoformat()}.md"
+        out_path = output.place(
+            cfg, f"review_{asp}_{dt.date.today().isoformat()}.md",
+            getattr(args, "out", None))
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(report)
         print(f"Done. {asp.capitalize()} review written to: {out_path}\n")

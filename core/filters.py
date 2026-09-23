@@ -54,8 +54,8 @@ SCOPE_INCLUDES = {
     "lint": "everything",
     "review": "everything",
     "ready": "children",
-    "standup_moved": "children",
-    "standup_wip": "children",
+    "daily_moved": "children",
+    "daily_wip": "children",
 }
 
 #  Sensible defaults, so a workstream only has to name its components. Any of
@@ -66,8 +66,8 @@ DEFAULT_SCOPES = {
     "lint": {"status": "open"},
     "review": {"status": "open"},
     "ready": {"sprint": "open", "status": "open"},
-    "standup_moved": {"updated_within_days": 1},
-    "standup_wip": {"status": "in-progress"},
+    "daily_moved": {"updated_within_days": 1},
+    "daily_wip": {"status": "in-progress"},
 }
 
 VALID_OPTIONS = (
@@ -182,7 +182,7 @@ def scope_options(cfg, ws, scope_name, overrides=None):
 
     Precedence, lowest first: built-in defaults, the global `scopes:` block,
     the workstream's own `scopes:` block, then run-time overrides (for example
-    `pm standup --days 3`).
+    `pm daily --days 3`).
     """
     if scope_name not in SCOPE_INCLUDES:
         _fail(f"unknown scope `{scope_name}`. "

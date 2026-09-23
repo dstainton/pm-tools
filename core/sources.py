@@ -15,10 +15,35 @@ Nothing here reaches the public internet except your own tenants.
 
 import datetime as dt
 import re
+import time
+from urllib.parse import quote
 
 import requests
 
 from core.cache import cache_key
+from core.http import retry_after_seconds
+
+
+def send(method, url, **kwargs):
+    """One HTTP call. On 429, wait for Retry-After and try once more.
+
+    Uses requests.get/post/put so tests can patch those on this module.
+    A stand-in response with no status_code is returned as-is.
+    """
+    kwargs.setdefault("timeout", 60)
+    func = {"GET": requests.get, "POST": requests.post,
+            "PUT": requests.put}[method.upper()]
+    response = func(url, **kwargs)
+    if getattr(response, "status_code", None) != 429:
+        return response
+    wait = retry_after_seconds(response)
+    time.sleep(wait)
+    response = func(url, **kwargs)
+    if getattr(response, "status_code", None) == 429:
+        raise requests.HTTPError(
+            f"Rate limit (429) after waiting {wait}s. Try again shortly.",
+            response=response)
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +164,7 @@ def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
         if token:
             body["nextPageToken"] = token
 
-        resp = requests.post(url, json=body, auth=_auth(cfg),
+        resp = send("POST",url, json=body, auth=_auth(cfg),
                              headers={"Accept": "application/json"}, timeout=60)
         resp.raise_for_status()
         data = resp.json()
@@ -169,7 +194,7 @@ def approximate_count(cfg, jql):
         hit = cache.get(key)
         if hit is not None:
             return int(hit)
-    resp = requests.post(_api(cfg, "search/approximate-count"),
+    resp = send("POST",_api(cfg, "search/approximate-count"),
                          json={"jql": jql}, auth=_auth(cfg),
                          headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
@@ -181,7 +206,7 @@ def approximate_count(cfg, jql):
 
 def fetch_myself(cfg):
     """Who the configured credentials belong to — used as a connection check."""
-    resp = requests.get(_api(cfg, "myself"), auth=_auth(cfg),
+    resp = send("GET",_api(cfg, "myself"), auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
     return resp.json()
@@ -189,7 +214,7 @@ def fetch_myself(cfg):
 
 def fetch_fields(cfg):
     """Every field the site knows about — used by `pm doctor --discover-fields`."""
-    resp = requests.get(_api(cfg, "field"), auth=_auth(cfg),
+    resp = send("GET",_api(cfg, "field"), auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
     return resp.json() or []
@@ -197,7 +222,7 @@ def fetch_fields(cfg):
 
 def fetch_project(cfg, project):
     """One project's metadata, or raise if the key does not exist."""
-    resp = requests.get(_api(cfg, f"project/{project}"), auth=_auth(cfg),
+    resp = send("GET",_api(cfg, f"project/{project}"), auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
     return resp.json()
@@ -205,7 +230,7 @@ def fetch_project(cfg, project):
 
 def fetch_project_components(cfg, project):
     """Component names defined on a project, so config typos can be caught."""
-    resp = requests.get(_api(cfg, f"project/{project}/components"),
+    resp = send("GET",_api(cfg, f"project/{project}/components"),
                         auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
@@ -214,7 +239,7 @@ def fetch_project_components(cfg, project):
 
 def fetch_comments(cfg, key):
     """Comments on one issue, newest last."""
-    resp = requests.get(_api(cfg, f"issue/{key}/comment"),
+    resp = send("GET",_api(cfg, f"issue/{key}/comment"),
                         auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
@@ -223,7 +248,7 @@ def fetch_comments(cfg, key):
 
 def fetch_issue_links(cfg, key):
     """issuelinks for one issue: [{type, inward, outward, key, summary}]."""
-    resp = requests.get(_api(cfg, f"issue/{key}"),
+    resp = send("GET",_api(cfg, f"issue/{key}"),
                         params={"fields": "issuelinks,summary"},
                         auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
@@ -247,7 +272,7 @@ def search_users(cfg, query):
     """People whose name or email matches `query`."""
     if not query:
         return []
-    resp = requests.get(_api(cfg, "user/search"),
+    resp = send("GET",_api(cfg, "user/search"),
                         params={"query": query},
                         auth=_auth(cfg),
                         headers={"Accept": "application/json"}, timeout=60)
@@ -280,7 +305,7 @@ def fetch_active_sprints(cfg, project):
     auth = _auth(cfg)
     headers = {"Accept": "application/json"}
     try:
-        resp = requests.get(f"{base}/rest/agile/1.0/board",
+        resp = send("GET",f"{base}/rest/agile/1.0/board",
                             params={"projectKeyOrId": project},
                             auth=auth, headers=headers, timeout=30)
         resp.raise_for_status()
@@ -294,7 +319,7 @@ def fetch_active_sprints(cfg, project):
         if board_id is None:
             continue
         try:
-            resp = requests.get(
+            resp = send("GET",
                 f"{base}/rest/agile/1.0/board/{board_id}/sprint",
                 params={"state": "active"},
                 auth=auth, headers=headers, timeout=30)
@@ -374,6 +399,30 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
 #  Jira — detailed fetch for lint
 # ---------------------------------------------------------------------------
 
+def latest_status_change(issue):
+    """ISO timestamp of the newest status transition, or None."""
+    histories = ((issue.get("changelog") or {}).get("histories") or [])
+    latest = None
+    for history in histories:
+        created = history.get("created")
+        if not created:
+            continue
+        for item in history.get("items") or []:
+            if (item.get("field") or "").lower() != "status":
+                continue
+            if latest is None or str(created) > str(latest):
+                latest = created
+    return latest
+
+
+def sharepoint_search_url(site_id, query):
+    """Graph drive search URL with quotes in the query escaped."""
+    escaped = str(query).replace("'", "''")
+    encoded = quote(escaped, safe="")
+    return (f"https://graph.microsoft.com/v1.0/sites/{site_id}"
+            f"/drive/root/search(q='{encoded}')")
+
+
 def fetch_jira_detailed(cfg, jql, max_results=None):
     """Fetch issues with the extra fields lint needs. Returns list of dicts.
 
@@ -396,7 +445,8 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
             fields.append(extra)
 
     out = []
-    for iss in search_issues(cfg, jql, fields=fields, max_items=max_results):
+    for iss in search_issues(cfg, jql, fields=fields, expand="changelog",
+                             max_items=max_results):
         f = iss.get("fields", {})
 
         # Epic / parent link — team-managed uses "parent", classic a customfield.
@@ -426,6 +476,7 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
             "start_date": f.get(sd) if sd else None,
             "due_date": f.get("duedate"),
             "updated": f.get("updated"),
+            "status_changed": latest_status_change(iss),
             "created": f.get("created"),
             "description": adf_to_text(f.get("description")),
             "acceptance_criteria": adf_to_text(f.get(ac)) if ac else "",
@@ -434,13 +485,13 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
 
 
 # ---------------------------------------------------------------------------
-#  Jira — standup helpers
+#  Jira — daily movement helpers
 # ---------------------------------------------------------------------------
 
 def fetch_jira_cards(cfg, jql, max_results=None):
     """Light fetch returning key/summary/status/assignee for grouping.
 
-    Used by `pm standup` for the "in progress now" list, where we want the
+    Used by `pm daily` for the "in progress now" list, where we want the
     owner but none of the heavier lint fields. Returns a list of dicts.
     """
     if not jql:
@@ -466,7 +517,7 @@ def fetch_jira_cards(cfg, jql, max_results=None):
 
 def fetch_issue_changelog(cfg, key):
     """One issue's change history, for sites that don't expand it on search."""
-    resp = requests.get(_api(cfg, f"issue/{key}/changelog"), auth=_auth(cfg),
+    resp = send("GET",_api(cfg, f"issue/{key}/changelog"), auth=_auth(cfg),
                         params={"maxResults": 100},
                         headers={"Accept": "application/json"}, timeout=60)
     resp.raise_for_status()
@@ -479,7 +530,7 @@ def fetch_jira_changelog(cfg, jql, since_days, max_results=None):
     Returns a list of dicts, each with a `transitions` list of
     {from, to, when, who} that happened within the last `since_days` days.
     Issues with no recent status transition are omitted, so the caller gets
-    exactly "what moved" for a standup.
+    exactly "what moved" for the Daily Scrum.
     """
     if not jql:
         return []
@@ -629,7 +680,7 @@ def fetch_confluence(cfg, cql, tag_prefix, start_index):
     full_cql = f"({cql}) AND lastmodified >= '{since}'"
 
     url = f"{cfg['base_url'].rstrip('/')}/rest/api/content/search"
-    resp = requests.get(
+    resp = send("GET",
         url,
         params={"cql": full_cql,
                 "limit": cfg["max_results"],
@@ -668,7 +719,7 @@ def fetch_confluence(cfg, cql, tag_prefix, start_index):
 def get_graph_token(cfg):
     """Get a Microsoft Graph app-only token for SharePoint."""
     url = f"https://login.microsoftonline.com/{cfg['tenant_id']}/oauth2/v2.0/token"
-    resp = requests.post(url, data={
+    resp = send("POST",url, data={
         "grant_type": "client_credentials",
         "client_id": cfg["client_id"],
         "client_secret": cfg["client_secret"],
@@ -688,14 +739,14 @@ def fetch_sharepoint(cfg, query, tag_prefix, start_index):
 
     # Resolve the site id from its path, then search its drive for the query.
     host = "graph.microsoft.com"
-    site_resp = requests.get(
+    site_resp = send("GET",
         f"https://{host}/v1.0/sites/root:/{cfg['site_path']}",
         headers=headers, timeout=60)
     site_resp.raise_for_status()
     site_id = site_resp.json()["id"]
 
-    search_resp = requests.get(
-        f"https://{host}/v1.0/sites/{site_id}/drive/root/search(q='{query}')",
+    search_resp = send("GET",
+        sharepoint_search_url(site_id, query),
         headers=headers, timeout=60)
     search_resp.raise_for_status()
     files = search_resp.json().get("value", [])[: cfg["max_results"]]
