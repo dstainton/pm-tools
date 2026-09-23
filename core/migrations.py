@@ -145,6 +145,33 @@ def to_version_2(text):
 MIGRATIONS.append((1, to_version_2))
 
 
+def to_version_3(text):
+    """Add blocked names and the model run budget. Leave set values alone.
+
+    `blocked` is how the team spells "blocked". `model.total_timeout` caps
+    a whole command, on top of the per-call `timeout`. The model-result
+    cache TTL is filled in memory when the key is absent; it is written
+    here too so the file shows the knob.
+    """
+    if not has_top_level(text, "blocked"):
+        text = insert_missing_block(
+            text, "blocked",
+            ["  statuses: [Blocked]", "  labels: [blocked]"],
+            before_key="today")
+    if not has_top_level(text, "model"):
+        text = insert_missing_block(
+            text, "model", ["  total_timeout: 3600"], before_key="jira")
+    elif not _block_has_key(text, "model", "total_timeout"):
+        text = _insert_under(text, "model", "  total_timeout: 3600")
+    if has_top_level(text, "cache") and not _block_has_key(
+            text, "cache", "model_ttl_seconds"):
+        text = _insert_under(text, "cache", "  model_ttl_seconds: 604800")
+    return set_version(text, 3)
+
+
+MIGRATIONS.append((2, to_version_3))
+
+
 def apply_migrations(text, migrations, target):
     """Walk `migrations` until `text` is at `target`.
 

@@ -7,12 +7,12 @@ workstreams. Runs entirely against your own Jira / Confluence / SharePoint and
 your local model — nothing leaves your machine.
 
 Commands:
-    pm init              Create a starter config at ~/.pm/config.yaml.
+    pm init              Create a starter config at ~/.pm-tools/config.yaml.
     pm products          List, add, remove or check your products.
     pm workstreams       List, add, remove or check your workstreams.
     pm today             One bounded daily screen (the habit command).
     pm do N              Preview, then write, the action `pm today` numbered N.
-    pm doctor            Verify the setup; `--discover-fields` finds field IDs.
+    pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
@@ -27,6 +27,7 @@ Commands:
     pm brief             Meeting prep for one audience, or a debrief.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
+    pm warm              Fill the model cache ahead of time (read-only).
     pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement + work in progress (no model).
     pm update            Upgrade pm-tools and migrate the config. Never
@@ -34,16 +35,16 @@ Commands:
 
 Common options (every command except init and update):
   --config PATH        Path to the config file. If omitted, pm searches:
-                       1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm/config.yaml,
+                       1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm-tools/config.yaml,
                        4) the config.yaml shipped next to this file.
   --product NAMES      Only these products, by abbreviation or full name.
   --workstream NAMES   Only these workstreams, by abbreviation or full name.
                        Comma-separated, case-insensitive. e.g. --workstream SDX
                        or --workstream "Secure Data Exchange". Omit for all.
-  --cached             Reuse the fetch cache even if it is past its TTL.
-  --refresh            Ignore the fetch cache and talk to Jira again.
+  --cached             Reuse a cached Jira fetch or model reply past its TTL.
+  --refresh            Ignore cached Jira fetches and model replies.
   --out DIR            Write this run's files under DIR instead of
-                       output.directory (default ~/.pm/out).
+                       output.directory (default ~/.pm-tools/out).
 
 Examples:
   pm init
@@ -66,6 +67,7 @@ Examples:
   pm brief --for "Monthly portfolio review"
   pm report --publish --dry-run
   pm schedule add today --at 08:30
+  pm schedule add warm --at 07:00
   pm ready --deep --workstream sdx,itk
   pm daily --days 3 --by workstream
 """
@@ -78,12 +80,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core import cache as fetch_cache                           # noqa: E402
+from core import model as model_core                           # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
+from core.paths import config_file                          # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
 from commands import (report, lint, ready, init,                # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
-                      schedule, update, coverage, release_notes)
+                      schedule, update, coverage, release_notes, warm)
 
 
 def resolve_config_path(explicit):
@@ -92,7 +96,7 @@ def resolve_config_path(explicit):
     1. --config given on the command line.
     2. $PM_CONFIG environment variable.
     3. config.yaml in the current working directory.
-    4. ~/.pm/config.yaml  (the usual home for a global CLI's config).
+    4. ~/.pm-tools/config.yaml  (the usual home for a global CLI's config).
     5. config.yaml shipped next to this script (the bundled default).
 
     Returns the first that exists, or exits with guidance if none do.
@@ -103,7 +107,7 @@ def resolve_config_path(explicit):
     if os.environ.get("PM_CONFIG"):
         candidates.append(os.environ["PM_CONFIG"])
     candidates.append(os.path.join(os.getcwd(), "config.yaml"))
-    candidates.append(os.path.expanduser("~/.pm/config.yaml"))
+    candidates.append(os.path.expanduser(config_file()))
     candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "config.yaml"))
 
@@ -113,7 +117,7 @@ def resolve_config_path(explicit):
 
     sys.exit(
         "No config file found. Get started with:\n"
-        "  pm init                     # creates ~/.pm/config.yaml\n\n"
+        "  pm init                     # creates ~/.pm-tools/config.yaml\n\n"
         "Or point pm at an existing config by any of:\n"
         "  * running from a folder containing config.yaml\n"
         "  * setting PM_CONFIG=/path/to/config.yaml\n"
@@ -147,9 +151,10 @@ def build_parser():
                              "name, comma-separated (e.g. SDX or "
                              "\"Secure Data Exchange\"). Default: all.")
     common.add_argument("--cached", action="store_true",
-                        help="Reuse cached Jira fetches even if they are stale")
+                        help="Reuse cached Jira fetches and model replies "
+                             "even if they are stale")
     common.add_argument("--refresh", action="store_true",
-                        help="Ignore the fetch cache and query Jira again")
+                        help="Ignore cached Jira fetches and model replies")
     common.add_argument("--out", default=None, metavar="DIR",
                         help="Write this run's files under DIR instead of "
                              "output.directory")
@@ -164,15 +169,15 @@ def build_parser():
         dest="command", required=True,
         metavar="{init,products,workstreams,today,do,doctor,report,lint,"
                 "triage,refine,review,note,inbox,metrics,brief,publish,"
-                "schedule,ready,daily,coverage,release-notes,update}")
+                "schedule,ready,daily,coverage,release-notes,warm,update}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
-                            help="Create a starter config at ~/.pm/config.yaml")
+                            help="Create a starter config at ~/.pm-tools/config.yaml")
     p_init.add_argument("--force", action="store_true",
                         help="Overwrite an existing config")
     p_init.add_argument("--path", default=None,
-                        help="Write to a specific path instead of ~/.pm")
+                        help="Write to a specific path instead of ~/.pm-tools")
     p_init.set_defaults(func=init.run, needs_config=False)
 
     p_prod = sub.add_parser("products", parents=[common],
@@ -228,7 +233,7 @@ def build_parser():
     p_do.set_defaults(func=today.run_do, needs_config=True)
 
     p_doctor = sub.add_parser("doctor", parents=[common],
-                              help="Verify config, Jira, fields, model, cache")
+                              help="Verify config, Jira, statuses, fields, model, cache")
     p_doctor.add_argument("--discover-fields", action="store_true",
                           help="List custom-field IDs that look like story "
                                "points, start date, or acceptance criteria")
@@ -367,6 +372,22 @@ def build_parser():
                          help="With `add ready`, pass --fail-under through")
     p_sched.set_defaults(func=schedule.run, needs_config=True)
 
+    p_warm = sub.add_parser(
+        "warm", parents=[common],
+        help="Fill the model cache ahead of time (read-only)",
+        description="Fill the model cache so a later command only catches up. "
+                    "Read-only: no Jira writes, no report. With no flag, warms "
+                    "review, report, and inbox. Review also covers ready --deep.")
+    p_warm.add_argument("--review", action="store_true",
+                        help="Warm pm review (and pm ready --deep)")
+    p_warm.add_argument("--report", action="store_true",
+                        help="Warm pm report")
+    p_warm.add_argument("--deep", action="store_true",
+                        help="Same model work as --review")
+    p_warm.add_argument("--inbox", action="store_true",
+                        help="Warm suggestions for notes already in the inbox")
+    p_warm.set_defaults(func=warm.run, needs_config=True)
+
     p_ready = sub.add_parser(
         "ready", parents=[common],
         help="Team working agreement (pass/fail)",
@@ -417,7 +438,7 @@ def build_parser():
     p_update = sub.add_parser(
         "update", help="Upgrade pm-tools and migrate the config")
     p_update.add_argument("--config", default=None,
-                          help="Config file to migrate (default: ~/.pm/config.yaml)")
+                          help="Config file to migrate (default: ~/.pm-tools/config.yaml)")
     p_update.add_argument("--code-only", action="store_true",
                           help="Upgrade the program and leave the config untouched")
     p_update.add_argument("--config-only", action="store_true",
@@ -477,6 +498,7 @@ def main():
     elif getattr(args, "cached", False):
         cache_mode = "cached"
     fetch_cache.attach(cfg, mode=cache_mode)
+    model_core.attach(cfg, mode=cache_mode)
 
     # Narrow the workstreams once, centrally, so every command respects
     # --product and --workstream without needing its own logic. Commands

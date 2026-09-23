@@ -7,6 +7,7 @@ that clears it. `--apply N` uses the same write path as `pm do`.
 import datetime as dt
 import json
 import os
+import re
 import sys
 
 from commands import today as today_cmd
@@ -50,6 +51,33 @@ def _comment_text(comment):
     return " ".join(texts)
 
 
+def _mention_ids(comment):
+    """accountIds on ADF mention nodes. Plain text has none."""
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "mention":
+                account = str((node.get("attrs") or {}).get("id") or "")
+                if account:
+                    found.append(account)
+            for child in node.get("content") or []:
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(comment.get("body"))
+    return found
+
+
+def _name_mentioned(text, name):
+    """Whole-word match, so Sam does not match sample."""
+    if not name:
+        return False
+    return re.search(r"\b" + re.escape(name) + r"\b", text, re.IGNORECASE) is not None
+
+
 def _mentioned(issue, me, within_days, jira_cfg):
     if not within_days or not me:
         return False
@@ -58,6 +86,7 @@ def _mentioned(issue, me, within_days, jira_cfg):
         age = (dt.datetime.now(dt.timezone.utc) - updated).days
         if age > within_days:
             return False
+    account = str(me.get("accountId") or "")
     names = [n for n in (me.get("displayName"), me.get("emailAddress")) if n]
     try:
         comments = sources.fetch_comments(jira_cfg, issue["key"])
@@ -68,10 +97,24 @@ def _mentioned(issue, me, within_days, jira_cfg):
         created = today_cmd._parse_datetime(comment.get("created"))
         if created and created < cutoff:
             continue
-        text = _comment_text(comment).lower()
-        if any(name.lower() in text for name in names):
+        if account and account in _mention_ids(comment):
+            return True
+        text = _comment_text(comment)
+        if any(_name_mentioned(text, name) for name in names):
             return True
     return False
+
+
+def _is_blocked_by(link):
+    """This issue is blocked by the other one.
+
+    Jira's Blocks link says `blocks` outward and `is blocked by` inward.
+    Matching the substring `block` treated both directions as the same problem.
+    """
+    relation = (link.get("relation") or "").strip().lower()
+    if relation in ("is blocked by", "blocked by"):
+        return True
+    return link.get("direction") == "inward" and relation == "blocks"
 
 
 def _blocked_by_link(issue, jira_cfg):
@@ -80,7 +123,7 @@ def _blocked_by_link(issue, jira_cfg):
     except Exception:                              # noqa: BLE001
         return None
     for link in links:
-        if "block" in (link.get("relation") or ""):
+        if _is_blocked_by(link):
             return link
     return None
 
@@ -96,7 +139,7 @@ def _is_new_bug(issue, within_days):
     return (dt.datetime.now(dt.timezone.utc) - created).days <= within_days
 
 
-def classify(issue, opts, me, jira_cfg):
+def classify(issue, opts, me, jira_cfg, cfg=None):
     """Highest-priority triage kind, or None."""
     if today_cmd._is_done(issue):
         return None
@@ -104,7 +147,7 @@ def classify(issue, opts, me, jira_cfg):
         return None
     if opts["overdue"] and today_cmd._is_overdue(issue):
         return "overdue"
-    if opts["blocked"] and (today_cmd._is_blocked(issue)
+    if opts["blocked"] and (today_cmd._is_blocked(issue, cfg)
                             or _blocked_by_link(issue, jira_cfg)):
         return "blocked"
     if opts["unassigned_in_sprint"] and today_cmd._is_unassigned(issue):
@@ -114,7 +157,7 @@ def classify(issue, opts, me, jira_cfg):
     if _is_new_bug(issue, opts["new_bugs_within_days"]):
         return "new-bug"
     if opts["in_sprint_untouched_days"] and today_cmd.classify_need(
-            issue, opts["in_sprint_untouched_days"]) == "untouched":
+            issue, opts["in_sprint_untouched_days"], cfg=cfg) == "untouched":
         return "untouched"
     return None
 
@@ -156,7 +199,7 @@ def gather(cfg):
                       if jql else [])
             for issue in issues:
                 tagged = today_cmd._tag_issue(issue, ws, product)
-                kind = classify(tagged, opts, me, cfg["jira"])
+                kind = classify(tagged, opts, me, cfg["jira"], cfg=cfg)
                 if not kind:
                     continue
                 items.append((KIND_RANK[kind], tagged, kind))
@@ -171,8 +214,9 @@ def gather(cfg):
             "product": issue.get("product"),
             "workstream": issue.get("workstream"),
             "url": issue.get("url"),
-            "tags": today_cmd.need_tags(issue, kind if kind in
-                                        today_cmd.KIND_RANK else "unassigned"),
+            "tags": today_cmd.need_tags(
+                issue, kind if kind in today_cmd.KIND_RANK else "unassigned",
+                cfg=cfg),
             "description": describe(kind, issue),
             "preview": preview_for(kind, issue),
         })

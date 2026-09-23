@@ -1,7 +1,7 @@
 """A local fetch cache so repeated commands (and `pm today`) stay fast.
 
 Search results are stored as one JSON file per query under `cache.path`
-(default `~/.pm/cache`). A query is reused when it is younger than
+(default `~/.pm-tools/cache`). A query is reused when it is younger than
 `cache.ttl_seconds` (default 300).
 
 Run-time flags, set once on the Jira config by `attach`:
@@ -19,8 +19,10 @@ import json
 import os
 import time
 
+from core.paths import HOME
 
-DEFAULT_PATH = "~/.pm/cache"
+
+DEFAULT_PATH = HOME + "/cache"
 DEFAULT_TTL = 300
 
 

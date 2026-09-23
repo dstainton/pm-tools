@@ -8,7 +8,7 @@ on that key). Three verbs:
   assign   hidden from the default lint; it lives in that person's
            `pm refine` queue. Deliberately a person, not a role.
 
-The file lives in `state.shared_path` when that is set, otherwise `~/.pm`,
+The file lives in `state.shared_path` when that is set, otherwise `~/.pm-tools`,
 so the PM and the BA see the same memory.
 """
 

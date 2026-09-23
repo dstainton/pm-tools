@@ -36,7 +36,7 @@ $ErrorActionPreference = "Stop"
 $ModelRef = "mradermacher/Qwen3.8-27B-GGUF:Q3_K_M"
 $ModelAlias = "qwen-local"
 
-$PmHome = Join-Path $HOME ".pm"
+$PmHome = Join-Path $HOME ".pm-tools"
 $LlamaDir = Join-Path $PmHome "llama.cpp"
 $DownloadDir = Join-Path $PmHome "downloads"
 $ModelDir = Join-Path $PmHome "models"

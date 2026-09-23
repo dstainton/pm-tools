@@ -44,7 +44,7 @@ $ModelRepo = "ggml-org/Qwen3-4B-GGUF"
 $ModelFile = "Qwen3-4B-Q4_K_M.gguf"
 $ModelUrl = "https://huggingface.co/${ModelRepo}/resolve/main/${ModelFile}?download=true"
 
-$PmHome = Join-Path $HOME ".pm"
+$PmHome = Join-Path $HOME ".pm-tools"
 $LlamaDir = Join-Path $PmHome "llama.cpp"
 $ModelDir = Join-Path $PmHome "models"
 $DownloadDir = Join-Path $PmHome "downloads"

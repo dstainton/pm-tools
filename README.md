@@ -6,12 +6,12 @@ own Jira / Confluence / SharePoint and a **local** model — nothing leaves
 your laptop.
 
 ```
-pm init         Create a starter config at ~/.pm/config.yaml
+pm init         Create a starter config at ~/.pm-tools/config.yaml
 pm products     List, add, remove or check your products
 pm workstreams  List, add, remove or check your workstreams
 pm today        One bounded daily screen (the habit command)
 pm do N         Preview, then write, the numbered action from `pm today`
-pm doctor       Verify config, Jira, fields, model, cache
+pm doctor       Verify config, Jira, statuses, fields, model, cache
 pm report       Weekly state-of-product report (uses the local model)
 pm lint         Deterministic Product Backlog checks (no model — pure rules)
 pm triage       Queue of things waiting on a decision from you
@@ -25,6 +25,7 @@ pm release-notes  Done issues since a date or in a fixVersion
 pm brief        Meeting prep for one audience, or a debrief
 pm publish      Send a Markdown file to Confluence and/or Teams
 pm schedule     Register read-only commands on a timer
+pm warm         Fill the model cache ahead of time (read-only)
 pm ready        Team working agreement: pass/fail per ticket
 pm daily        Daily Scrum movement + work in progress (no model)
 pm update       Upgrade pm-tools and migrate the config (never replaces it)
@@ -33,8 +34,9 @@ pm update       Upgrade pm-tools and migrate the config (never replaces it)
 Every command except `init` and `update` can be scoped with `--product`
 and `--workstream`. Each accepts an abbreviation or the full name,
 comma-separated and case-insensitive. The two compose. `--cached` reuses a
-stale fetch cache; `--refresh` ignores it. `--out DIR` writes that run's
-files under DIR instead of `output.directory` (default `~/.pm/out`).
+stale Jira fetch or model reply; `--refresh` ignores both caches.
+`--out DIR` writes that run's files under DIR instead of `output.directory`
+(default `~/.pm-tools/out`).
 
 ---
 
@@ -55,7 +57,7 @@ pipx install git+https://github.com/dstainton/pm-tools.git
 pm init
 ```
 
-`pm init` copies a template to `~/.pm/config.yaml` and stops. Open that file
+`pm init` copies a template to `~/.pm-tools/config.yaml` and stops. Open that file
 and fill in the Jira URL, email, API token, project, and your products and
 workstreams. Then:
 
@@ -68,14 +70,16 @@ pm today
 is the habit command, from any directory.
 
 You also need a local OpenAI-compatible model server for `pm report`,
-`pm refine`, and `pm ready --deep` — see **The local model** below.
+`pm review`, `pm refine`, `pm ready --deep`, `pm inbox` suggestions,
+`pm brief --debrief`, and `pm warm` — see **The local model** below.
 `pm today`, `pm lint`, `pm triage`, `pm daily`, `pm doctor`, `pm note`,
 `pm coverage`, `pm metrics`, and the fast `pm ready` need no model at all.
 `pm release-notes` prints the issue list either way, and drafts prose only
-when the model is up.
+when the model is up. `pm warm` only calls the model for the commands you
+ask it to prepare.
 
 A later upgrade is `pm update`. It upgrades the program and adds new config
-keys. It does not replace `~/.pm/config.yaml`. `pm init --force` is the only
+keys. It does not replace `~/.pm-tools/config.yaml`. `pm init --force` is the only
 command that replaces that file.
 
 Developing pm-tools itself is a separate path: `pip install -e .` inside a
@@ -121,14 +125,14 @@ It searches, in order, and uses the first it finds:
 1. `--config /path/to/config.yaml` if you pass it
 2. the `PM_CONFIG` environment variable
 3. `config.yaml` in the current folder
-4. `~/.pm/config.yaml`  ← the tidy home for it
+4. `~/.pm-tools/config.yaml`  ← the tidy home for it
 5. the `config.yaml` shipped next to `pm.py` (the fallback)
 
 **`pm init` sets up option 4 for you** — it copies the bundled template to
-`~/.pm/config.yaml` so `pm` finds it automatically from then on:
+`~/.pm-tools/config.yaml` so `pm` finds it automatically from then on:
 
 ```
-pm init                 # create ~/.pm/config.yaml (won't overwrite)
+pm init                 # create ~/.pm-tools/config.yaml (won't overwrite)
 pm init --force         # replace an existing one
 pm init --path FILE     # write somewhere specific instead
 ```
@@ -152,7 +156,7 @@ the only command that does.
 > time. Handy for the API token.
 
 The report's `report_state.json` (the "what changed" memory) is written under
-`output.directory` (default `~/.pm/out`), so it stays in one place no matter
+`output.directory` (default `~/.pm-tools/out`), so it stays in one place no matter
 which folder you run `pm report` from.
 
 ---
@@ -160,9 +164,10 @@ which folder you run `pm report` from.
 ## The local model
 
 Only needed for `pm report`, `pm refine`, `pm review` (without `--apply`),
-`pm ready --deep`, the filing suggestion in `pm inbox`, and the prose draft
-in `pm release-notes`. The issue list in `pm release-notes` is chosen
-without the model.
+`pm ready --deep`, the filing suggestion in `pm inbox`, `pm brief --debrief`,
+`pm warm`, and the prose draft in `pm release-notes`. The issue list in
+`pm release-notes` is chosen without the model. `pm warm` only calls the
+model for the commands you ask it to prepare.
 
 The default config expects a local OpenAI-compatible endpoint at:
 
@@ -274,19 +279,21 @@ pm do 1                   # confirm once, then write
 The screen is the same shape every day: Sprint Goal (when Jira's Agile API
 exposes one), and under it a line when the sprint has an end date —
 "Sprint ends in N days. Not started: K. Blocked: M." That line does not
-name an issue or claim one is on the goal path. Then NEEDS YOU, movement
+name an issue or claim one is on the goal path. "Blocked" means a status or
+label listed under `blocked:` in the config (default: a status named Blocked,
+or a label named blocked), matched exactly. Then NEEDS YOU, movement
 since yesterday, aging in-progress work, and refinement gaps against the
 team's ready agreement. Numbered actions are
-written to `~/.pm/today.json` so the numbers still mean what they meant when
+written to `~/.pm-tools/today.json` so the numbers still mean what they meant when
 you walked away.
 
 `pm do N` prints the exact payload, asks once (`--yes` skips the prompt,
 `--dry-run` stops after the preview), writes to Jira, and appends a line to
-`~/.pm/write-log.jsonl`. Non-interactive runs must pass `--yes` or `--dry-run`.
+`~/.pm-tools/write-log.jsonl`. Non-interactive runs must pass `--yes` or `--dry-run`.
 
 ---
 
-## `pm doctor` and the fetch cache
+## `pm doctor` and the caches
 
 ```
 pm doctor
@@ -295,16 +302,19 @@ pm doctor --discover-fields --yes
 ```
 
 One command that names its own fix: config, Jira login, projects, custom-field
-IDs, membership (including unclaimed open work), the local model, and the
-cache. `--discover-fields` prints a YAML snippet and does not write the
+IDs, membership (including unclaimed open work), the project's status list,
+the local model (and how long a round trip took), and both caches.
+`--discover-fields` prints a YAML snippet and does not write the
 file. `pm doctor --discover-fields --yes` fills `story_points_field`,
 `start_date_field`, and `acceptance_criteria_field` only when those values
 are blank. It leaves a value you already set, and it does not write
 `epic_link_field`.
 
-Repeated fetches are cached under `~/.pm/cache` for five minutes. `pm today`
-depends on this to stay fast. `--cached` reuses a hit even if it is stale
-(a plane / offline run); `--refresh` talks to Jira again.
+Jira fetches are cached under `~/.pm-tools/cache` for five minutes. `pm today`
+depends on this to stay fast. Model replies are cached under
+`~/.pm-tools/cache/model` for seven days, keyed on the prompt, so an unchanged
+issue is not asked again. `--cached` reuses a hit even if it is stale
+(a plane / offline run); `--refresh` fetches and asks again.
 
 ---
 
@@ -339,7 +349,8 @@ every other setting exactly where it was, and refuse to write a file that
 wouldn't load. `check` is the one to run after any edit: it confirms the
 Component names exist in the project (and suggests close matches when they
 don't), counts the epics and directly tagged issues that carry them, and shows
-roughly how much work each command would see.
+roughly how much work each command would see. It also checks that each
+name in `blocked.statuses` is a real status on the project.
 
 ```text
 Secure Data Exchange (SDX)
@@ -468,10 +479,10 @@ sprint planning.
 | `bad-dates` | 🔴 error | Due before start, or due date passed but not done |
 | `missing-component` | 🟠 warn | No component set, in a legacy workstream that can't inherit one |
 | `missing-parent` | 🟠 warn | Story/task not linked to a parent |
-| `missing-acceptance-criteria` | 🟠 warn | No AC found on a story/bug |
+| `missing-acceptance-criteria` | 🟠 warn | No AC field, and the description has no criteria-shaped structure |
 | `no-estimate` | 🟠 warn | In-scope story with no story points |
 | `stale` | 🟠 warn | "In Progress" but untouched for *N* days |
-| `vague-title` | 🔵 review | Title too short or full of vague words |
+| `vague-title` | 🔵 review | Title too short, or only a vague word. A longer unclear title is `pm review titles` |
 
 Output: `lint_report_<date>.md`. Flags: `--severity error` (only hard problems),
 `--json` (machine-readable). Every threshold lives in the `lint:` config block.
@@ -488,11 +499,13 @@ pm lint --all
 `--assign --to` takes a person, not a role. It hides the finding from the
 default lint, lands it in that person's `pm refine` queue, and writes the
 Jira assignee after a preview. Memory lives in `state.shared_path` (a synced
-folder) when that is set, otherwise `~/.pm`.
+folder) when that is set, otherwise `~/.pm-tools`.
 
-> **Lint vs. refine.** `pm lint` uses cheap, reliable heuristics that never cry
-> wolf. `pm refine` drafts the missing title, criteria and estimate so the BA
-> edits instead of starting from a blank field.
+> **Lint vs. review.** `pm lint` only flags what a rule can know: a short
+> title, a title that is only a vague word, an empty acceptance-criteria
+> field. Whether a longer title is unclear, or whether criteria are testable,
+> is `pm review`. `pm refine` drafts the missing title, criteria and estimate
+> so the BA edits instead of starting from a blank field.
 
 ### `pm triage` — waiting on you
 
@@ -546,9 +559,11 @@ edit wins over the model suggestion. Filing still previews the Jira create.
 
 **No model.** Throughput, cycle time (median and 85th percentile), aging work
 in progress, sprint scope change, forecast accuracy (points Done vs forecast),
-and a plain landing date at the current weekly rate. `pm metrics --sprint`
-reports the open sprint: forecast points at the start, points done, points
-added after the start, and items carried in.
+and a plain landing date at the current weekly rate. Done and in-flight come
+from the status's category in Jira, not from the status name, so a workflow
+that says Complete still counts. Sprint scope change matches the sprint id.
+`pm metrics --sprint` reports the open sprint: forecast points at the start,
+points done, points added after the start, and items carried in.
 
 ```
 pm metrics --weeks 8
@@ -578,8 +593,15 @@ pm report --publish --dry-run
 pm publish weekly_report_2026-09-03.md --yes
 pm schedule add today --at 08:30
 pm schedule add report --weekly fri@16:00
+pm schedule add warm --at 07:00
 pm schedule list
+pm warm
 ```
+
+`pm warm` fills the model cache and writes nothing else. The morning
+`pm review` or `pm report` then reuses those replies and only calls the
+model for what changed. `--review`, `--report`, `--deep`, and `--inbox`
+warm one of those; with no flag it warms review, report, and inbox.
 
 On Windows, `scripts/register-pm-task.ps1` registers Task Scheduler entries.
 Elsewhere a `schedule.cron` snippet is written next to the job list.
@@ -647,7 +669,7 @@ pm daily --by workstream      # group WIP by workstream instead of by assignee
 pm daily --print              # also echo the snapshot to the terminal
 ```
 
-Output: `daily_<date>.md` under `output.directory` (default `~/.pm/out`). The "moved" list reads each issue's changelog and
+Output: `daily_<date>.md` under `output.directory` (default `~/.pm-tools/out`). The "moved" list reads each issue's changelog and
 shows the transition — e.g. **To Do → In Review by A. Lee (today 09:12)**. If a
 ticket hopped several statuses, it collapses to first-from → last-to so you see
 the net move at a glance. Scope it like anything else: `pm daily -w SDX`.
@@ -667,7 +689,8 @@ The window and the definition of "in progress" come from the `daily_moved` and
 - **Between meetings:** `pm note "..."` — file it from `pm inbox` later.
 - **Before a meeting:** `pm brief --for "Monthly portfolio review"`.
 - **End of week:** `pm report --publish` for the stakeholder snapshot.
-- **Once:** `pm schedule add today --at 08:30` and
+- **Once:** `pm schedule add today --at 08:30`,
+  `pm schedule add warm --at 07:00`, and
   `pm schedule add report --weekly fri@16:00`.
 
 ---
@@ -696,13 +719,16 @@ that check.
 pm-tools/
 ├── pyproject.toml       # packaging — this creates the `pm` and `pm-tools` commands
 ├── install.ps1          # Windows first install
-├── config.yaml          # template config (pm init copies it to ~/.pm)
+├── config.yaml          # template config (pm init copies it to ~/.pm-tools)
 ├── pm.py                # entry point: routes subcommands, applies --workstream
 ├── core/                # shared plumbing (tested, reused by every command)
 │   ├── config.py        #   loads config, expands ${ENV:VAR}, validates it all
 │   ├── config_edit.py   #   comment-preserving edits to the config file
 │   ├── products.py      #   product lookup, Unassigned, --product filter
 │   ├── cache.py         #   local fetch cache (--cached / --refresh)
+│   ├── model_cache.py   #   model replies, keyed on the prompt
+│   ├── blocked.py       #   which statuses and labels mean blocked
+│   ├── statuses.py      #   status id -> statusCategory
 │   ├── filters.py       #   plain scope options -> JQL
 │   ├── workstreams.py   #   Component + parent membership -> JQL
 │   ├── sources.py       #   Jira / Confluence / SharePoint fetchers
@@ -712,12 +738,13 @@ pm-tools/
 │   ├── metrics.py       #   throughput, cycle time, forecast, sprint snapshot
 │   ├── checklist.py     #   Product Goal sentence and Definition of Done
 │   ├── output.py        #   places files under output.directory
-│   ├── paths.py         #   local ~/.pm vs shared state folder
+│   ├── paths.py         #   local ~/.pm-tools vs shared state folder
 │   ├── migrations.py    #   config_version steps for pm update
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff
 ├── docs/
-│   ├── PLAN.md                # shipped install work through tranche 2
+│   ├── PLAN.md                # install plan; tranche status at the top
+│   ├── INFERENCE_PLAN.md      # tranche 3: judgements, cache, pm warm
 │   ├── FEATURE_PROPOSALS.md   # earlier code-first proposals
 │   ├── PORTFOLIO_PROPOSALS.md # the ten features that shipped
 │   └── TERMINOLOGY.md         # Scrum Guide vocabulary check
@@ -742,6 +769,7 @@ pm-tools/
     ├── brief.py         # pm brief
     ├── publish.py       # pm publish
     ├── schedule.py      # pm schedule
+    ├── warm.py          # pm warm
     ├── ready.py         # pm ready
     ├── daily.py         # pm daily
     └── update.py        # pm update
@@ -763,6 +791,12 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 `too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`,
 `pm release-notes`, and `pm inbox edit`. `config_version` 2 adds
 `ready.max_points` and leaves products alone.
+
+`docs/INFERENCE_PLAN.md` is tranche 3, shipped in 0.9.0. Status and sprint
+membership come from Jira ids, not English word lists. `pm lint` no longer
+treats a word list as a judgement. Model replies are cached, `pm warm` fills
+that cache, and `pm schedule add warm --at 07:00` runs it ahead of time.
+There is no background service.
 
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those
@@ -804,12 +838,18 @@ issue as being on the goal path.
 - **Custom field IDs matter.** If story points or start date point at the wrong
   field ID, those checks silently skip. Verify against the field list above.
 - **Deterministic vs. inference.** `pm lint` and the fast `pm ready` are rules
-  you can trust. `pm report`, `pm review`, `pm ready --deep`, and a
+  you can trust. `pm report`, `pm review`, `pm refine`, `pm ready --deep`,
+  `pm inbox` suggestions, `pm brief --debrief`, `pm warm`, and a
   `pm release-notes` draft use Qwen3.8
   Q3_K_M — read them before acting. A 3-bit quant is smaller and a bit less
   sharp than Q4; keep thinking off and `review.batch_size` at 8 or below.
-- **Speed.** `pm lint` is instant. Model command speed depends heavily on the local model and hardware; `--deep` and `review all` make several
-  calls, so scope them with `--workstream` when you want a quick pass.
+- **Speed.** `pm lint` is instant. Model commands pay per call, and the
+  reply is cached: a second run of the same unchanged work does not call the
+  model again. `pm warm` fills that cache, and `pm schedule add warm --at 07:00`
+  does it before you sit down. `pm doctor` times one round trip and later
+  commands print an estimate from that. `--deep` and `review all` still make
+  several calls the first time, so scope them with `--workstream` when you
+  want a quick pass.
 
 ---
 

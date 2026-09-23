@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.9.0 - 2026-09-23
+
+### Tranche 3
+
+- `pm metrics` classifies Done and in-flight from the project's status
+  category, using the status id on the changelog. A workflow named Complete
+  or Shipped counts. The old English name lists remain only when the status
+  list cannot be loaded. Sprint scope change matches sprint ids, so Sprint
+  42 no longer matches Sprint 421.
+- Blocked is configuration. `blocked.statuses` and `blocked.labels` match
+  exactly. The default is a status named Blocked and a label named blocked.
+  `Unblocked` does not count. `pm workstreams check` warns when a configured
+  status is not a status on the project.
+- `pm triage` treats an `@mention` as the account id on the comment, and
+  falls back to a whole-word name match. A link counts as blocked-by only
+  in that direction, not when this issue is the one doing the blocking.
+- `pm brief` loads risk pages by the Confluence label, not by the word
+  "risk" in the title.
+- `pm lint` flags a title that is too short or that is only a vague word.
+  It no longer flags a clear title because it contains "fix". Acceptance
+  criteria count when the field is filled, or the description has an
+  acceptance-criteria heading or a Given/When/Then scenario. The word
+  "when" on its own does not. Both findings point at `pm review`.
+- Model replies are cached under the fetch cache, keyed on the prompt.
+  `--cached` and `--refresh` apply. A second `pm inbox` on an unchanged
+  inbox does not call the model. `model.total_timeout` caps a whole run.
+  A multi-call command prints the call count and an estimate from the
+  round trip `pm doctor` last measured.
+- `pm warm` fills that cache. It is read-only. `pm schedule add warm --at
+  07:00` runs it on the scheduler that already ships. There is no
+  background service.
+
+### Config
+
+- User data lives in `~/.pm-tools`: the config, the cache, output files,
+  `today.json`, the write log, and `schedule.json`. The Windows setup
+  scripts keep llama.cpp and the model files there too. Nothing was
+  installed under `~/.pm`, so there is no move.
+- `config_version` 3. `pm update` inserts `blocked.statuses`,
+  `blocked.labels`, `model.total_timeout`, and `cache.model_ttl_seconds`
+  when those keys are missing. A value you already set is not replaced.
+  Products and workstreams are left alone.
+
 ## 0.8.0 - 2026-09-23
 
 ### Tranche 2
@@ -47,7 +90,7 @@
 - First install is `install.ps1` on Windows, or `pipx install` of the GitHub
   repo elsewhere, then `pm init`. The Qwen setup scripts no longer install
   the CLI.
-- `pm update` upgrades the installed program, then migrates `~/.pm/config.yaml`.
+- `pm update` upgrades the installed program, then migrates `~/.pm-tools/config.yaml`.
   It never replaces that file. `config_version: 1` is the shape `pm init`
   writes. There is no migration from older shapes, because this is the first
   install.
@@ -57,7 +100,7 @@
 ### The first config
 
 - Reports, lint, ready, daily, refine, metrics, and brief files go to
-  `output.directory` (`~/.pm/out`), including `report_state.json`.
+  `output.directory` (`~/.pm-tools/out`), including `report_state.json`.
 - `pm daily` replaces `pm standup`. Scopes are `daily_moved` and `daily_wip`.
 - Lint says `missing-parent`. The ready criterion is `linked-to-parent`.
 - `pm lint --fail-on` and `pm ready --fail-under` exit non-zero. The default
@@ -108,7 +151,7 @@
 
 - One write path: preview the payload, confirm once (`--yes` skips the
   prompt, `--dry-run` stops after preview), send, append a line to
-  `~/.pm/write-log.jsonl`. Nothing on this path runs on a schedule.
+  `~/.pm-tools/write-log.jsonl`. Nothing on this path runs on a schedule.
 - Non-interactive runs (tests, scripts, a missing TTY) must pass `--yes`
   or `--dry-run`. A hang waiting for input is refused.
 - `pm do N` now writes after that confirmation.
@@ -122,7 +165,7 @@
   lint, lands it in that person's refine queue, and writes the Jira
   assignee. A person, not a role.
 - Memory lives in `state.shared_path` when that is set (a synced folder
-  so the PM and the BA see the same queues), otherwise `~/.pm`. Cache,
+  so the PM and the BA see the same queues), otherwise `~/.pm-tools`. Cache,
   write-log and `today.json` stay local.
 
 ### `pm triage`
@@ -174,7 +217,7 @@
 ### Fetch cache and `pm doctor`
 
 - Jira searches (and approximate counts) are cached under `cache.path`
-  (default `~/.pm/cache`) for `cache.ttl_seconds` (default 300). `--cached`
+  (default `~/.pm-tools/cache`) for `cache.ttl_seconds` (default 300). `--cached`
   reuses a hit even if it is stale; `--refresh` ignores the cache. The two
   flags cannot be combined.
 - `pm doctor` verifies config, Jira credentials, every project in play,
@@ -187,7 +230,7 @@
 - `pm today` is the habit command: Sprint Goal (when the Agile API is there),
   a capped NEEDS YOU list, movement since yesterday, aging in-progress work,
   and refinement gaps against the team's ready agreement.
-- Numbered actions are written to `today.state_file` (default `~/.pm/today.json`).
+- Numbered actions are written to `today.state_file` (default `~/.pm-tools/today.json`).
 - `pm do N` prints the exact Jira payload that action would send, then stops.
   Writes are not enabled in this release.
 

@@ -1,7 +1,7 @@
 """`pm update` — upgrade the installed code, then the config.
 
 The code upgrade depends on how pm-tools was installed. The config upgrade
-never replaces `~/.pm/config.yaml`. It walks migrations until
+never replaces `~/.pm-tools/config.yaml`. It walks migrations until
 `config_version` matches the installed template, and it writes only when
 that result still validates.
 
@@ -26,6 +26,7 @@ from core import config as config_core
 from core.migrations import (MigrationError, apply_migrations,
                              bundled_template_path, read_version,
                              template_version)
+from core.paths import config_file
 
 
 SECRET_KEYS = ("api_token", "client_secret", "webhook")
@@ -40,7 +41,7 @@ def user_config_path(explicit=None):
     elif os.environ.get("PM_CONFIG"):
         path = os.environ["PM_CONFIG"]
     else:
-        path = "~/.pm/config.yaml"
+        path = config_file()
     path = os.path.abspath(os.path.expanduser(path))
     if not os.path.exists(path):
         sys.exit(f"No config at {path}.\n"
@@ -50,7 +51,7 @@ def user_config_path(explicit=None):
     if os.path.abspath(path) == template or _is_inside(path, package_root):
         sys.exit(f"Refusing to edit {path}.\n"
                  "That file is part of the pm-tools install. "
-                 "Your config lives at ~/.pm/config.yaml.")
+                 f"Your config lives at {config_file()}.")
     return path
 
 

@@ -237,6 +237,28 @@ def fetch_project_components(cfg, project):
     return [c.get("name") for c in resp.json() if c.get("name")]
 
 
+def fetch_project_statuses(cfg, project):
+    """Every status on a project, with its statusCategory key.
+
+    Jira returns one entry per issue type, each with its own status list.
+    The same status id can appear under several types; callers de-duplicate.
+    """
+    resp = send("GET", _api(cfg, f"project/{project}/statuses"),
+                auth=_auth(cfg),
+                headers={"Accept": "application/json"}, timeout=60)
+    resp.raise_for_status()
+    rows = []
+    for issue_type in resp.json() or []:
+        for status in issue_type.get("statuses") or []:
+            category = ((status.get("statusCategory") or {}).get("key") or "")
+            rows.append({
+                "id": str(status.get("id") or ""),
+                "name": status.get("name") or "",
+                "category": category,
+            })
+    return rows
+
+
 def fetch_comments(cfg, key):
     """Comments on one issue, newest last."""
     resp = send("GET",_api(cfg, f"issue/{key}/comment"),
@@ -262,6 +284,7 @@ def fetch_issue_links(cfg, key):
         links.append({
             "type": rel.get("name") or "",
             "relation": (name or "").lower(),
+            "direction": direction,
             "key": other.get("key"),
             "summary": ((other.get("fields") or {}).get("summary") or ""),
         })
@@ -568,14 +591,17 @@ def fetch_jira_changelog(cfg, jql, since_days, max_results=None):
             if when is None or when < cutoff:
                 continue
             for it in hist.get("items", []):
-                if it.get("field") == "status":
-                    transitions.append({
-                        "from": it.get("fromString") or "?",
-                        "to": it.get("toString") or "?",
-                        "when": when,
-                        "who": (hist.get("author") or {}).get("displayName",
-                                                              ""),
-                    })
+                if (it.get("field") or "").lower() != "status":
+                    continue
+                transitions.append({
+                    "field": "status",
+                    "from": it.get("fromString") or "?",
+                    "to": it.get("toString") or "?",
+                    "from_id": it.get("from") or "",
+                    "to_id": it.get("to") or "",
+                    "when": when,
+                    "who": (hist.get("author") or {}).get("displayName", ""),
+                })
         if not transitions:
             continue
         transitions.sort(key=lambda t: t["when"])
@@ -643,6 +669,8 @@ def fetch_jira_history(cfg, jql, max_results=None):
                     "field": field,
                     "from": it.get("fromString") or "",
                     "to": it.get("toString") or "",
+                    "from_id": it.get("from") or "",
+                    "to_id": it.get("to") or "",
                     "when": when,
                     "who": (hist.get("author") or {}).get("displayName", ""),
                 })

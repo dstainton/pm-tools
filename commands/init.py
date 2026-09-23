@@ -1,12 +1,12 @@
 """`pm init` — create a starter config in the standard location.
 
 On first run there's usually no config yet. This copies the bundled template
-(the config.yaml shipped next to the code) to ~/.pm/config.yaml — the tidy home
+(the config.yaml shipped next to the code) to ~/.pm-tools/config.yaml — the tidy home
 a globally-installed `pm` looks in — so you can fill it in and immediately run
 `pm lint` from anywhere.
 
-  pm init                 Create ~/.pm/config.yaml (won't overwrite).
-  pm init --force         Overwrite an existing ~/.pm/config.yaml.
+  pm init                 Create ~/.pm-tools/config.yaml (won't overwrite).
+  pm init --force         Overwrite an existing ~/.pm-tools/config.yaml.
   pm init --path FILE     Write to a specific location instead.
 
 This command deliberately does NOT load or validate config, so it works even
@@ -18,6 +18,7 @@ import shutil
 import sys
 
 from core.migrations import bundled_template_path
+from core.paths import config_file
 
 
 def run(args):
@@ -31,7 +32,7 @@ def run(args):
     if getattr(args, "path", None):
         dest = os.path.expanduser(args.path)
     else:
-        dest = os.path.expanduser("~/.pm/config.yaml")
+        dest = os.path.expanduser(config_file())
 
     # Don't clobber an existing config unless asked.
     if os.path.exists(dest) and not getattr(args, "force", False):

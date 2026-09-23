@@ -90,8 +90,25 @@ CRITERIA_USER_TAIL = "Return the JSON array now."
 # ---------------------------------------------------------------------------
 
 def _batches(items, size):
+    size = max(1, int(size or 8))
     for i in range(0, len(items), size):
         yield items[i:i + size]
+
+
+def candidates_for(aspect, issues):
+    if aspect == "titles":
+        return list(issues)
+    return [i for i in issues if (i.get("issuetype") or "").lower() in ("story", "bug")]
+
+
+def call_count(aspects, issues, batch_size):
+    total = 0
+    size = max(1, int(batch_size or 8))
+    for aspect in aspects:
+        count = len(candidates_for(aspect, issues))
+        if count:
+            total += (count + size - 1) // size
+    return total
 
 
 def build_titles_input(issues):
@@ -126,17 +143,19 @@ def review_aspect(model_cfg, aspect, issues, batch_size):
     """Return (findings, errors) for one aspect over one workstream."""
     if aspect == "titles":
         prompt, builder, keys = TITLES_PROMPT, build_titles_input, ("problem", "suggestion")
-        candidates = issues
+        candidates = candidates_for(aspect, issues)
     else:  # criteria — only look at story-type issues
         prompt, builder = CRITERIA_PROMPT, build_criteria_input
         keys = ("problem", "missing")
-        candidates = [i for i in issues
-                      if (i["issuetype"] or "").lower() in ("story", "bug")]
+        candidates = candidates_for(aspect, issues)
 
     valid_keys = {i["key"] for i in candidates}
     findings, errors = [], []
 
     for batch in _batches(candidates, batch_size):
+        detail = model_cfg.get("_progress_detail")
+        if detail:
+            model.tick(model_cfg, detail)
         user_content = builder(batch)
         data, err = model.call_model_json(model_cfg, prompt, user_content)
         if err:
@@ -220,29 +239,32 @@ def build_markdown(cfg, aspect, results, any_errors):
 #  Entry point
 # ---------------------------------------------------------------------------
 
-def run(cfg, args):
-    review_cfg = cfg.get("review", {})
-    batch_size = review_cfg.get("batch_size", 8)
-    aspect = getattr(args, "aspect", "all")
-    aspects = ["titles", "criteria"] if aspect == "all" else [aspect]
-
-    any_errors = False
-    # We build one report per aspect so titles and criteria stay separate.
+def evaluate(cfg, aspects, batch_size=None):
+    """Ask the model. Returns [(aspect, results, any_errors)]. Writes nothing."""
+    if batch_size is None:
+        batch_size = cfg.get("review", {}).get("batch_size", 8)
+    produced = []
     for asp in aspects:
-        results = []
+        any_errors = False
+        prepared = []
         for ws in cfg["_workstreams"]:
             jql = workstreams.scope_jql(cfg, ws, "review")
             if not jql:
                 print(f"Skipping {ws['abbrev']}: nothing in its review scope.")
-                results.append((ws, [], {}))
+                prepared.append((ws, []))
                 continue
-
             print(f"Reviewing {asp}: {ws['name']} ({ws['abbrev']}) ...")
-            issues = sources.fetch_jira_detailed(cfg["jira"], jql)
+            prepared.append((ws, sources.fetch_jira_detailed(cfg["jira"], jql)))
+        total = sum(call_count([asp], issues, batch_size)
+                    for _ws, issues in prepared)
+        model.announce(cfg["model"], total, f"pm review {asp}")
+        results = []
+        for ws, issues in prepared:
             lookup = {i["key"]: i for i in issues}
-
+            cfg["model"]["_progress_detail"] = f"{ws['abbrev']}, {asp}"
             findings, errors = review_aspect(cfg["model"], asp, issues,
                                              batch_size)
+            cfg["model"].pop("_progress_detail", None)
             if errors:
                 any_errors = True
                 print(f"  ({len(errors)} batch(es) could not be parsed)")
@@ -250,6 +272,16 @@ def run(cfg, args):
                   f"{len(findings)} flagged.")
             results.append((ws, findings, lookup))
 
+        produced.append((asp, results, any_errors))
+    return produced
+
+
+def run(cfg, args):
+    review_cfg = cfg.get("review", {})
+    batch_size = review_cfg.get("batch_size", 8)
+    aspect = getattr(args, "aspect", "all")
+    aspects = ["titles", "criteria"] if aspect == "all" else [aspect]
+    for asp, results, any_errors in evaluate(cfg, aspects, batch_size):
         report = build_markdown(cfg, asp, results, any_errors)
         out_path = output.place(
             cfg, f"review_{asp}_{dt.date.today().isoformat()}.md",

@@ -265,6 +265,34 @@ def connect_jira(cfg):
                  f"Check jira.base_url, jira.email and jira.api_token.")
 
 
+def _check_blocked_names(cfg):
+    """Configured blocked statuses should exist on the project."""
+    from core import blocked as blocked_core
+    statuses, _labels = blocked_core.names(cfg)
+    problems = 0
+    seen = set()
+    for ws in cfg.get("_workstreams") or []:
+        project = ws_core.project_of(cfg, ws)
+        if not project or project in seen:
+            continue
+        seen.add(project)
+        try:
+            rows = sources.fetch_project_statuses(cfg["jira"], project)
+        except Exception as err:                   # noqa: BLE001
+            print(f"Could not list statuses for {project}: {err}")
+            problems += 1
+            continue
+        known = {(row.get("name") or "").strip().lower() for row in rows}
+        if not known:
+            continue
+        missing = [name for name in statuses if name not in known]
+        if missing:
+            print(f"{project}: blocked status not in Jira: {', '.join(missing)}. "
+                  f"Set blocked.statuses to the names this workflow uses.")
+            problems += 1
+    return problems
+
+
 def _check(cfg, args):
     connect_jira(cfg)
     problems = 0
@@ -272,6 +300,7 @@ def _check(cfg, args):
         print(f"{ws.get('name')} ({ws.get('abbrev')})")
         problems += check_one(cfg, ws, args)
         print("")
+    problems += _check_blocked_names(cfg)
 
     if problems:
         print(f"{problems} problem(s) found. Fix the config, or the Component "

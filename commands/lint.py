@@ -6,8 +6,9 @@ so you can trust the output completely and run it before every sprint planning.
 Rules (all tunable in config under `lint:`):
   * missing-component            field hygiene (idea 3)
   * missing-parent                field hygiene (idea 3)
-  * vague-title                  cheap heuristic version of idea 1
-  * missing-acceptance-criteria  keyword version of idea 2
+  * vague-title                  too short, or only a vague word
+  * missing-acceptance-criteria  the field is empty and the description
+                                 has no criteria-shaped structure
   * no-estimate                  unestimated in-scope stories
   * bad-dates                    due before start / due in past (idea 4)
   * stale                        in progress but untouched for N days
@@ -65,6 +66,35 @@ def parse_datetime(value):
 #  The checks — one issue in, a list of findings out
 # ---------------------------------------------------------------------------
 
+_GHERKIN = re.compile(r"\bgiven\b.+\bwhen\b.+\bthen\b", re.IGNORECASE | re.DOTALL)
+
+
+def _has_criteria(issue):
+    """True when criteria are a fact, not a guess from a common word.
+
+    The acceptance-criteria field being filled is a fact. So is a description
+    that names an "acceptance criteria" heading, or that states Given / When /
+    Then as a scenario. The word "when" on its own is not.
+    """
+    field = (issue.get("acceptance_criteria") or "").strip()
+    if field:
+        return True
+    text = issue.get("description") or ""
+    if not text.strip():
+        return False
+    lowered = text.lower()
+    if "acceptance criteria" in lowered or re.search(r"\bac:", lowered):
+        return True
+    if _GHERKIN.search(text):
+        return True
+    starters = set()
+    for line in text.splitlines():
+        word = line.strip().split(" ", 1)[0].lower().rstrip(":") if line.strip() else ""
+        if word in ("given", "when", "then"):
+            starters.add(word)
+    return len(starters) >= 2
+
+
 def check_issue(issue, lint_cfg, component_inherited=False):
     findings = []
     itype = (issue["issuetype"] or "").lower()
@@ -95,40 +125,30 @@ def check_issue(issue, lint_cfg, component_inherited=False):
         add("missing-parent", "warn", "Not linked to a parent.")
 
     # --- Vague title -------------------------------------------------------
+    # Length, and a title that is only a vague word, are rules. Whether a
+    # longer title is unclear is a judgement: `pm review titles` makes it.
     title = (issue["summary"] or "").strip()
-    tokens = set(re.findall(r"[a-z0-9]+", title.lower()))
     min_words = lint_cfg.get("min_title_words", 3)
+    alone = [t.lower() for t in lint_cfg.get("vague_title_alone", [])]
+    normalized = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
     if len(title.split()) < min_words:
         add("vague-title", "review",
-            f"Title is only {len(title.split())} word(s); may be too vague.")
-    else:
-        alone = [t.lower() for t in lint_cfg.get("vague_title_alone", [])]
-        normalized = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
-        if normalized in alone:
-            add("vague-title", "review",
-                f"Title is only the vague word {normalized!r}.")
-        else:
-            vague = [t.lower() for t in lint_cfg.get("vague_title_terms", [])]
-            hits = [t for t in vague if t in tokens]
-            if hits:
-                add("vague-title", "review",
-                    f"Title contains vague term(s): {', '.join(sorted(hits))}.")
+            f"Title is only {len(title.split())} word(s). "
+            f"Run `pm review titles` for a judgement.")
+    elif normalized in alone:
+        add("vague-title", "review",
+            f"Title is only the vague word {normalized!r}. "
+            f"Run `pm review titles` for a judgement.")
 
     # --- Missing acceptance criteria (stories/bugs) -----------------------
     story_types = [t.lower() for t in lint_cfg.get("story_types",
                                                    ["story", "bug"])]
     if lint_cfg.get("require_acceptance_criteria", True) and itype in story_types:
-        if issue["acceptance_criteria"].strip():
-            has_ac = True
-        else:
-            markers = [m.lower() for m in
-                       lint_cfg.get("acceptance_criteria_markers", [])]
-            haystack = (issue["acceptance_criteria"] + " "
-                        + issue["description"]).lower()
-            has_ac = any(m in haystack for m in markers)
+        has_ac = _has_criteria(issue)
         if not has_ac:
             add("missing-acceptance-criteria", "warn",
-                "No acceptance criteria found.")
+                "No acceptance criteria found. "
+                "Run `pm review criteria` for a judgement.")
 
     # --- Missing estimate (stories only, and only if in scope) ------------
     if lint_cfg.get("require_estimate", True) and itype == "story" \

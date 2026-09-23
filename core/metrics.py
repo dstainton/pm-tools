@@ -26,6 +26,23 @@ def is_in_flight_name(value):
     return text in IN_FLIGHT_NAMES or "progress" in text or "review" in text
 
 
+def transition_category(transition):
+    """`done`, `indeterminate`, `new`, or "" for one status transition.
+
+    `to_category` wins. It is stamped from the project's status list, so a
+    status named Complete is done without being in the English name list.
+    The name lists are the fallback when that stamp is missing.
+    """
+    category = (transition.get("to_category") or "").strip().lower()
+    if category in ("done", "indeterminate", "new"):
+        return category
+    if is_done_name(transition.get("to")):
+        return "done"
+    if is_in_flight_name(transition.get("to")):
+        return "indeterminate"
+    return ""
+
+
 def _when_date(value):
     if isinstance(value, dt.datetime):
         return value.date()
@@ -42,7 +59,7 @@ def _when_date(value):
 def first_in_flight(issue):
     """When the issue first entered an in-flight status."""
     for tr in issue.get("transitions") or []:
-        if tr.get("field") == "status" and is_in_flight_name(tr.get("to")):
+        if tr.get("field") == "status" and transition_category(tr) == "indeterminate":
             return _when_date(tr.get("when"))
     return None
 
@@ -50,7 +67,7 @@ def first_in_flight(issue):
 def done_on(issue):
     """The date the issue first reached Done, or None."""
     for tr in issue.get("transitions") or []:
-        if tr.get("field") == "status" and is_done_name(tr.get("to")):
+        if tr.get("field") == "status" and transition_category(tr) == "done":
             return _when_date(tr.get("when"))
     if (issue.get("status_category") or "").lower() == "done":
         return _when_date(issue.get("updated"))
@@ -154,22 +171,51 @@ def aging_wip(issues, today=None, limit=8):
     return rows[:limit], len(rows)
 
 
+def _sprint_tokens(value):
+    """Comma-separated changelog values, as exact tokens."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        parts = value
+    else:
+        parts = str(value).split(",")
+    return [str(part).strip() for part in parts if str(part).strip()]
+
+
+def _added_to_sprint(transition, sprint):
+    """True when this changelog row pulled `sprint` in.
+
+    Sprint ids are exact. A name is an exact token of the comma-separated
+    list, so Sprint 42 does not match Sprint 421. Ids win when the changelog
+    recorded them.
+    """
+    sprint_id = str((sprint or {}).get("id") or "").strip()
+    to_ids = _sprint_tokens(transition.get("to_id"))
+    from_ids = _sprint_tokens(transition.get("from_id"))
+    if sprint_id and (to_ids or from_ids):
+        return sprint_id in to_ids and sprint_id not in from_ids
+    name = (sprint.get("name") or "").strip().lower()
+    if not name:
+        return False
+    to_names = [part.lower() for part in _sprint_tokens(transition.get("to"))]
+    from_names = [part.lower() for part in _sprint_tokens(transition.get("from"))]
+    return name in to_names and name not in from_names
+
+
 def sprint_scope_change(issues, sprint):
-    """Items added to the named sprint after it started."""
+    """Items added to the sprint after it started."""
     if not sprint or not sprint.get("start"):
         return {"added": 0, "keys": []}
     start = _when_date(sprint.get("start"))
     if not start:
         return {"added": 0, "keys": []}
-    name = (sprint.get("name") or "").lower()
     keys = []
     for issue in issues:
         for tr in issue.get("transitions") or []:
             if tr.get("field") != "sprint":
                 continue
             when = _when_date(tr.get("when"))
-            to = (tr.get("to") or "").lower()
-            if when and when > start and name and name in to:
+            if when and when > start and _added_to_sprint(tr, sprint):
                 keys.append(issue.get("key"))
                 break
     return {"added": len(keys), "keys": keys}

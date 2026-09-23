@@ -97,7 +97,9 @@ def _list(cfg, args):
     if not notes:
         print("Inbox is empty. Capture with:  pm note \"...\"")
         return
+    model.announce(cfg["model"], len(notes), "pm inbox")
     for note in notes:
+        model.tick(cfg["model"], f"note {note['n']}")
         print(f"#{note['n']}  {note['text']}")
         print(f"    {note.get('at', '')[:16].replace('T', ' ')}")
         suggestion = _suggest(cfg, note)

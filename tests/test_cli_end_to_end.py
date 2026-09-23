@@ -161,7 +161,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
-config_version: 2
+config_version: 3
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -785,6 +785,11 @@ class TriageTests(CliTestCase):
 
 class RefineTests(CliTestCase):
     def test_refine_writes_a_worksheet_with_drafts(self):
+        # `pm refine --apply` rewrites the summary on the shared fake. A clear
+        # title is no longer a lint finding, so put the short title back.
+        for issue in self.jira.server.RequestHandlerClass.backlog:
+            if issue["key"] == "APS-11":
+                issue["summary"] = "Fix stuff"
         out = self.run_pm("refine", "-w", "SDX")
         self.assertIn("Drafts in refine_SDX_", out)
         text = self.read_output(r"refine_SDX_.*\.md")

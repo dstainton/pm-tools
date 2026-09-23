@@ -5,7 +5,7 @@ Contract, settled 2026-09-03:
 * Preview the payload.
 * Confirm once (`--yes` skips the prompt; `--dry-run` stops after preview).
 * Send.
-* Append a line to `~/.pm/write-log.jsonl`.
+* Append a line to `~/.pm-tools/write-log.jsonl`.
 * Nothing on this path runs on a schedule.
 
 Non-interactive runs (tests, scripts) must pass `--yes` or `--dry-run`.

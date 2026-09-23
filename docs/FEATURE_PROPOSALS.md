@@ -8,9 +8,12 @@ priority order, with a config sketch for each.
 > **Historical.** The ten portfolio features shipped in 0.4.0–0.6.0; see
 > `docs/PORTFOLIO_PROPOSALS.md`. Install, `pm update`, and `pm daily` shipped
 > in 0.7.0. `pm coverage`, `pm release-notes`, and `pm metrics --sprint`
-> shipped in 0.8.0; see `docs/PLAN.md`. Where this document says `pm standup`,
-> the command is now `pm daily`. Part 1 describes the tool as it was when this
-> note was written, not the current tree.
+> shipped in 0.8.0; see `docs/PLAN.md`. Tranche 3 shipped in 0.9.0; see
+> `docs/INFERENCE_PLAN.md`. The `vague_title_terms` row below is done: a
+> title is flagged for being short or for being only a vague word, not for
+> containing one. Where this document says `pm standup`, the command is now
+> `pm daily`. Part 1 describes the tool as it was when this note was written,
+> not the current tree. User data lives in `~/.pm-tools`.
 
 Two constraints shape every proposal here:
 
@@ -34,7 +37,7 @@ JSON example — the shape that quant follows.
 
 | Command | Model? | Answers |
 |---------|--------|---------|
-| `pm init` | no | Copy the config template to `~/.pm/config.yaml` |
+| `pm init` | no | Copy the config template to `~/.pm-tools/config.yaml` |
 | `pm workstreams` | no | What's configured, and does Jira agree with it |
 | `pm report` | yes | The weekly state-of-product write-up, plus what changed since last week |
 | `pm lint` | no | Deterministic backlog hygiene findings |
@@ -45,7 +48,7 @@ JSON example — the shape that quant follows.
 The design that makes it hang together:
 
 - **One config, discovered in a fixed order** (`--config`, `$PM_CONFIG`, `./`,
-  `~/.pm/`, bundled), with `${ENV:VAR}` expansion so the API token can stay out
+  `~/.pm-tools/`, bundled), with `${ENV:VAR}` expansion so the API token can stay out
   of the file.
 - **Workstreams resolved centrally.** `pm.py` narrows the list once from
   `--workstream`, and every command reads `cfg['_workstreams']`, so a new
@@ -94,14 +97,14 @@ output directory is writable. A first-run PM finds out one command at a time.
 
 ```
 pm doctor
-  config          ~/.pm/config.yaml — 14 settings, 3 workstreams        ok
+  config          ~/.pm-tools/config.yaml — 14 settings, 3 workstreams        ok
   jira            connected as Dana Stainton (APS project visible)      ok
   custom fields   story points customfield_10016                        ok
                   start date customfield_10015                          MISSING
   workstreams     SDX 11 items · APS 7 · ITK 1                          ok
   confluence      space SDX reachable, 4 pages in the last 7 days       ok
   model           qwen-local answered in 1.8s                           ok
-  output          ~/.pm writable                                        ok
+  output          ~/.pm-tools writable                                        ok
 ```
 
 Touches: one new `commands/doctor.py` reusing the checks in
@@ -148,7 +151,7 @@ membership clauses, so no new config. Low risk, high diagnostic value.
 
 Every command writes `<name>_<date>.md` into the current directory. That makes
 `report_state.json` position-dependent (the README has to tell people to always
-run from `~/.pm`) and makes automation awkward.
+run from `~/.pm-tools`) and makes automation awkward.
 
 ```yaml
 output:
@@ -180,7 +183,7 @@ someone a report, means hammering Jira and waiting each time.
 ```yaml
 cache:
   enabled: true
-  directory: "~/.pm/cache"
+  directory: "~/.pm-tools/cache"
   ttl_minutes: 30
 ```
 
@@ -358,7 +361,7 @@ that's the target laptop) would catch exactly the class of breakage that made
 #### 19. Keep the token out of a plaintext file entirely
 
 `${ENV:VAR}` helps, but the default path still ends with a token in
-`~/.pm/config.yaml`. `keyring` support (Windows Credential Manager, macOS
+`~/.pm-tools/config.yaml`. `keyring` support (Windows Credential Manager, macOS
 Keychain, Secret Service) would let the config say
 `api_token: "${KEYRING:pm/jira}"`. Small change to `core/config.py`, one optional
 dependency.

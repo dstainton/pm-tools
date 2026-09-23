@@ -11,6 +11,7 @@ import sys
 import yaml
 
 from core import filters, products as product_core, workstreams as ws_core
+from core.paths import HOME
 
 
 # Filled in memory when a block or key is absent. This does not write the file.
@@ -25,10 +26,11 @@ SECTION_DEFAULTS = {
         "presence_penalty": 1.5,
         "max_tokens": 2048,
         "timeout": 600,
+        "total_timeout": 3600,
         "enable_thinking": False,
     },
     "output": {
-        "directory": "~/.pm/out",
+        "directory": HOME + "/out",
         "file": "weekly_report_{date}.md",
         "audience": "stakeholders",
         "state_file": "report_state.json",
@@ -37,14 +39,9 @@ SECTION_DEFAULTS = {
         "stale_days": 14,
         "required_fields": ["parent"],
         "min_title_words": 3,
-        "vague_title_terms": ["fix", "update", "change", "stuff", "misc",
-                              "tbd", "wip", "various", "temp", "placeholder",
-                              "todo"],
         "vague_title_alone": ["refactor", "test"],
         "story_types": ["story", "bug"],
         "require_acceptance_criteria": True,
-        "acceptance_criteria_markers": ["acceptance criteria", "given ",
-                                        "when ", "then ", "ac:"],
         "require_estimate": True,
     },
     "review": {"batch_size": 8},
@@ -58,11 +55,16 @@ SECTION_DEFAULTS = {
     "daily": {"lookback_days": 1},
     "cache": {
         "enabled": True,
-        "path": "~/.pm/cache",
+        "path": HOME + "/cache",
         "ttl_seconds": 300,
+        "model_ttl_seconds": 604800,
+    },
+    "blocked": {
+        "statuses": ["Blocked"],
+        "labels": ["blocked"],
     },
     "today": {
-        "state_file": "~/.pm/today.json",
+        "state_file": HOME + "/today.json",
         "max_needs_you": 5,
         "max_moved": 8,
         "max_aging": 3,
@@ -139,6 +141,8 @@ def validate(cfg):
     _validate_workstreams(cfg)
     _validate_membership(cfg)
     _validate_ready(cfg)
+    _validate_blocked(cfg)
+    _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
     filters.validate_config_scopes(cfg)
 
@@ -261,6 +265,41 @@ def _validate_ready(cfg):
     criteria = block.get("blocking_criteria")
     if criteria is not None and not isinstance(criteria, list):
         sys.exit("`ready.blocking_criteria` must be a list.")
+
+
+def _name_list(block, key):
+    value = block.get(key)
+    if value is None:
+        return
+    if isinstance(value, str):
+        return
+    if not isinstance(value, list) or not all(
+            isinstance(item, str) and item.strip() for item in value):
+        sys.exit(f"`blocked.{key}` must be a list of names.")
+
+
+def _validate_blocked(cfg):
+    block = cfg.get("blocked")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`blocked:` must be a mapping of statuses and labels.")
+    _name_list(block, "statuses")
+    _name_list(block, "labels")
+
+
+def _validate_model_budget(cfg):
+    block = cfg.get("model") or {}
+    total = block.get("total_timeout")
+    if total is None:
+        return
+    if isinstance(total, bool) or not isinstance(total, (int, float)) or total < 0:
+        sys.exit("`model.total_timeout` must be a number of seconds, 0 or more.")
+    ttl = (cfg.get("cache") or {}).get("model_ttl_seconds")
+    if ttl is None:
+        return
+    if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or ttl < 0:
+        sys.exit("`cache.model_ttl_seconds` must be a number of seconds, 0 or more.")
 
 
 def _validate_definition_of_done(label, raw):

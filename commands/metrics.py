@@ -11,7 +11,13 @@ import json
 from core import metrics as core
 from core import output
 from core import products as product_core
-from core import sources, workstreams
+from core import sources, statuses, workstreams
+
+
+def _history(cfg, project, jql):
+    issues = sources.fetch_jira_history(cfg["jira"], jql) if jql else []
+    index, _detail = statuses.load_index(cfg["jira"], project)
+    return statuses.annotate(issues, index)
 
 
 def settings(cfg, args):
@@ -37,8 +43,7 @@ def gather(cfg, weeks, today=None):
                     cfg["jira"], project)
             jql = workstreams.scope_jql(
                 cfg, ws, "lint", overrides={"status": "any", "sprint": "any"})
-            issues = (sources.fetch_jira_history(cfg["jira"], jql)
-                      if jql else [])
+            issues = _history(cfg, project, jql)
             bundle = core.summarise_stream(
                 issues, weeks, sprints=seen_projects.get(project) or [],
                 today=today)
@@ -155,8 +160,7 @@ def gather_sprint(cfg):
             jql = workstreams.scope_jql(
                 cfg, ws, "lint",
                 overrides={"status": "any", "sprint": "open"})
-            issues = (sources.fetch_jira_history(cfg["jira"], jql)
-                      if jql else [])
+            issues = _history(cfg, project, jql)
             snap = core.sprint_snapshot(issues, sprint)
             snap["workstream"] = ws.get("abbrev")
             rows.append(snap)
