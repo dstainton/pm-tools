@@ -5,6 +5,12 @@
 - `pm today` shows each Sprint Goal once. Jira's board search returns every
   board whose filter mentions the project, so the same active sprint was
   printed once per board.
+- The sprint name is on its own line. Each numbered goal is on its own line,
+  and a wrapped line starts under the first word. The indent includes the
+  space after the number, so the continuation is not one column short.
+- Issue keys on that screen are links when stdout is a terminal. Windows
+  Terminal, which hosts PowerShell, opens the Jira issue from the key. A
+  pipe stays plain text.
 
 ## 0.10.0 - 2026-09-23
 
