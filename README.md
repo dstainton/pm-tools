@@ -18,12 +18,14 @@ pm triage       Queue of things waiting on a decision from you
 pm refine       BA queue: draft titles, criteria and estimates
 pm review       Without --apply, the old model judgement; with --apply, refine (deprecated)
 pm note         Capture a thought offline; file it later
-pm inbox        List, create or drop captured notes
+pm coverage     Open issues no workstream claims, plus overlaps and unused components
+pm inbox        List, edit, create or drop captured notes
 pm metrics      Delivery numbers per product and workstream (no model)
+pm release-notes  Done issues since a date or in a fixVersion
 pm brief        Meeting prep for one audience, or a debrief
 pm publish      Send a Markdown file to Confluence and/or Teams
 pm schedule     Register read-only commands on a timer
-pm ready        Team ready-agreement gate: pass/fail per ticket
+pm ready        Team working agreement: pass/fail per ticket
 pm daily        Daily Scrum movement + work in progress (no model)
 pm update       Upgrade pm-tools and migrate the config (never replaces it)
 ```
@@ -68,7 +70,9 @@ is the habit command, from any directory.
 You also need a local OpenAI-compatible model server for `pm report`,
 `pm refine`, and `pm ready --deep` — see **The local model** below.
 `pm today`, `pm lint`, `pm triage`, `pm daily`, `pm doctor`, `pm note`,
-and the fast `pm ready` need no model at all.
+`pm coverage`, `pm metrics`, and the fast `pm ready` need no model at all.
+`pm release-notes` prints the issue list either way, and drafts prose only
+when the model is up.
 
 A later upgrade is `pm update`. It upgrades the program and adds new config
 keys. It does not replace `~/.pm/config.yaml`. `pm init --force` is the only
@@ -156,7 +160,9 @@ which folder you run `pm report` from.
 ## The local model
 
 Only needed for `pm report`, `pm refine`, `pm review` (without `--apply`),
-and `pm ready --deep`.
+`pm ready --deep`, the filing suggestion in `pm inbox`, and the prose draft
+in `pm release-notes`. The issue list in `pm release-notes` is chosen
+without the model.
 
 The default config expects a local OpenAI-compatible endpoint at:
 
@@ -241,7 +247,7 @@ workstreams:
 
 ```
 pm products
-pm products add --name "Billing Platform" --abbrev BILL
+pm products add --name "Billing Platform" --abbrev BILL --goal "Invoices go out the day the work is done"
 pm products remove BILL
 pm products check
 ```
@@ -251,6 +257,8 @@ a product that workstreams still name. `pm products check` verifies each
 workstream's components exist in the team project (`jira.project`). A product
 may set `project:` only when it really lives outside that team project, and
 may set `scopes:`; workstreams inherit those unless they override.
+`product_goal:` is optional. `pm report` and `pm brief` print that sentence
+once under the product heading, and omit it when it is empty.
 
 ---
 
@@ -264,8 +272,11 @@ pm do 1                   # confirm once, then write
 ```
 
 The screen is the same shape every day: Sprint Goal (when Jira's Agile API
-exposes one), NEEDS YOU, movement since yesterday, aging in-progress work, and
-refinement gaps against the team's ready agreement. Numbered actions are
+exposes one), and under it a line when the sprint has an end date —
+"Sprint ends in N days. Not started: K. Blocked: M." That line does not
+name an issue or claim one is on the goal path. Then NEEDS YOU, movement
+since yesterday, aging in-progress work, and refinement gaps against the
+team's ready agreement. Numbered actions are
 written to `~/.pm/today.json` so the numbers still mean what they meant when
 you walked away.
 
@@ -522,21 +533,26 @@ reports. With `--apply` it writes the refine worksheet.
 pm note "customer wants an SSO audit export"
 pm note -w SDX "check whether cert rotation needs a comms plan"
 pm inbox
+pm inbox edit 1 --title "Export the SSO audit log" --criteria "Given an admin, when they export, then the file lists every login."
 pm inbox create 1
 pm inbox drop 1
 ```
 
-Capture is instant and offline. Filing suggests a product, workstream, type
-and title, then creates the issue after a preview.
+Capture is instant and offline. `pm inbox edit` corrects the title,
+workstream, or acceptance criteria in `inbox.json` before create. A stored
+edit wins over the model suggestion. Filing still previews the Jira create.
 
 ### `pm metrics` — portfolio health
 
 **No model.** Throughput, cycle time (median and 85th percentile), aging work
 in progress, sprint scope change, forecast accuracy (points Done vs forecast),
-and a plain landing date at the current weekly rate.
+and a plain landing date at the current weekly rate. `pm metrics --sprint`
+reports the open sprint: forecast points at the start, points done, points
+added after the start, and items carried in.
 
 ```
 pm metrics --weeks 8
+pm metrics --sprint
 pm metrics --product IP --json
 ```
 
@@ -568,10 +584,11 @@ pm schedule list
 On Windows, `scripts/register-pm-task.ps1` registers Task Scheduler entries.
 Elsewhere a `schedule.cron` snippet is written next to the job list.
 
-### `pm ready` — Definition-of-Ready gate
+### `pm ready` — the team's working agreement
 
 One pass/fail verdict per ticket: *is this good to pull into a sprint?* A ticket
-is **Ready** only when every **blocking** criterion is met.
+is **Ready** only when every **blocking** criterion is met. The header calls
+that list a team working agreement. The pass/fail table stays.
 
 ```
 pm ready              # fast gate — deterministic rules only
@@ -582,7 +599,40 @@ Output: `ready_report_<date>.md` with a percent-ready summary, a **🔴 Not read
 table naming exactly which criteria each ticket fails, and a **🟢 Ready** list.
 Choose which criteria block readiness in the `ready:` config block — available:
 `clear-title`, `has-acceptance-criteria`, `has-estimate`, `linked-to-parent`,
-`has-component`, `sane-dates`. Anything not listed becomes an advisory note.
+`has-component`, `sane-dates`, `too-big-for-a-sprint`. Anything not listed
+becomes an advisory note, except `too-big-for-a-sprint`, which does nothing
+until you list it. The threshold is `ready.max_points` (default 8). An item
+with no estimate does not also fail that rule.
+
+Definition of Done is a printed checklist (`definition_of_done:` on the
+config or on a product). `pm report` prints it in the Increment section.
+A line may set `label:`, and then `pm ready` warns when a Done item lacks
+that label. Lines without a label are reminders only.
+
+### `pm coverage`
+
+Open issues no workstream claims, open issues two or more workstreams claim,
+and Jira components in the team project that no workstream names. Exit 1
+when unclaimed work exists, so it can sit next to `pm products check` on a
+schedule. `--workstream` chooses which projects to inspect; claims use every
+workstream in that project.
+
+```
+pm coverage
+pm schedule add coverage --at 08:45
+```
+
+### `pm release-notes`
+
+Done issues since a date or in a fixVersion, grouped by product and
+workstream. The model drafts prose when it is up. Otherwise the command
+prints the bullet list and says the model was skipped. The model does not
+choose which issues are included.
+
+```
+pm release-notes --since 2026-08-01
+pm release-notes --version 2026.9
+```
 
 ### `pm daily` — Daily Scrum snapshot
 
@@ -659,14 +709,15 @@ pm-tools/
 │   ├── http.py          #   one retry when Jira answers 429
 │   ├── writes.py        #   the one path that writes to Jira
 │   ├── decisions.py     #   snooze / accept / assign memory
-│   ├── metrics.py       #   throughput, cycle time, forecast
+│   ├── metrics.py       #   throughput, cycle time, forecast, sprint snapshot
+│   ├── checklist.py     #   Product Goal sentence and Definition of Done
 │   ├── output.py        #   places files under output.directory
 │   ├── paths.py         #   local ~/.pm vs shared state folder
 │   ├── migrations.py    #   config_version steps for pm update
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff
 ├── docs/
-│   ├── PLAN.md                # shipped install work, and tranche 2
+│   ├── PLAN.md                # shipped install work through tranche 2
 │   ├── FEATURE_PROPOSALS.md   # earlier code-first proposals
 │   ├── PORTFOLIO_PROPOSALS.md # the ten features that shipped
 │   └── TERMINOLOGY.md         # Scrum Guide vocabulary check
@@ -684,8 +735,10 @@ pm-tools/
     ├── triage.py        # pm triage
     ├── refine.py        # pm refine
     ├── review.py        # pm review (deprecated alias)
+    ├── coverage.py      # pm coverage
     ├── inbox.py         # pm note / pm inbox
     ├── metrics.py       # pm metrics
+    ├── release_notes.py # pm release-notes
     ├── brief.py         # pm brief
     ├── publish.py       # pm publish
     ├── schedule.py      # pm schedule
@@ -705,11 +758,11 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 
 ## Roadmap (ideas, not commitments)
 
-`docs/PLAN.md` tranches 0 and 1 shipped in 0.7.0: the pm-tools name, first
-install, `pm update`, `pm daily`, and files under `~/.pm/out`. Tranche 2 is
-still open: coverage, Product Goal, Definition of Done, sprint metrics, and
-release notes. That waits until after the first real install, because new
-config keys become migrations.
+`docs/PLAN.md` tranches 0 and 1 shipped in 0.7.0. Tranche 2 shipped in
+0.8.0: `pm coverage`, the Sprint Goal risk line, Product Goal,
+`too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`,
+`pm release-notes`, and `pm inbox edit`. `config_version` 2 adds
+`ready.max_points` and leaves products alone.
 
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those
@@ -731,8 +784,9 @@ last section of the portfolio document says what happened to each of them.
 
 `docs/TERMINOLOGY.md` checks every word the tool uses against the November 2020
 Scrum Guide. The Daily Scrum rename and `missing-parent` shipped in 0.7.0
-with no alias. Sprint Goal risk, Definition of Done, and Product Goal are
-still open.
+with no alias. Sprint Goal risk, Definition of Done, Product Goal, and
+`too-big-for-a-sprint` shipped in 0.8.0. The risk line does not name an
+issue as being on the goal path.
 
 ---
 
@@ -745,11 +799,13 @@ still open.
   before expanding.
 - **Overlap is allowed by design.** With the default
   `child_component_wins: false`, a child naming a different Component than its
-  Epic counts in both workstreams. Set it to `true` for a strict split.
+  Epic counts in both workstreams. `pm coverage` lists those issues. Set it
+  to `true` for a strict split.
 - **Custom field IDs matter.** If story points or start date point at the wrong
   field ID, those checks silently skip. Verify against the field list above.
 - **Deterministic vs. inference.** `pm lint` and the fast `pm ready` are rules
-  you can trust. `pm report`, `pm review`, and `pm ready --deep` use Qwen3.8
+  you can trust. `pm report`, `pm review`, `pm ready --deep`, and a
+  `pm release-notes` draft use Qwen3.8
   Q3_K_M — read them before acting. A 3-bit quant is smaller and a bit less
   sharp than Q4; keep thinking off and `review.batch_size` at 8 or below.
 - **Speed.** `pm lint` is instant. Model command speed depends heavily on the local model and hardware; `--deep` and `review all` make several

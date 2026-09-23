@@ -10,7 +10,7 @@ narrowed if --workstream was given.
 
 import datetime as dt
 
-from core import output, sources, model, state, workstreams
+from core import checklist, output, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -48,10 +48,19 @@ def build_report(cfg, sections, all_items, scope_note):
                          f"{abbrevs} | {count} |")
         lines.append("")
 
+    printed_shared_done = False
     for product, streams in groups or [({}, [ws for ws, _ in sections])]:
         if show_products and product:
             lines.append(f"## {product['name']} ({product['abbrev']})")
             lines.append("")
+            goal = checklist.product_goal(product)
+            if goal:
+                lines.append(f"Product Goal: {goal}")
+                lines.append("")
+            lines.extend(_increment_lines(cfg, product))
+        elif not printed_shared_done:
+            lines.extend(_increment_lines(cfg, None))
+            printed_shared_done = True
         for ws in streams:
             heading = (f"### {ws['name']} ({ws['abbrev']})"
                        if show_products and product
@@ -76,6 +85,22 @@ def build_report(cfg, sections, all_items, scope_note):
         lines.append("_No source items were gathered this week._")
     lines.append("")
     return "\n".join(lines)
+
+
+def _increment_lines(cfg, product):
+    """Definition of Done next to the Increment. Omitted when unset."""
+    items = checklist.definition_items(cfg, product)
+    if not items:
+        return []
+    lines = ["### Increment", "",
+             "Definition of Done for this Increment:", ""]
+    for item in items:
+        if item.get("label"):
+            lines.append(f"- {item['text']} _(label: {item['label']})_")
+        else:
+            lines.append(f"- {item['text']}")
+    lines.append("")
+    return lines
 
 
 def run(cfg, args):

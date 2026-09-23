@@ -37,6 +37,9 @@ def _entry_lines(entry, indent="  "):
             f'{indent}  abbrev: {quoted(entry["abbrev"])}']
     if entry.get("project"):
         body.append(f'{indent}  project: {quoted(entry["project"])}')
+    goal = (entry.get("product_goal") or "").strip()
+    if goal:
+        body.append(f'{indent}  product_goal: {quoted(goal)}')
     return body
 
 
@@ -92,7 +95,7 @@ def _list(cfg):
 
     print("\nA workstream with no `product:` lands in Unassigned.")
     print("Add one with:  pm products add --name ... --abbrev ... "
-          "[--project ...]")
+          "[--project ...] [--goal ...]")
 
 
 def _add(cfg, args):
@@ -106,6 +109,9 @@ def _add(cfg, args):
         "abbrev": args.abbrev,
         "project": args.project,
     }
+    goal = getattr(args, "goal", None)
+    if goal:
+        entry["product_goal"] = goal
 
     path = cfg["_config_path"]
     with open(path, "r", encoding="utf-8") as fh:

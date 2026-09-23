@@ -26,6 +26,7 @@ SAFE = {
     "ready": [],
     "workstreams": ["check"],
     "products": ["check"],
+    "coverage": [],
 }
 
 UNSAFE = {"do", "refine", "triage", "inbox", "note", "publish", "review"}

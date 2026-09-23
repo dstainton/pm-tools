@@ -87,8 +87,8 @@ The wider community is genuinely split:
    in the report header and the config comment does this.
 2. Make the Scrum-anchored criterion the one that always blocks: *can this be
    Done inside one Sprint?* In practice that is an estimate that exists and is
-   under a size threshold — a new `too-big-for-a-sprint` check, which the tool
-   cannot currently make at all.
+   under a size threshold — `too-big-for-a-sprint`, shipped in 0.8.0. It
+   blocks only when the team lists it. It is not on by default.
 3. Keep the rest (`clear-title`, `has-acceptance-criteria`, …) blocking only
    because the team chose them, which is already how `ready.blocking_criteria`
    works. The mechanism is right; only the labelling implies more authority than
@@ -114,8 +114,10 @@ the second stage of a pipeline.
 
 ## What the audit found missing
 
-Three Scrum concepts the tool has no notion of. All three are worth building,
-and the first is the most glaring.
+Three Scrum concepts the tool had no notion of when this note was written.
+All three shipped in 0.8.0, in the shape `docs/PLAN.md` tranche 2 settled:
+the Sprint Goal line does not name an issue, Definition of Done is a
+printed checklist, and Product Goal is one optional sentence.
 
 ### Sprint Goal — the Sprint's commitment
 
@@ -126,16 +128,15 @@ is a status report, not a Scrum artifact — and search results and Scrum traine
 alike make the same point about the Daily Scrum: it is the Developers'
 re-planning session, not a report-out.
 
-```
-$ pm daily -w SDX
-Sprint 24 · Goal: "Tenants can rotate exchange certificates without downtime"
-  4 of 7 items Done · 2 in progress · 1 not started · 3 days left
-  At risk: APS-30 is not started and is on the Goal path
+`pm today` prints the Sprint Goal Jira already stores, and under it, when
+the sprint has an end date:
+
+```text
+Sprint ends in N days. Not started: K. Blocked: M.
 ```
 
-Costs one new fetch: Jira's Agile API (`/rest/agile/1.0/sprint/{id}`) exposes a
-sprint's `goal`, which the current JQL-only client never asks for. This also
-gives `pm today` and `pm report` a spine they currently lack.
+Jira does not link issues to that goal text, so the line does not name an
+issue or call one "on the goal path".
 
 ### Definition of Done — the commitment we skipped
 
@@ -150,10 +151,9 @@ definition_of_done:            # a checklist, per product or one for all
   - "Deployed to staging"
 ```
 
-`pm done` would check items claiming Done against it, and the weekly report
-would describe the Increment in those terms. Together with the DoR reframing
-above, this puts the Scrum-correct pair in place instead of only the optional
-half.
+Shipped as a checklist, not a `pm done` command. `pm report` prints it in
+the Increment section. A line may set `label:`, and `pm ready` warns when a
+Done item lacks that label. Lines without a label are reminders only.
 
 ### Product Goal — what a product is currently missing
 
@@ -169,7 +169,9 @@ products:
     product_goal: "Any tenant can exchange data with a partner in under a day"
 ```
 
-One config key, and the report gains the sentence directors actually want.
+Shipped as optional `product_goal:`. `pm products add --goal` sets it.
+`pm report` and `pm brief` print the sentence once. Empty means omit.
+The 0.8.0 migration does not add the key to products that are already there.
 
 A fourth, lower priority: nothing supports the **Sprint Retrospective**. Worth
 noting that the Retrospective belongs to the Scrum Team, not the PM, so tooling
@@ -190,11 +192,11 @@ config block is `daily:`, and the scopes are `daily_moved` and `daily_wip`.
 `linked-to-epic`. Report titles are "Daily Scrum" and "Product Backlog Lint".
 Nothing had been installed, so the old names are not still read.
 
-**Needs your decision.** Reframing `pm ready` as a working agreement and a
-refinement worklist. Adding the Definition of Done and the
-`too-big-for-a-sprint` check. Adding the Sprint Goal fetch. Changing
-`--to ba` to `--to <person>`. Each of these changes what the tool asserts about
-your process, which is not mine to decide.
+**Shipped in 0.8.0.** `pm ready` is labelled a team working agreement and
+keeps the pass/fail table. `too-big-for-a-sprint` blocks only when it is
+listed in `ready.blocking_criteria`, against `ready.max_points` (default 8).
+Definition of Done, Product Goal, and the Sprint Goal risk line are in the
+commands above. `--to` takes a person.
 
 ## What I would not rename
 

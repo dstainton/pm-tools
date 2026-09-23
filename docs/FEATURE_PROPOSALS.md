@@ -7,8 +7,9 @@ priority order, with a config sketch for each.
 
 > **Historical.** The ten portfolio features shipped in 0.4.0–0.6.0; see
 > `docs/PORTFOLIO_PROPOSALS.md`. Install, `pm update`, and `pm daily` shipped
-> in 0.7.0; see `docs/PLAN.md`. Where this document says `pm standup`, the
-> command is now `pm daily`. Part 1 describes the tool as it was when this
+> in 0.7.0. `pm coverage`, `pm release-notes`, and `pm metrics --sprint`
+> shipped in 0.8.0; see `docs/PLAN.md`. Where this document says `pm standup`,
+> the command is now `pm daily`. Part 1 describes the tool as it was when this
 > note was written, not the current tree.
 
 Two constraints shape every proposal here:

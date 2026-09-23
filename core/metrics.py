@@ -175,6 +175,51 @@ def sprint_scope_change(issues, sprint):
     return {"added": len(keys), "keys": keys}
 
 
+def sprint_snapshot(issues, sprint):
+    """Open-sprint numbers from the changelog the metrics fetch already has.
+
+    Forecast is points on issues that were in the sprint at the start.
+    Done is points that reached Done on or after the start, including work
+    added later. Added is points on issues pulled in after the start.
+    Carried in is a count of items that already existed before the start
+    and were still in the sprint then.
+    """
+    sprint = sprint or {}
+    start = _when_date(sprint.get("start"))
+    added = sprint_scope_change(issues, sprint)
+    added_keys = set(added["keys"])
+    forecast = 0.0
+    done_points = 0.0
+    added_points = 0.0
+    carried = 0
+    for issue in issues or []:
+        if (issue.get("issuetype") or "").lower() == "epic":
+            continue
+        points = issue.get("story_points")
+        if isinstance(points, bool) or not isinstance(points, (int, float)) or points <= 0:
+            points = 0
+        finished = done_on(issue)
+        created = _when_date(issue.get("created"))
+        if start and finished and finished < start:
+            continue
+        if issue.get("key") in added_keys:
+            added_points += points
+        else:
+            forecast += points
+            if start and created and created < start:
+                carried += 1
+        if finished and (not start or finished >= start):
+            done_points += points
+    return {
+        "name": sprint.get("name") or "",
+        "forecast": forecast,
+        "done": done_points,
+        "added_points": added_points,
+        "added": added["added"],
+        "carried": carried,
+    }
+
+
 def forecast_accuracy(issues, sprint):
     """Story points Done during the sprint vs points still/was in the sprint.
 

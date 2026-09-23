@@ -1,8 +1,9 @@
-"""`pm ready` — a Definition of Ready (DoR) gate.
+"""`pm ready` — the team's working agreement for pulling work into a Sprint.
 
 Answers one question for each item about to enter a sprint: "Is this ready to
 work on — yes or no?" It bundles the deterministic lint checks into a single
-pass/fail verdict per ticket, using a checklist you define in config.
+pass/fail verdict per ticket, using the criteria the team listed in config.
+That list is a working agreement, not a Scrum rule.
 
   pm ready            Fast gate — deterministic checks only.
   pm ready --deep     Also run the model reviews (title clarity, AC quality)
@@ -21,7 +22,8 @@ import datetime as dt
 
 import sys
 
-from core import output, sources, workstreams
+from core import checklist, output, sources, workstreams
+from core import products as product_core
 from commands import lint, review
 
 
@@ -37,7 +39,38 @@ CRITERION_RULES = {
 }
 
 
-def evaluate_issue(issue, lint_cfg, blocking, deep_findings, component_inherited=False):
+def _positive_points(issue):
+    """A real estimate, or None. Missing and zero are not 'too big'."""
+    value = issue.get("story_points")
+    if value in (None, "", 0, 0.0):
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return None
+    if value <= 0:
+        return None
+    return value
+
+
+def size_failure(issue, max_points):
+    """Why `too-big-for-a-sprint` fails, or None.
+
+    An item with no estimate does not fail this rule. `has-estimate` covers
+    that case.
+    """
+    points = _positive_points(issue)
+    if points is None:
+        return None
+    limit = float(max_points if max_points is not None else 8)
+    if points > limit:
+        return f"{points:g} points is above the sprint size of {limit:g}"
+    return None
+
+
+def evaluate_issue(issue, lint_cfg, blocking, deep_findings,
+                   component_inherited=False, max_points=8):
     """Return a verdict dict for one issue.
 
     deep_findings: set of aspects ("titles"/"criteria") the model flagged for
@@ -48,6 +81,11 @@ def evaluate_issue(issue, lint_cfg, blocking, deep_findings, component_inherited
     triggered_rules = {f["rule"]: f["message"] for f in lint_findings}
 
     failed, advisory = [], []
+    if "too-big-for-a-sprint" in blocking:
+        reason = size_failure(issue, max_points)
+        if reason:
+            failed.append({"criterion": "too-big-for-a-sprint", "reason": reason})
+
     for criterion, rules in CRITERION_RULES.items():
         hit_msg = next((triggered_rules[r] for r in rules
                         if r in triggered_rules), None)
@@ -82,12 +120,38 @@ def evaluate_issue(issue, lint_cfg, blocking, deep_findings, component_inherited
     }
 
 
-def build_markdown(cfg, results, deep):
+def label_gaps(done_issues, items):
+    """Done items missing a Definition of Done label. Reminders are skipped."""
+    labeled = [item for item in items if item.get("label")]
+    gaps = []
+    for issue in done_issues or []:
+        present = {str(label).lower() for label in (issue.get("labels") or [])}
+        for item in labeled:
+            if item["label"].lower() not in present:
+                gaps.append({
+                    "key": issue.get("key"),
+                    "summary": issue.get("summary") or "",
+                    "label": item["label"],
+                    "text": item["text"],
+                })
+    return gaps
+
+
+def _checklist_for(cfg, ws):
+    product = None
+    abbrev = (ws.get("product") or "").strip()
+    if abbrev:
+        product = product_core.resolve_product(cfg, abbrev)
+    return checklist.definition_items(cfg, product)
+
+
+def build_markdown(cfg, results, deep, reminders=None, gaps=None):
     today = dt.date.today().isoformat()
     mode = "deep (rules + model)" if deep else "fast (rules only)"
     lines = [
-        "# Definition of Ready — Gate Report",
-        f"_Run on {today} in {mode} mode. A ticket is **Ready** only when every "
+        "# Ready agreement",
+        f"_Run on {today} in {mode} mode. This is the team's working agreement "
+        "for pulling work into a Sprint. A ticket is **Ready** only when every "
         "blocking criterion is met._",
         "",
     ]
@@ -143,10 +207,10 @@ def build_markdown(cfg, results, deep):
             lines.append("|-------|------|---------------|------|")
             for v in not_ready:
                 title = sources.short(v["title"], 55).replace("|", "\\|")
-                gaps = "; ".join(f"{f['criterion']}: {f['reason']}"
-                                 for f in v["failed"]).replace("|", "\\|")
+                gap_text = "; ".join(f"{f['criterion']}: {f['reason']}"
+                                     for f in v["failed"]).replace("|", "\\|")
                 lines.append(f"| {v['key']}: {title} | {v['type']} | "
-                             f"{gaps} | [open]({v['url']}) |")
+                             f"{gap_text} | [open]({v['url']}) |")
             lines.append("")
 
         if ready:
@@ -160,6 +224,27 @@ def build_markdown(cfg, results, deep):
                             + ", ".join(a["criterion"] for a in v["advisory"])
                             + ")_")
                 lines.append(f"- **{v['key']}**: {title}{note}")
+            lines.append("")
+
+    reminders = list(reminders or [])
+    gaps = list(gaps or [])
+    if reminders or gaps:
+        lines.append("## Definition of Done")
+        lines.append("")
+        lines.append("A checklist, not a verifier. Lines without a label "
+                     "are reminders only.")
+        lines.append("")
+        if reminders:
+            for text in reminders:
+                lines.append(f"- {text}")
+            lines.append("")
+        if gaps:
+            lines.append("Done items missing a label:")
+            lines.append("")
+            for gap in gaps:
+                lines.append(
+                    f"- **{gap['key']}** lacks `{gap['label']}` "
+                    f"({gap['text']})")
             lines.append("")
 
     return "\n".join(lines)
@@ -182,10 +267,20 @@ def run(cfg, args):
     ready_cfg = cfg.get("ready", {})
     blocking = set(ready_cfg.get("blocking_criteria",
                                  list(CRITERION_RULES.keys())))
+    max_points = ready_cfg.get("max_points", 8)
     deep = getattr(args, "deep", False)
 
     results = []
+    reminders = []
+    gaps = []
+    seen_reminders = set()
     for ws in cfg["_workstreams"]:
+        items = _checklist_for(cfg, ws)
+        for item in items:
+            if not item.get("label") and item["text"] not in seen_reminders:
+                seen_reminders.add(item["text"])
+                reminders.append(item["text"])
+
         jql = workstreams.scope_jql(cfg, ws, "ready")
         if not jql:
             print(f"Skipping {ws['abbrev']}: nothing in its ready scope.")
@@ -202,14 +297,22 @@ def run(cfg, args):
         for issue in issues:
             df = deep_map.get(issue["key"]) if deep else None
             verdicts.append(evaluate_issue(
-                issue, lint_cfg, blocking, df, component_inherited))
+                issue, lint_cfg, blocking, df, component_inherited,
+                max_points=max_points))
 
         ready_n = sum(1 for v in verdicts if v["ready"])
         print(f"  {len(issues)} items — {ready_n} ready, "
               f"{len(issues) - ready_n} not ready.")
         results.append((ws, verdicts))
 
-    report = build_markdown(cfg, results, deep)
+        if any(item.get("label") for item in items):
+            done_jql = workstreams.scope_jql(
+                cfg, ws, "ready", overrides={"status": "done"})
+            done = (sources.fetch_jira_detailed(cfg["jira"], done_jql)
+                    if done_jql else [])
+            gaps.extend(label_gaps(done, items))
+
+    report = build_markdown(cfg, results, deep, reminders=reminders, gaps=gaps)
     out_path = output.place(
         cfg, f"ready_report_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

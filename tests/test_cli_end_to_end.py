@@ -161,7 +161,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
-config_version: 1
+config_version: 2
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -523,10 +523,19 @@ class ReportTests(CliTestCase):
         self.assertIn("changes: 0 new", out)
 
 
+class CoverageTests(CliTestCase):
+    def test_coverage_exits_when_work_is_unclaimed(self):
+        out = self.run_pm("coverage", expect=1)
+        self.assertIn("APS-3", out)
+        self.assertIn("APS-50", out)
+        self.assertIn("Documentation", out)
+
+
 class ReadyTests(CliTestCase):
     def test_gate_names_the_blocking_gaps(self):
         self.run_pm("ready", "-w", "SDX")
         report = self.read_output(r"ready_report_.*\.md")
+        self.assertIn("working agreement", report)
         self.assertIn("🔴 Not ready", report)
         self.assertIn("APS-11", report)              # vague title
         self.assertIn("sane-dates", report)          # APS-30's past due date
@@ -673,6 +682,8 @@ class TodayTests(CliTestCase):
         self.assertIn("REFINEMENT GAPS", out)
         self.assertIn("SPRINT GOAL", out)
         self.assertIn("Ship certificate rotation", out)
+        self.assertIn("Not started:", out)
+        self.assertIn("Blocked:", out)
         self.assertIn("APS-30", out)                 # overdue
         self.assertIn("pm do", out)
         self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))

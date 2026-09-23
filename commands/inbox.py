@@ -101,15 +101,19 @@ def _list(cfg, args):
         print(f"#{note['n']}  {note['text']}")
         print(f"    {note.get('at', '')[:16].replace('T', ' ')}")
         suggestion = _suggest(cfg, note)
-        if suggestion:
+        title = note.get("title") or suggestion.get("title")
+        criteria = note.get("criteria") or suggestion.get("criteria")
+        stream = note.get("workstream") or suggestion.get("workstream")
+        if suggestion or note.get("title") or note.get("criteria"):
             print(f"    suggests   {suggestion.get('product') or '—'} · "
-                  f"{suggestion.get('workstream') or '—'} · "
+                  f"{stream or '—'} · "
                   f"{suggestion.get('issuetype') or 'Story'}")
-            if suggestion.get("title"):
-                print(f"    title      {suggestion['title']}")
-            if suggestion.get("criteria"):
-                print(f"    criteria   {suggestion['criteria']}")
+        if title:
+            print(f"    title      {title}")
+        if criteria:
+            print(f"    criteria   {criteria}")
         print(f"    → pm inbox create {note['n']}    "
+              f"pm inbox edit {note['n']}    "
               f"pm inbox drop {note['n']}")
         print("")
 
@@ -138,10 +142,14 @@ def _create(cfg, args):
     if note is None:
         sys.exit(f"No inbox note #{n}.")
     suggestion = _suggest(cfg, note)
-    title = getattr(args, "title", None) or suggestion.get("title") or note["text"]
+    # Stored edits win over the model, so a correction made before create
+    # is the one that gets filed. The model does not overwrite them.
+    title = (getattr(args, "title", None) or note.get("title")
+             or suggestion.get("title") or note["text"])
     itype = getattr(args, "issuetype", None) or suggestion.get("issuetype") or "Story"
-    product = suggestion.get("product") or note.get("product")
-    stream_ab = suggestion.get("workstream") or note.get("workstream")
+    product = note.get("product") or suggestion.get("product")
+    stream_ab = (getattr(args, "workstream", None) or note.get("workstream")
+                 or suggestion.get("workstream"))
     ws = None
     if stream_ab:
         ws = next((w for w in (cfg.get("workstreams") or [])
@@ -150,7 +158,8 @@ def _create(cfg, args):
     project = (ws_core.project_of(cfg, ws) if ws
                else (cfg.get("jira") or {}).get("project"))
     components = ws_core.components_of(ws) if ws else []
-    criteria = suggestion.get("criteria") or ""
+    criteria = (getattr(args, "criteria", None) or note.get("criteria")
+                or suggestion.get("criteria") or "")
     fields = {
         "project": {"key": project},
         "summary": title,
@@ -175,6 +184,31 @@ def run_note(cfg, args):
     _note(cfg, args)
 
 
+def _edit(cfg, args):
+    """Correct a note before create. Writes inbox.json only."""
+    n = getattr(args, "target", None)
+    if n is None:
+        sys.exit("Which note? e.g.  pm inbox edit 7 --title \"Clearer title\"")
+    title = getattr(args, "title", None)
+    stream = getattr(args, "workstream", None)
+    criteria = getattr(args, "criteria", None)
+    if title is None and stream is None and criteria is None:
+        sys.exit("What should change? Pass --title, --workstream, or --criteria.")
+    store = _load(cfg)
+    note = next((x for x in store.get("notes") or [] if x.get("n") == n
+                 and not x.get("dropped")), None)
+    if note is None:
+        sys.exit(f"No inbox note #{n}.")
+    if title is not None:
+        note["title"] = title
+    if stream is not None:
+        note["workstream"] = stream
+    if criteria is not None:
+        note["criteria"] = criteria
+    _save(cfg, store)
+    print(f"Updated #{n}. Nothing was sent to Jira.")
+
+
 def run_inbox(cfg, args):
     action = getattr(args, "action", "list") or "list"
     if action == "list":
@@ -183,5 +217,7 @@ def run_inbox(cfg, args):
         _create(cfg, args)
     elif action == "drop":
         _drop(cfg, args)
+    elif action == "edit":
+        _edit(cfg, args)
     else:
-        sys.exit(f"Unknown inbox action {action}. Try: list, create, drop.")
+        sys.exit(f"Unknown inbox action {action}. Try: list, edit, create, drop.")

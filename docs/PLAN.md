@@ -10,7 +10,7 @@ identity, setup, and a few holes in the tools that are already there.
 
 ## Status
 
-Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm/out`, exit codes, discover-fields write-if-blank, and CI. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Tranche 2 is still open. New config keys from here on are migrations.
+Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm/out`, exit codes, discover-fields write-if-blank, and CI. Tranche 2 shipped in 0.8.0 (`config_version` 2): `pm coverage`, the Sprint Goal risk line, Product Goal, `too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`, `pm release-notes`, and `pm inbox edit`. The migration adds `ready.max_points` only. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Section 2.8 is still not built.
 
 ---
 
@@ -428,6 +428,9 @@ until the repo has a linter config.
 
 ## Tranche 2 — gaps in the tools
 
+Shipped in 0.8.0. The notes below are the spec that shipped. Section 2.8
+was not part of that release.
+
 These are the deferred items that still match the PM and the person refining
 with them. Each one is a small command or a section on a command that
 already exists. None of them write to Jira on their own.
@@ -537,8 +540,9 @@ Do not build these in the tranches above:
 6. Tranche 2 after the first install. New config keys from here on are
    migrations. `pm coverage` and the Sprint Goal line first.
 
-The first install is package 0.7.0 with `config_version: 1`. Later releases
-bump `config_version` only when a migration ships.
+The first install was package 0.7.0 with `config_version: 1`. Package 0.8.0
+ships `config_version: 2`. Later releases bump `config_version` only when a
+migration ships.
 
 ---
 
@@ -549,7 +553,8 @@ bump `config_version` only when a migration ships.
 - `pipx install git+https://github.com/dstainton/pm-tools.git` produces
   both `pm` and `pm-tools`.
 - `pm init` on a machine with no config creates `~/.pm/config.yaml` at
-  `config_version` 1, including `output.directory`.
+  the template's `config_version` (2 as of 0.8.0), including
+  `output.directory` and `ready.max_points`.
 - `pm init` a second time does not change that file.
 - `pm update` on that fresh file reports the config current and does not
   rewrite it.

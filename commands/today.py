@@ -15,6 +15,7 @@ import os
 import sys
 
 from commands import lint, ready
+from core import filters
 from core import products as product_core
 from core import sources, workstreams, writes
 
@@ -100,6 +101,44 @@ def _is_blocked(issue):
         return True
     labels = [str(l).lower() for l in (issue.get("labels") or [])]
     return "blocked" in labels
+
+
+def _is_not_started(issue):
+    return (issue.get("status_category") or "").lower() == "new"
+
+
+def sprint_risk_sentence(sprint, issues, today=None):
+    """Days left, not-started count, and blocked count. No goal-path claim.
+
+    Jira does not link an issue to the Sprint Goal text, so this sentence
+    never names an issue. Returns None when the sprint has no end date.
+    """
+    today = today or dt.date.today()
+    end = _parse_date((sprint or {}).get("end"))
+    if not end:
+        return None
+    not_started = 0
+    blocked = 0
+    for issue in issues or []:
+        if _is_done(issue):
+            continue
+        if (issue.get("issuetype") or "").lower() == "epic":
+            continue
+        if _is_not_started(issue):
+            not_started += 1
+        if _is_blocked(issue):
+            blocked += 1
+    days = (end - today).days
+    if days < 0:
+        ago = -days
+        when = f"Sprint ended {ago} day{'s' if ago != 1 else ''} ago."
+    elif days == 0:
+        when = "Sprint ends today."
+    elif days == 1:
+        when = "Sprint ends in 1 day."
+    else:
+        when = f"Sprint ends in {days} days."
+    return f"{when} Not started: {not_started}. Blocked: {blocked}."
 
 
 def _is_overdue(issue, today=None):
@@ -276,14 +315,20 @@ def gather(cfg):
         ready_gaps.append((product, product_ready))
 
     sprints = []
+    sprint_items = {}
     for project in projects:
         sprints.extend(sources.fetch_active_sprints(cfg["jira"], project))
+        jql = (f"project = {filters.quote(project)} "
+               f"AND sprint in openSprints() "
+               f"AND statusCategory != Done")
+        sprint_items[project] = sources.fetch_jira_detailed(cfg["jira"], jql)
 
     return {
         "open_items": open_items,
         "moved": moved,
         "ready_gaps": ready_gaps,
         "sprints": sprints,
+        "sprint_items": sprint_items,
         "stale_days": stale_days,
         "days": days,
         "opts": opts,
@@ -357,15 +402,20 @@ def render_screen(bundle, actions, aging, today=None):
         "",
     ]
 
-    goals = [s for s in bundle["sprints"] if s.get("goal")]
-    if goals:
+    visible = [s for s in bundle["sprints"] if s.get("goal") or s.get("end")]
+    if visible:
         lines.append("SPRINT GOAL")
-        for sprint in goals:
-            goal = sprint["goal"]
+        items_by_project = bundle.get("sprint_items") or {}
+        for sprint in visible:
             label = sprint.get("name") or "Sprint"
             project = sprint.get("project") or ""
             prefix = f"{project} / {label}" if project else label
-            lines.append(f"  {prefix}: {goal}")
+            if sprint.get("goal"):
+                lines.append(f"  {prefix}: {sprint['goal']}")
+            sentence = sprint_risk_sentence(
+                sprint, items_by_project.get(project) or [], today=today)
+            if sentence:
+                lines.append(f"  {sentence}")
         lines.append("")
 
     shown, total = len(actions), bundle.get("needs_total", len(actions))

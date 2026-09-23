@@ -13,7 +13,7 @@ import re
 import sys
 
 from commands import today as today_cmd
-from core import model, output, paths, sources, state, workstreams, writes
+from core import checklist, model, output, paths, sources, state, workstreams, writes
 from core import products as product_core
 
 
@@ -128,6 +128,10 @@ def render_prep(audience, sections, last):
         product = section["product"]
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
+        goal = checklist.product_goal(product)
+        if goal:
+            lines.append(f"Product Goal: {goal}")
+            lines.append("")
         lines.append("### What changed")
         lines.append("")
         lines.append(section["change"])
