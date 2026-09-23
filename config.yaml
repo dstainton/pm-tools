@@ -4,7 +4,7 @@
 #  Fill in the placeholders marked <LIKE_THIS>. One config drives every command.
 #  Keep this file private — it holds API tokens.
 #
-#  New here? Run `pm init` to copy this template to ~/.pm/config.yaml, then edit
+#  New here? Run `pm init` to copy this template to ~/.pm-tools/config.yaml, then edit
 #  that copy. Tip: instead of pasting tokens, set them as environment variables
 #  and reference them with ${ENV:VAR_NAME}. See the README.
 #
@@ -225,7 +225,7 @@ scopes:
 #  the cache. Relative paths are resolved from the folder you run pm in.
 cache:
   enabled: true
-  path: "~/.pm/cache"
+  path: "~/.pm-tools/cache"
   ttl_seconds: 300
   # Model replies are kept much longer than Jira fetches. The key includes
   # the prompt, so an edited issue misses and is asked again. `pm warm`
@@ -245,7 +245,7 @@ blocked:
 #  5h. Today — the one command you type on a normal day
 # ----------------------------------------------------------------------------
 today:
-  state_file: "~/.pm/today.json"   # numbered actions for `pm do N`
+  state_file: "~/.pm-tools/today.json"   # numbered actions for `pm do N`
   max_needs_you: 5
   max_moved: 8
   max_aging: 3
@@ -253,13 +253,13 @@ today:
 
 # ----------------------------------------------------------------------------
 #  5i. Shared state — decisions and the inbox, so the PM and the BA see the
-#      same queues. Cache, write-log and today.json stay local (~/.pm).
+#      same queues. Cache, write-log and today.json stay local (~/.pm-tools).
 # ----------------------------------------------------------------------------
 #  Point shared_path at a synced OneDrive / SharePoint folder. Leave it
-#  empty to keep everything in ~/.pm.
+#  empty to keep everything in ~/.pm-tools.
 state:
   shared_path: ""
-  # local_path: "~/.pm"            # override only if you must
+  # local_path: "~/.pm-tools"            # override only if you must
 
 # ----------------------------------------------------------------------------
 #  5j. Triage — the "waiting on me" queue (`pm triage`)
@@ -376,7 +376,7 @@ workstreams:
 #  7. Output (used by `pm report`)
 # ----------------------------------------------------------------------------
 output:
-  directory: "~/.pm/out"
+  directory: "~/.pm-tools/out"
   file: "weekly_report_{date}.md"
   audience: "stakeholders"
   # Remembers last week's items so the report can show what changed.

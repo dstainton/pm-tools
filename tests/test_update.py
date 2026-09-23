@@ -65,6 +65,32 @@ def _pair():
 
 
 class UpdateCommandTests(unittest.TestCase):
+    def test_default_home_is_pm_tools(self):
+        from core.paths import HOME, config_file, local_dir
+        self.assertEqual(HOME, "~/.pm-tools")
+        self.assertEqual(config_file(), "~/.pm-tools/config.yaml")
+        with tempfile.TemporaryDirectory() as folder:
+            home = os.path.join(folder, "home")
+            os.makedirs(home)
+            env = {k: v for k, v in os.environ.items() if k != "PM_CONFIG"}
+            env["HOME"] = home
+            env["USERPROFILE"] = home
+            out = StringIO()
+            with patch.dict(os.environ, env, clear=True), patch("sys.stdout", out):
+                self.assertEqual(local_dir(None), os.path.join(home, ".pm-tools"))
+                init.run(Namespace(path=None, force=False))
+            dest = os.path.join(home, ".pm-tools", "config.yaml")
+            self.assertTrue(os.path.isfile(dest))
+            self.assertFalse(os.path.exists(os.path.join(home, ".pm")))
+            with open(dest, encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertIn("~/.pm-tools/cache", text)
+            self.assertIn("~/.pm-tools/out", text)
+            self.assertIn("~/.pm-tools/today.json", text)
+            self.assertNotIn("~/.pm/", text.replace("~/.pm-tools", ""))
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(update.user_config_path(), os.path.abspath(dest))
+
     def test_init_writes_the_template_version_and_will_not_overwrite(self):
         with tempfile.TemporaryDirectory() as folder:
             dest = os.path.join(folder, "config.yaml")

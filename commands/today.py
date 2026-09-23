@@ -2,7 +2,7 @@
 
 `pm today` is the habit command: a short list of things that need you, what
 moved, what is aging, and the refinement gaps, grouped by product. Numbered
-actions are written to `today.state_file` (default `~/.pm/today.json`) so
+actions are written to `today.state_file` (default `~/.pm-tools/today.json`) so
 `pm do 3` still means what it meant when you walked away.
 
 `pm do N` previews the payload, asks once (or honours `--yes` / `--dry-run`),
@@ -15,13 +15,14 @@ import os
 import sys
 
 from commands import lint, ready
+from core.paths import HOME
 from core import blocked as blocked_core
 from core import filters
 from core import products as product_core
 from core import sources, workstreams, writes
 
 
-DEFAULT_STATE = "~/.pm/today.json"
+DEFAULT_STATE = HOME + "/today.json"
 DEFAULT_MAX_NEEDS = 5
 DEFAULT_MAX_MOVED = 8
 DEFAULT_MAX_AGING = 3

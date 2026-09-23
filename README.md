@@ -6,7 +6,7 @@ own Jira / Confluence / SharePoint and a **local** model — nothing leaves
 your laptop.
 
 ```
-pm init         Create a starter config at ~/.pm/config.yaml
+pm init         Create a starter config at ~/.pm-tools/config.yaml
 pm products     List, add, remove or check your products
 pm workstreams  List, add, remove or check your workstreams
 pm today        One bounded daily screen (the habit command)
@@ -36,7 +36,7 @@ and `--workstream`. Each accepts an abbreviation or the full name,
 comma-separated and case-insensitive. The two compose. `--cached` reuses a
 stale Jira fetch or model reply; `--refresh` ignores both caches.
 `--out DIR` writes that run's files under DIR instead of `output.directory`
-(default `~/.pm/out`).
+(default `~/.pm-tools/out`).
 
 ---
 
@@ -57,7 +57,7 @@ pipx install git+https://github.com/dstainton/pm-tools.git
 pm init
 ```
 
-`pm init` copies a template to `~/.pm/config.yaml` and stops. Open that file
+`pm init` copies a template to `~/.pm-tools/config.yaml` and stops. Open that file
 and fill in the Jira URL, email, API token, project, and your products and
 workstreams. Then:
 
@@ -79,7 +79,7 @@ when the model is up. `pm warm` only calls the model for the commands you
 ask it to prepare.
 
 A later upgrade is `pm update`. It upgrades the program and adds new config
-keys. It does not replace `~/.pm/config.yaml`. `pm init --force` is the only
+keys. It does not replace `~/.pm-tools/config.yaml`. `pm init --force` is the only
 command that replaces that file.
 
 Developing pm-tools itself is a separate path: `pip install -e .` inside a
@@ -125,14 +125,14 @@ It searches, in order, and uses the first it finds:
 1. `--config /path/to/config.yaml` if you pass it
 2. the `PM_CONFIG` environment variable
 3. `config.yaml` in the current folder
-4. `~/.pm/config.yaml`  ← the tidy home for it
+4. `~/.pm-tools/config.yaml`  ← the tidy home for it
 5. the `config.yaml` shipped next to `pm.py` (the fallback)
 
 **`pm init` sets up option 4 for you** — it copies the bundled template to
-`~/.pm/config.yaml` so `pm` finds it automatically from then on:
+`~/.pm-tools/config.yaml` so `pm` finds it automatically from then on:
 
 ```
-pm init                 # create ~/.pm/config.yaml (won't overwrite)
+pm init                 # create ~/.pm-tools/config.yaml (won't overwrite)
 pm init --force         # replace an existing one
 pm init --path FILE     # write somewhere specific instead
 ```
@@ -156,7 +156,7 @@ the only command that does.
 > time. Handy for the API token.
 
 The report's `report_state.json` (the "what changed" memory) is written under
-`output.directory` (default `~/.pm/out`), so it stays in one place no matter
+`output.directory` (default `~/.pm-tools/out`), so it stays in one place no matter
 which folder you run `pm report` from.
 
 ---
@@ -284,12 +284,12 @@ label listed under `blocked:` in the config (default: a status named Blocked,
 or a label named blocked), matched exactly. Then NEEDS YOU, movement
 since yesterday, aging in-progress work, and refinement gaps against the
 team's ready agreement. Numbered actions are
-written to `~/.pm/today.json` so the numbers still mean what they meant when
+written to `~/.pm-tools/today.json` so the numbers still mean what they meant when
 you walked away.
 
 `pm do N` prints the exact payload, asks once (`--yes` skips the prompt,
 `--dry-run` stops after the preview), writes to Jira, and appends a line to
-`~/.pm/write-log.jsonl`. Non-interactive runs must pass `--yes` or `--dry-run`.
+`~/.pm-tools/write-log.jsonl`. Non-interactive runs must pass `--yes` or `--dry-run`.
 
 ---
 
@@ -310,9 +310,9 @@ file. `pm doctor --discover-fields --yes` fills `story_points_field`,
 are blank. It leaves a value you already set, and it does not write
 `epic_link_field`.
 
-Jira fetches are cached under `~/.pm/cache` for five minutes. `pm today`
+Jira fetches are cached under `~/.pm-tools/cache` for five minutes. `pm today`
 depends on this to stay fast. Model replies are cached under
-`~/.pm/cache/model` for seven days, keyed on the prompt, so an unchanged
+`~/.pm-tools/cache/model` for seven days, keyed on the prompt, so an unchanged
 issue is not asked again. `--cached` reuses a hit even if it is stale
 (a plane / offline run); `--refresh` fetches and asks again.
 
@@ -499,7 +499,7 @@ pm lint --all
 `--assign --to` takes a person, not a role. It hides the finding from the
 default lint, lands it in that person's `pm refine` queue, and writes the
 Jira assignee after a preview. Memory lives in `state.shared_path` (a synced
-folder) when that is set, otherwise `~/.pm`.
+folder) when that is set, otherwise `~/.pm-tools`.
 
 > **Lint vs. review.** `pm lint` only flags what a rule can know: a short
 > title, a title that is only a vague word, an empty acceptance-criteria
@@ -669,7 +669,7 @@ pm daily --by workstream      # group WIP by workstream instead of by assignee
 pm daily --print              # also echo the snapshot to the terminal
 ```
 
-Output: `daily_<date>.md` under `output.directory` (default `~/.pm/out`). The "moved" list reads each issue's changelog and
+Output: `daily_<date>.md` under `output.directory` (default `~/.pm-tools/out`). The "moved" list reads each issue's changelog and
 shows the transition — e.g. **To Do → In Review by A. Lee (today 09:12)**. If a
 ticket hopped several statuses, it collapses to first-from → last-to so you see
 the net move at a glance. Scope it like anything else: `pm daily -w SDX`.
@@ -719,7 +719,7 @@ that check.
 pm-tools/
 ├── pyproject.toml       # packaging — this creates the `pm` and `pm-tools` commands
 ├── install.ps1          # Windows first install
-├── config.yaml          # template config (pm init copies it to ~/.pm)
+├── config.yaml          # template config (pm init copies it to ~/.pm-tools)
 ├── pm.py                # entry point: routes subcommands, applies --workstream
 ├── core/                # shared plumbing (tested, reused by every command)
 │   ├── config.py        #   loads config, expands ${ENV:VAR}, validates it all
@@ -738,7 +738,7 @@ pm-tools/
 │   ├── metrics.py       #   throughput, cycle time, forecast, sprint snapshot
 │   ├── checklist.py     #   Product Goal sentence and Definition of Done
 │   ├── output.py        #   places files under output.directory
-│   ├── paths.py         #   local ~/.pm vs shared state folder
+│   ├── paths.py         #   local ~/.pm-tools vs shared state folder
 │   ├── migrations.py    #   config_version steps for pm update
 │   ├── model.py         #   the local-model call + robust JSON parsing
 │   └── state.py         #   week-to-week memory + diff

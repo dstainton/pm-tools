@@ -10,7 +10,7 @@ identity, setup, and a few holes in the tools that are already there.
 
 ## Status
 
-Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm/out`, exit codes, discover-fields write-if-blank, and CI. Tranche 2 shipped in 0.8.0 (`config_version` 2): `pm coverage`, the Sprint Goal risk line, Product Goal, `too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`, `pm release-notes`, and `pm inbox edit`. The migration adds `ready.max_points` only. Tranche 3 shipped in 0.9.0 (`config_version` 3): see `docs/INFERENCE_PLAN.md`. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Section 2.8 is still not built.
+Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm-tools/out`, exit codes, discover-fields write-if-blank, and CI. Tranche 2 shipped in 0.8.0 (`config_version` 2): `pm coverage`, the Sprint Goal risk line, Product Goal, `too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`, `pm release-notes`, and `pm inbox edit`. The migration adds `ready.max_points` only. Tranche 3 shipped in 0.9.0 (`config_version` 3): see `docs/INFERENCE_PLAN.md`. User data lives in `~/.pm-tools`. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Section 2.8 is still not built.
 
 ---
 
@@ -22,17 +22,17 @@ Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`
 2. **The daily command stays `pm`.** Schedules, docs, tests, and the habit
    all use that short word. A second console script, `pm-tools`, calls the
    same `main`.
-3. **User data lives in `~/.pm`.** Config, cache, `today.json`, the write
+3. **User data lives in `~/.pm-tools`.** Config, cache, `today.json`, the write
    log, and `schedule.json` go there. Nothing has been installed yet, so
    this is a choice for the first install, not a migration.
 4. **First install creates a new config. It does not upgrade one.** Nobody
-   has run the tool. There is no live `~/.pm/config.yaml` to preserve, and
+   has run the tool. There is no live `~/.pm-tools/config.yaml` to preserve, and
    no old config shape to keep working. Template changes before the first
    real install can break the old file format freely.
 5. **Compatibility starts at first install.** The config `pm init` writes
    is the baseline. After that, `pm update` upgrades the code and adds new
    config keys. It never replaces the file and never calls `pm init --force`.
-6. **`pm init` is create-only.** If `~/.pm/config.yaml` already exists it
+6. **`pm init` is create-only.** If `~/.pm-tools/config.yaml` already exists it
    leaves the file alone and tells you to run `pm update`. `--force` is the
    only replace path, and it must say so.
 7. **New commands wait until install and update are real.** Output location,
@@ -96,7 +96,7 @@ pm init
 
 The Windows script is that same pair of commands, plus installing pipx and
 putting it on PATH if it is missing. It installs from GitHub, not from a
-local folder. It runs `pm init` only when `~/.pm/config.yaml` does not
+local folder. It runs `pm init` only when `~/.pm-tools/config.yaml` does not
 exist. It does not download a model.
 
 Either way the install ends with a `pm` command that works in a new
@@ -104,7 +104,7 @@ terminal, and a config file that did not exist before.
 
 ### What `pm init` does
 
-`pm init` copies the bundled template to `~/.pm/config.yaml` and stops. It
+`pm init` copies the bundled template to `~/.pm-tools/config.yaml` and stops. It
 does not talk to Jira, does not start a model, and does not open an editor.
 The copy is a starting file: placeholders for the Jira URL, email, and API
 token, plus the sample product and workstreams so the shape is visible.
@@ -114,7 +114,7 @@ writing. First install is the only time the template is copied in full.
 
 ### What you fill in
 
-Open `~/.pm/config.yaml` and replace the placeholders:
+Open `~/.pm-tools/config.yaml` and replace the placeholders:
 
 - `jira.base_url`, `jira.email`, `jira.api_token`, `jira.project`
 - the `products:` and `workstreams:` entries, so they name your portfolio
@@ -154,7 +154,7 @@ do not install it.
   anyone installs.
 - It does not write sample products into a file you already edited.
 
-After this install, the file in `~/.pm/config.yaml` is the one `pm update`
+After this install, the file in `~/.pm-tools/config.yaml` is the one `pm update`
 must keep. That is the moment backward compatibility starts.
 
 ---
@@ -193,7 +193,7 @@ steps work.
 3. `pipx install git+https://github.com/dstainton/pm-tools.git` (the
    published repo, not the script's folder). A `-FromPath` switch can
    install `.` for someone testing a branch.
-4. Run `pm init` only when `~/.pm/config.yaml` does not exist.
+4. Run `pm init` only when `~/.pm-tools/config.yaml` does not exist.
 5. Print two lines: open that file and fill in the Jira placeholders, then
    run `pm doctor`.
 
@@ -244,7 +244,7 @@ upgrade, or the current tree in `--config-only` and editable mode.
 
 1. `--config`, if passed.
 2. `$PM_CONFIG`, if set.
-3. Otherwise `~/.pm/config.yaml`.
+3. Otherwise `~/.pm-tools/config.yaml`.
 
 It does **not** follow the normal discovery order. Discovery prefers
 `./config.yaml`, and inside a clone that file is the template. Updating that
@@ -316,7 +316,7 @@ at the current directory yet.
 
 No network. Extend the existing unittest style.
 
-- `pm init` writes `~/.pm/config.yaml` with `config_version` equal to the
+- `pm init` writes `~/.pm-tools/config.yaml` with `config_version` equal to the
   template, and a second `pm init` does not change the file.
 - `pm update` on that fresh file prints that the config is current and
   leaves the bytes alone, including the token the test wrote into it.
@@ -342,9 +342,9 @@ copies. Anything that changes the template after that is a migration.
 Today `commands/report.py`, `lint.py`, `ready.py`, `standup.py`, `refine.py`,
 `metrics.py`, and `brief.py` write `<name>_<date>.md` into the current
 directory. `output.state_file` defaults to `report_state.json` in that same
-directory, which is why the README tells people to always run from `~/.pm`.
+directory, which is why the README tells people to always run from `~/.pm-tools`.
 
-Put `output.directory: "~/.pm/out"` in the first-install template. Relative
+Put `output.directory: "~/.pm-tools/out"` in the first-install template. Relative
 `output.file` and `output.state_file` resolve under that directory.
 `--out PATH` on a command overrides the directory for one run. No warning
 about the old current-directory default, because first install never writes
@@ -521,7 +521,6 @@ Do not build these in the tranches above:
   the token out of the file.
 - A GUI, a dashboard, unattended Jira writes, and model-written claims
   about what is true. The portfolio doc already rules these out.
-- Moving `~/.pm` to `~/.pm-tools`.
 
 ---
 
@@ -552,7 +551,7 @@ releases bump `config_version` only when a migration ships.
   on `pm doctor` without cloning the repo.
 - `pipx install git+https://github.com/dstainton/pm-tools.git` produces
   both `pm` and `pm-tools`.
-- `pm init` on a machine with no config creates `~/.pm/config.yaml` at
+- `pm init` on a machine with no config creates `~/.pm-tools/config.yaml` at
   the template's `config_version` (3 as of 0.9.0), including
   `output.directory`, `ready.max_points`, `blocked`, and
   `model.total_timeout`.
@@ -564,5 +563,5 @@ releases bump `config_version` only when a migration ships.
 - `pm doctor` on a config whose version is behind exits non-zero and
   prints `pm update`.
 - `pm today` runs from any directory, and a new config writes
-  `report_state.json` under `~/.pm`.
+  `report_state.json` under `~/.pm-tools`.
 - `python -m unittest discover -s tests` passes with no network.

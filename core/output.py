@@ -1,14 +1,16 @@
 """Where command output files are written.
 
 Relative report, lint, ready, daily, refine, metrics and brief files land
-in `output.directory` (default `~/.pm/out`). An absolute path is used as
+in `output.directory` (default `~/.pm-tools/out`). An absolute path is used as
 given. `--out DIR` overrides the directory for one run.
 """
 
 import os
 
+from core.paths import HOME
 
-DEFAULT_DIRECTORY = "~/.pm/out"
+
+DEFAULT_DIRECTORY = HOME + "/out"
 
 
 def directory(cfg, override=None):

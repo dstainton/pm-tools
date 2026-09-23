@@ -1,18 +1,27 @@
 """Where local and shared state files live.
 
-Personal files (cache, write log, today's numbered list) stay in `~/.pm`.
-Decisions and the inbox follow `state.shared_path` when that is set, so the
-PM and the BA see the same queues on a synced folder. An empty or missing
-path keeps those files in `~/.pm` too.
+Personal files (config, cache, write log, today's numbered list) stay in
+`~/.pm-tools`. Decisions and the inbox follow `state.shared_path` when that
+is set, so the PM and the BA see the same queues on a synced folder. An
+empty or missing path keeps those files in `~/.pm-tools` too.
 """
 
 import os
 
 
+# The only home directory. Nothing was ever installed under ~/.pm.
+HOME = "~/.pm-tools"
+
+
+def config_file():
+    """Unexpanded path of the user config (`pm init` / `pm update`)."""
+    return HOME + "/config.yaml"
+
+
 def local_dir(cfg=None):
     block = (cfg or {}).get("state") if isinstance((cfg or {}).get("state"), dict) else {}
     override = (block or {}).get("local_path")
-    return os.path.expanduser(override or "~/.pm")
+    return os.path.expanduser(override or HOME)
 
 
 def shared_dir(cfg):

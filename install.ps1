@@ -67,7 +67,7 @@ if (-not $pm) {
     throw "pm was installed but is not on PATH. Open a new terminal and run: pm init"
 }
 
-$config = Join-Path $env:USERPROFILE ".pm\config.yaml"
+$config = Join-Path $env:USERPROFILE ".pm-tools\config.yaml"
 if (-not (Test-Path $config)) {
     & pm init
     if ($LASTEXITCODE -ne 0) {

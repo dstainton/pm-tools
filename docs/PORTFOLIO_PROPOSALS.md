@@ -20,7 +20,7 @@ Where this document says `pm standup`, the command is now `pm daily` (0.7.0,
 no alias). `docs/PLAN.md` tranche 2 shipped in 0.8.0 (`pm coverage`,
 `pm release-notes`, `pm inbox edit`, and the rest of that list). That
 tranche is a different list from the tranches above. Section 2.8 of the
-plan is still not built.
+plan is still not built. User data lives in `~/.pm-tools`.
 
 ---
 
@@ -162,7 +162,7 @@ WITH THE BA (4 of 10 refined)
 ```
 
 `pm do N` performs the offered action after showing exactly what it will send.
-The numbering is written to `~/.pm/today.json`, so the numbers still mean what
+The numbering is written to `~/.pm-tools/today.json`, so the numbers still mean what
 they meant when you walked away from the terminal.
 
 **Serves** the PM, mainly. **Touches** a new command that composes existing
@@ -327,7 +327,7 @@ answer before this is built:
 
 | Option | Shared with the BA | Cost |
 |--------|--------------------|------|
-| Local file in `~/.pm` | No | Simplest; two people drift apart |
+| Local file in `~/.pm-tools` | No | Simplest; two people drift apart |
 | A shared file (OneDrive / SharePoint) | Yes | One path in config; needs the folder to sync |
 | Jira labels and comments | Yes, and visible to everyone | Pollutes the backlog; needs write scope |
 
@@ -446,20 +446,20 @@ ticket — a report that is confidently wrong.
 
 ```
 pm doctor
-  config          ~/.pm/config.yaml — 2 products, 4 workstreams        ok
+  config          ~/.pm-tools/config.yaml — 2 products, 4 workstreams        ok
   jira            connected as Dana Stainton                          ok
   projects        APS ok · BILL ok
   custom fields   story points customfield_10016                      ok
                   start date                                          MISSING
   membership      DX 18 items · BILL 12 · unclaimed 3                 warn
   model           qwen-local answered in 1.9s, thinking off           ok
-  cache           ~/.pm/cache, 41 entries, warm                       ok
+  cache           ~/.pm-tools/cache, 41 entries, warm                       ok
 
 pm doctor --discover-fields      # find the field IDs and offer to write them
 ```
 
 Shipped alongside it, because item 2 cannot be fast without it: a fetch cache
-(`~/.pm/cache`, TTL in config, `--cached` and `--refresh`) which also makes
+(`~/.pm-tools/cache`, TTL in config, `--cached` and `--refresh`) which also makes
 repeated `pm lint` runs instant and lets the tool work on a plane.
 
 **Serves** both. **Touches** a new command reusing `commands/workstreams.py`
@@ -474,11 +474,11 @@ seconds.
 ## Cross-cutting decisions — settled 2026-09-03
 
 1. **Jira write scope — yes.** The token may write. Every write is
-   preview → one confirm → a line in `~/.pm/write-log.jsonl`. `--dry-run`
+   preview → one confirm → a line in `~/.pm-tools/write-log.jsonl`. `--dry-run`
    is available everywhere. Nothing that writes to Jira runs on a schedule.
 2. **Shared state — a synced folder.** `state.shared_path` (OneDrive /
    SharePoint) holds decisions and the inbox so the PM and the BA see the
-   same queues. Local `~/.pm` is the default when that path is empty. Jira
+   same queues. Local `~/.pm-tools` is the default when that path is empty. Jira
    is touched on `--assign` (the assignee field), not used as a decision store.
 3. **The BA runs `pm`.** Same config shape, shared state from (2). `pm refine`
    is a command on their machine, not a file you email.

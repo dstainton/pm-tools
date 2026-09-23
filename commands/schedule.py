@@ -1,7 +1,7 @@
 """`pm schedule` — register read-only commands so they happen without you.
 
 Nothing that writes to Jira (or publishes) is allowed on a timer. The job
-list lives in `~/.pm/schedule.json`. On Windows the companion PowerShell
+list lives in `~/.pm-tools/schedule.json`. On Windows the companion PowerShell
 script registers Task Scheduler entries; elsewhere a crontab snippet is
 written next to the job list.
 """

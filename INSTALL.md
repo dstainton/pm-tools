@@ -11,7 +11,7 @@ irm https://raw.githubusercontent.com/dstainton/pm-tools/main/install.ps1 | iex
 ```
 
 That installs pipx if it is missing, installs pm-tools from GitHub, and runs
-`pm init` when `~/.pm/config.yaml` does not exist. It does not download a model.
+`pm init` when `~/.pm-tools/config.yaml` does not exist. It does not download a model.
 
 ## macOS or Linux
 
@@ -22,7 +22,7 @@ pm init
 
 ## Fill in the config
 
-`pm init` copies a template to `~/.pm/config.yaml` and stops. Open that file
+`pm init` copies a template to `~/.pm-tools/config.yaml` and stops. Open that file
 and replace the placeholders:
 
 - `jira.base_url`, `jira.email`, `jira.api_token`, `jira.project`
@@ -39,7 +39,7 @@ pm today
 `pm doctor` checks the login, the project, the field IDs, and the workstream
 components. It does not rewrite the file. `pm today` is the first real use.
 
-If `~/.pm/config.yaml` already exists, `pm init` leaves it alone. Later
+If `~/.pm-tools/config.yaml` already exists, `pm init` leaves it alone. Later
 releases are installed with `pm update`, which upgrades the program and adds
 new config keys without replacing the file.
 
@@ -71,4 +71,4 @@ pip install -e .
 ```
 
 An editable install does not get `pm update`'s code upgrade. Pull the
-repository yourself. `pm update` will still migrate `~/.pm/config.yaml`.
+repository yourself. `pm update` will still migrate `~/.pm-tools/config.yaml`.

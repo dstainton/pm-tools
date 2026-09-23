@@ -18,7 +18,7 @@ landed: status category and sprint identity from Jira ids, configurable
 blocked names, mention account ids, link direction, risk pages by label,
 narrower `pm lint` rules, a model-result cache, call counts and an estimate
 from `pm doctor`, `model.total_timeout`, and read-only `pm warm` on the
-existing scheduler. No daemon.
+existing scheduler. No daemon. The home directory is `~/.pm-tools`.
 
 ---
 
@@ -413,7 +413,7 @@ tool do this arithmetic with the user's own measured rate instead of guessing.**
 ## 3.2 What to build instead, in order
 
 **Step 1 — a model-result cache.** Key on a hash of `(prompt, user content,
-model name, sampling settings)`, store under `~/.pm/cache/model/`, TTL and
+model name, sampling settings)`, store under `~/.pm-tools/cache/model/`, TTL and
 mode flags mirroring the existing `FetchCache` (`--cached` / `--refresh`
 already exist and already mean the right thing). Because every prompt is built
 from issue text, an issue whose summary and criteria did not change produces
@@ -495,7 +495,7 @@ deserving it.
     `call_model` / `call_model_json`, honouring `--cached` / `--refresh`,
     reported by `pm doctor` and cleared by the existing cache clear path.
 11. **Call counting and an ETA** before any multi-call run, using the latency
-    `pm doctor` last measured on this machine, persisted in `~/.pm`.
+    `pm doctor` last measured on this machine, persisted in `~/.pm-tools`.
 12. **`model.total_timeout`** as a whole-run budget, with a clear message
     naming what was skipped.
 

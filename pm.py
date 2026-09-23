@@ -7,7 +7,7 @@ workstreams. Runs entirely against your own Jira / Confluence / SharePoint and
 your local model — nothing leaves your machine.
 
 Commands:
-    pm init              Create a starter config at ~/.pm/config.yaml.
+    pm init              Create a starter config at ~/.pm-tools/config.yaml.
     pm products          List, add, remove or check your products.
     pm workstreams       List, add, remove or check your workstreams.
     pm today             One bounded daily screen (the habit command).
@@ -35,7 +35,7 @@ Commands:
 
 Common options (every command except init and update):
   --config PATH        Path to the config file. If omitted, pm searches:
-                       1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm/config.yaml,
+                       1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm-tools/config.yaml,
                        4) the config.yaml shipped next to this file.
   --product NAMES      Only these products, by abbreviation or full name.
   --workstream NAMES   Only these workstreams, by abbreviation or full name.
@@ -44,7 +44,7 @@ Common options (every command except init and update):
   --cached             Reuse a cached Jira fetch or model reply past its TTL.
   --refresh            Ignore cached Jira fetches and model replies.
   --out DIR            Write this run's files under DIR instead of
-                       output.directory (default ~/.pm/out).
+                       output.directory (default ~/.pm-tools/out).
 
 Examples:
   pm init
@@ -82,6 +82,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core import cache as fetch_cache                           # noqa: E402
 from core import model as model_core                           # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
+from core.paths import config_file                          # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
 from commands import (report, lint, ready, init,                # noqa: E402
                       daily, workstreams, products, doctor, today,
@@ -95,7 +96,7 @@ def resolve_config_path(explicit):
     1. --config given on the command line.
     2. $PM_CONFIG environment variable.
     3. config.yaml in the current working directory.
-    4. ~/.pm/config.yaml  (the usual home for a global CLI's config).
+    4. ~/.pm-tools/config.yaml  (the usual home for a global CLI's config).
     5. config.yaml shipped next to this script (the bundled default).
 
     Returns the first that exists, or exits with guidance if none do.
@@ -106,7 +107,7 @@ def resolve_config_path(explicit):
     if os.environ.get("PM_CONFIG"):
         candidates.append(os.environ["PM_CONFIG"])
     candidates.append(os.path.join(os.getcwd(), "config.yaml"))
-    candidates.append(os.path.expanduser("~/.pm/config.yaml"))
+    candidates.append(os.path.expanduser(config_file()))
     candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "config.yaml"))
 
@@ -116,7 +117,7 @@ def resolve_config_path(explicit):
 
     sys.exit(
         "No config file found. Get started with:\n"
-        "  pm init                     # creates ~/.pm/config.yaml\n\n"
+        "  pm init                     # creates ~/.pm-tools/config.yaml\n\n"
         "Or point pm at an existing config by any of:\n"
         "  * running from a folder containing config.yaml\n"
         "  * setting PM_CONFIG=/path/to/config.yaml\n"
@@ -172,11 +173,11 @@ def build_parser():
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
-                            help="Create a starter config at ~/.pm/config.yaml")
+                            help="Create a starter config at ~/.pm-tools/config.yaml")
     p_init.add_argument("--force", action="store_true",
                         help="Overwrite an existing config")
     p_init.add_argument("--path", default=None,
-                        help="Write to a specific path instead of ~/.pm")
+                        help="Write to a specific path instead of ~/.pm-tools")
     p_init.set_defaults(func=init.run, needs_config=False)
 
     p_prod = sub.add_parser("products", parents=[common],
@@ -437,7 +438,7 @@ def build_parser():
     p_update = sub.add_parser(
         "update", help="Upgrade pm-tools and migrate the config")
     p_update.add_argument("--config", default=None,
-                          help="Config file to migrate (default: ~/.pm/config.yaml)")
+                          help="Config file to migrate (default: ~/.pm-tools/config.yaml)")
     p_update.add_argument("--code-only", action="store_true",
                           help="Upgrade the program and leave the config untouched")
     p_update.add_argument("--config-only", action="store_true",

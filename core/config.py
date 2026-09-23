@@ -11,6 +11,7 @@ import sys
 import yaml
 
 from core import filters, products as product_core, workstreams as ws_core
+from core.paths import HOME
 
 
 # Filled in memory when a block or key is absent. This does not write the file.
@@ -29,7 +30,7 @@ SECTION_DEFAULTS = {
         "enable_thinking": False,
     },
     "output": {
-        "directory": "~/.pm/out",
+        "directory": HOME + "/out",
         "file": "weekly_report_{date}.md",
         "audience": "stakeholders",
         "state_file": "report_state.json",
@@ -54,7 +55,7 @@ SECTION_DEFAULTS = {
     "daily": {"lookback_days": 1},
     "cache": {
         "enabled": True,
-        "path": "~/.pm/cache",
+        "path": HOME + "/cache",
         "ttl_seconds": 300,
         "model_ttl_seconds": 604800,
     },
@@ -63,7 +64,7 @@ SECTION_DEFAULTS = {
         "labels": ["blocked"],
     },
     "today": {
-        "state_file": "~/.pm/today.json",
+        "state_file": HOME + "/today.json",
         "max_needs_you": 5,
         "max_moved": 8,
         "max_aging": 3,
