@@ -25,6 +25,7 @@ pm release-notes  Done issues since a date or in a fixVersion
 pm brief        Meeting prep for one audience, or a debrief
 pm publish      Send a Markdown file to Confluence and/or Teams
 pm schedule     Register read-only commands on a timer
+pm warm         Fill the model cache ahead of time (read-only)
 pm ready        Team working agreement: pass/fail per ticket
 pm daily        Daily Scrum movement + work in progress (no model)
 pm update       Upgrade pm-tools and migrate the config (never replaces it)
@@ -468,10 +469,10 @@ sprint planning.
 | `bad-dates` | 🔴 error | Due before start, or due date passed but not done |
 | `missing-component` | 🟠 warn | No component set, in a legacy workstream that can't inherit one |
 | `missing-parent` | 🟠 warn | Story/task not linked to a parent |
-| `missing-acceptance-criteria` | 🟠 warn | No AC found on a story/bug |
+| `missing-acceptance-criteria` | 🟠 warn | No AC field, and the description has no criteria-shaped structure |
 | `no-estimate` | 🟠 warn | In-scope story with no story points |
 | `stale` | 🟠 warn | "In Progress" but untouched for *N* days |
-| `vague-title` | 🔵 review | Title too short or full of vague words |
+| `vague-title` | 🔵 review | Title too short, or only a vague word. A longer unclear title is `pm review titles` |
 
 Output: `lint_report_<date>.md`. Flags: `--severity error` (only hard problems),
 `--json` (machine-readable). Every threshold lives in the `lint:` config block.
@@ -490,9 +491,11 @@ default lint, lands it in that person's `pm refine` queue, and writes the
 Jira assignee after a preview. Memory lives in `state.shared_path` (a synced
 folder) when that is set, otherwise `~/.pm`.
 
-> **Lint vs. refine.** `pm lint` uses cheap, reliable heuristics that never cry
-> wolf. `pm refine` drafts the missing title, criteria and estimate so the BA
-> edits instead of starting from a blank field.
+> **Lint vs. review.** `pm lint` only flags what a rule can know: a short
+> title, a title that is only a vague word, an empty acceptance-criteria
+> field. Whether a longer title is unclear, or whether criteria are testable,
+> is `pm review`. `pm refine` drafts the missing title, criteria and estimate
+> so the BA edits instead of starting from a blank field.
 
 ### `pm triage` — waiting on you
 
@@ -578,8 +581,15 @@ pm report --publish --dry-run
 pm publish weekly_report_2026-09-03.md --yes
 pm schedule add today --at 08:30
 pm schedule add report --weekly fri@16:00
+pm schedule add warm --at 07:00
 pm schedule list
+pm warm
 ```
+
+`pm warm` fills the model cache and writes nothing else. The morning
+`pm review` or `pm report` then reuses those replies and only calls the
+model for what changed. `--review`, `--report`, `--deep`, and `--inbox`
+warm one of those; with no flag it warms review, report, and inbox.
 
 On Windows, `scripts/register-pm-task.ps1` registers Task Scheduler entries.
 Elsewhere a `schedule.cron` snippet is written next to the job list.
@@ -764,11 +774,11 @@ for free. Adding one is a small file in `commands/` plus a few lines in `pm.py`.
 `pm release-notes`, and `pm inbox edit`. `config_version` 2 adds
 `ready.max_points` and leaves products alone.
 
-`docs/INFERENCE_PLAN.md` is the proposed next body of work (tranche 3, not
-started): a review of every place a rule guesses with a string comparison,
-measured model-call counts per command, and the answer to "should a background
-service pre-evaluate?" — a model-result cache and `pm warm` on the existing
-`pm schedule`, not a daemon.
+`docs/INFERENCE_PLAN.md` is tranche 3, shipped in 0.9.0. Status and sprint
+membership come from Jira ids, not English word lists. `pm lint` no longer
+treats a word list as a judgement. Model replies are cached, `pm warm` fills
+that cache, and `pm schedule add warm --at 07:00` runs it ahead of time.
+There is no background service.
 
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those
@@ -814,8 +824,13 @@ issue as being on the goal path.
   `pm release-notes` draft use Qwen3.8
   Q3_K_M — read them before acting. A 3-bit quant is smaller and a bit less
   sharp than Q4; keep thinking off and `review.batch_size` at 8 or below.
-- **Speed.** `pm lint` is instant. Model command speed depends heavily on the local model and hardware; `--deep` and `review all` make several
-  calls, so scope them with `--workstream` when you want a quick pass.
+- **Speed.** `pm lint` is instant. Model commands pay per call, and the
+  reply is cached: a second run of the same unchanged work does not call the
+  model again. `pm warm` fills that cache, and `pm schedule add warm --at 07:00`
+  does it before you sit down. `pm doctor` times one round trip and later
+  commands print an estimate from that. `--deep` and `review all` still make
+  several calls the first time, so scope them with `--workstream` when you
+  want a quick pass.
 
 ---
 

@@ -27,6 +27,7 @@ Commands:
     pm brief             Meeting prep for one audience, or a debrief.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
+    pm warm              Fill the model cache ahead of time (read-only).
     pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement + work in progress (no model).
     pm update            Upgrade pm-tools and migrate the config. Never
@@ -66,6 +67,7 @@ Examples:
   pm brief --for "Monthly portfolio review"
   pm report --publish --dry-run
   pm schedule add today --at 08:30
+  pm schedule add warm --at 07:00
   pm ready --deep --workstream sdx,itk
   pm daily --days 3 --by workstream
 """
@@ -78,12 +80,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core import cache as fetch_cache                           # noqa: E402
+from core import model as model_core                           # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
 from commands import (report, lint, ready, init,                # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
-                      schedule, update, coverage, release_notes)
+                      schedule, update, coverage, release_notes, warm)
 
 
 def resolve_config_path(explicit):
@@ -164,7 +167,7 @@ def build_parser():
         dest="command", required=True,
         metavar="{init,products,workstreams,today,do,doctor,report,lint,"
                 "triage,refine,review,note,inbox,metrics,brief,publish,"
-                "schedule,ready,daily,coverage,release-notes,update}")
+                "schedule,ready,daily,coverage,release-notes,warm,update}")
 
     # init is special: no config needed (it creates one), so no `common`.
     p_init = sub.add_parser("init",
@@ -367,6 +370,22 @@ def build_parser():
                          help="With `add ready`, pass --fail-under through")
     p_sched.set_defaults(func=schedule.run, needs_config=True)
 
+    p_warm = sub.add_parser(
+        "warm", parents=[common],
+        help="Fill the model cache ahead of time (read-only)",
+        description="Fill the model cache so a later command only catches up. "
+                    "Read-only: no Jira writes, no report. With no flag, warms "
+                    "review, report, and inbox. Review also covers ready --deep.")
+    p_warm.add_argument("--review", action="store_true",
+                        help="Warm pm review (and pm ready --deep)")
+    p_warm.add_argument("--report", action="store_true",
+                        help="Warm pm report")
+    p_warm.add_argument("--deep", action="store_true",
+                        help="Same model work as --review")
+    p_warm.add_argument("--inbox", action="store_true",
+                        help="Warm suggestions for notes already in the inbox")
+    p_warm.set_defaults(func=warm.run, needs_config=True)
+
     p_ready = sub.add_parser(
         "ready", parents=[common],
         help="Team working agreement (pass/fail)",
@@ -477,6 +496,7 @@ def main():
     elif getattr(args, "cached", False):
         cache_mode = "cached"
     fetch_cache.attach(cfg, mode=cache_mode)
+    model_core.attach(cfg, mode=cache_mode)
 
     # Narrow the workstreams once, centrally, so every command respects
     # --product and --workstream without needing its own logic. Commands

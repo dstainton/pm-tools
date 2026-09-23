@@ -394,6 +394,26 @@ class _Handler(BaseHTTPRequestHandler):
                 boards.append({"id": 1, "name": f"{project} board"})
             return self._send({"values": boards})
 
+        match = re.match(r"/rest/api/3/project/([^/]+)/statuses", path)
+        if match:
+            rows = [{
+                "id": "10001",
+                "name": "Story",
+                "statuses": [
+                    {"id": "1", "name": "To Do",
+                     "statusCategory": {"key": "new"}},
+                    {"id": "3", "name": "In Progress",
+                     "statusCategory": {"key": "indeterminate"}},
+                    {"id": "4", "name": "In Review",
+                     "statusCategory": {"key": "indeterminate"}},
+                    {"id": "6", "name": "Blocked",
+                     "statusCategory": {"key": "indeterminate"}},
+                    {"id": "5", "name": "Done",
+                     "statusCategory": {"key": "done"}},
+                ],
+            }]
+            return self._send(rows)
+
         match = re.match(r"/rest/api/3/project/([^/]+)/components", path)
         if match:
             names = self.components.get(match.group(1), [])

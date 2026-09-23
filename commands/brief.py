@@ -13,7 +13,7 @@ import re
 import sys
 
 from commands import today as today_cmd
-from core import checklist, model, output, paths, sources, state, workstreams, writes
+from core import checklist, filters, model, output, paths, sources, state, workstreams, writes
 from core import products as product_core
 
 
@@ -52,10 +52,10 @@ def _as_items(issues):
     return items
 
 
-def _needs(issues):
+def _needs(issues, cfg):
     rows = []
     for issue in issues:
-        kind = today_cmd.classify_need(issue, untouched_days=3)
+        kind = today_cmd.classify_need(issue, untouched_days=3, cfg=cfg)
         if not kind:
             continue
         rows.append((kind, issue))
@@ -64,18 +64,27 @@ def _needs(issues):
     return rows[:3]
 
 
+def _risk_cql(ws):
+    """Pages the workstream labelled as risks.
+
+    The label is the author's statement. A title that happens to contain
+    the word is not, and a title that does not is still a risk page.
+    """
+    labels = [str(label).strip() for label in (ws.get("confluence_labels") or [])]
+    risk = next((label for label in labels if label.lower() == "risk"), None)
+    space = ws.get("confluence_space")
+    if risk and space:
+        return (f"space = {filters.quote(space)} "
+                f"AND label = {filters.quote(risk)}")
+    return workstreams.confluence_cql(ws)
+
+
 def _risks(cfg, ws):
-    cql = workstreams.confluence_cql(ws)
+    cql = _risk_cql(ws)
     if not cql:
         return []
-    # Narrow to risk-labelled pages when the workstream names that label.
-    labels = [str(l).lower() for l in (ws.get("confluence_labels") or [])]
     items, _idx = sources.fetch_confluence(cfg["confluence"], cql, ws["abbrev"], 1)
-    if "risk" in labels:
-        return [i for i in items if "risk" in (i.get("title") or "").lower()
-                or "risk" in (i.get("detail") or "").lower()
-                or "risk" in (i.get("meta") or "").lower()] or items[:2]
-    return items[:2]
+    return items[:3]
 
 
 def gather(cfg, audience):
@@ -103,7 +112,7 @@ def gather(cfg, audience):
         sections.append({
             "product": product,
             "issues": product_issues,
-            "needs": _needs(product_issues),
+            "needs": _needs(product_issues, cfg),
             "change": state.build_change_block(new, changed, dropped, first),
             "first": first,
             "risks": risks[:3],

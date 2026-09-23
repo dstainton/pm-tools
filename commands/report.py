@@ -103,6 +103,41 @@ def _increment_lines(cfg, product):
     return lines
 
 
+def prepare(cfg, ws, previous):
+    """Items and the change block `pm report` will send. Writes nothing."""
+    prefix = ws["abbrev"]
+    items = []
+    idx = 1
+    sprint_jql = workstreams.scope_jql(cfg, ws, "report")
+    roadmap_jql = workstreams.scope_jql(cfg, ws, "roadmap")
+    got, idx = sources.fetch_jira(cfg["jira"], sprint_jql, prefix, idx)
+    items += got
+    got, idx = sources.fetch_jira(cfg["jira"], roadmap_jql, prefix, idx)
+    items += got
+    idx = 1
+    got, idx = sources.fetch_confluence(cfg["confluence"],
+                                        workstreams.confluence_cql(ws),
+                                        prefix, idx)
+    items += got
+    idx = 1
+    got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
+                                        ws.get("sharepoint_query"), prefix, idx)
+    items += got
+    prev_snapshot = previous.get(prefix, {})
+    first_run = prefix not in previous
+    new, changed, dropped = state.compute_changes(prev_snapshot, items)
+    change_block = state.build_change_block(new, changed, dropped, first_run)
+    return {
+        "items": items,
+        "change_block": change_block,
+        "snapshot": state.snapshot_items(items),
+        "first_run": first_run,
+        "new": new,
+        "changed": changed,
+        "dropped": dropped,
+    }
+
+
 def run(cfg, args):
     """Entry point called by pm.py."""
     selected = cfg["_workstreams"]
@@ -113,46 +148,29 @@ def run(cfg, args):
     previous = state.load_state(state_path)
     new_state = dict(previous)   # keep untouched workstreams' memory intact
 
+    prepared = []
+    for ws in selected:
+        print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
+        row = prepare(cfg, ws, previous)
+        if not row["first_run"]:
+            print(f"  changes: {len(row['new'])} new, "
+                  f"{len(row['changed'])} changed, "
+                  f"{len(row['dropped'])} dropped")
+        prepared.append((ws, row))
+        new_state[ws["abbrev"]] = row["snapshot"]
+
     sections = []
     all_items = []
+    model.announce(cfg["model"], len(prepared), "pm report")
 
-    for ws in selected:
-        prefix = ws["abbrev"]
-        print(f"Gathering: {ws['name']} ({prefix}) ...")
-
-        items = []
-        idx = 1
-        sprint_jql = workstreams.scope_jql(cfg, ws, "report")
-        roadmap_jql = workstreams.scope_jql(cfg, ws, "roadmap")
-        got, idx = sources.fetch_jira(cfg["jira"], sprint_jql, prefix, idx)
-        items += got
-        got, idx = sources.fetch_jira(cfg["jira"], roadmap_jql, prefix, idx)
-        items += got
-        idx = 1
-        got, idx = sources.fetch_confluence(cfg["confluence"],
-                                            workstreams.confluence_cql(ws),
-                                            prefix, idx)
-        items += got
-        idx = 1
-        got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
-                                            ws.get("sharepoint_query"), prefix, idx)
-        items += got
-
-        prev_snapshot = previous.get(prefix, {})
-        first_run = prefix not in previous
-        new, changed, dropped = state.compute_changes(prev_snapshot, items)
-        change_block = state.build_change_block(new, changed, dropped, first_run)
-        new_state[prefix] = state.snapshot_items(items)
-        if not first_run:
-            print(f"  changes: {len(new)} new, {len(changed)} changed, "
-                  f"{len(dropped)} dropped")
-
-        print(f"  found {len(items)} items — asking the model to write it up ...")
-        body = model.infer_report_section(cfg["model"], cfg["output"]["audience"],
-                                          ws, items, change_block)
-
+    for ws, row in prepared:
+        print(f"  found {len(row['items'])} items — asking the model to write it up ...")
+        model.tick(cfg["model"], ws["abbrev"])
+        body = model.infer_report_section(
+            cfg["model"], cfg["output"]["audience"],
+            ws, row["items"], row["change_block"])
         sections.append((ws, body))
-        all_items += items
+        all_items += row["items"]
 
     state.save_state(state_path, new_state)
 

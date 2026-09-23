@@ -99,7 +99,11 @@ def _drafts(cfg, issues):
     need_ac = [i for i in issues
                if any(f.get("rule") == "missing-acceptance-criteria"
                       for f in i.get("_findings") or [])]
-    for group in _chunks(need_titles, batch):
+    title_groups = list(_chunks(need_titles, batch))
+    ac_groups = list(_chunks(need_ac, batch))
+    model.announce(cfg["model"], len(title_groups) + len(ac_groups), "pm refine")
+    for group in title_groups:
+        model.tick(cfg["model"], "titles")
         data, _err = model.call_model_json(
             cfg["model"], TITLE_DRAFT_PROMPT,
             "\n".join(f"{i['key']}: {i['summary']}" for i in group)
@@ -107,7 +111,8 @@ def _drafts(cfg, issues):
         for obj in data or []:
             if obj.get("key") and obj.get("title"):
                 titles[obj["key"]] = obj["title"].strip()
-    for group in _chunks(need_ac, batch):
+    for group in ac_groups:
+        model.tick(cfg["model"], "criteria")
         data, _err = model.call_model_json(
             cfg["model"], CRITERIA_DRAFT_PROMPT,
             "\n".join(f"{i['key']}: {i['summary']}" for i in group)

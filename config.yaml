@@ -13,7 +13,7 @@
 #  you have already filled in.
 # ============================================================================
 
-config_version: 2
+config_version: 3
 
 # ----------------------------------------------------------------------------
 #  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
@@ -37,6 +37,9 @@ model:
   presence_penalty: 1.5
   max_tokens: 2048
   timeout: 600
+  # Whole-command budget, in seconds, across every model call in one run.
+  # The per-call timeout above still applies to each request.
+  total_timeout: 3600
   enable_thinking: false
 
 # ----------------------------------------------------------------------------
@@ -101,20 +104,18 @@ lint:
   # Component is intentionally NOT required on child work: workstream membership
   # is inherited from the parent's Component(s).
   required_fields: [parent]
-  # Titles shorter than this many words are flagged for review.
+  # Titles shorter than this many words are flagged. A longer title that
+  # is merely unclear is a judgement for `pm review titles`, not a rule.
   min_title_words: 3
-  # Titles containing any of these words are flagged as vague.
-  vague_title_terms: [fix, update, change, stuff, misc, tbd, wip,
-                      various, temp, placeholder, todo]
   # These flag only when they are the whole title ("test", "Refactor").
   vague_title_alone: [refactor, test]
   # Which issue types are treated as "stories" for AC / estimate checks.
   story_types: [story, bug]
-  # Require acceptance criteria on story-type issues?
+  # Require acceptance criteria on story-type issues? The field being
+  # filled counts, as does a description with an acceptance-criteria heading
+  # or a Given/When/Then scenario. The word "when" on its own does not.
+  # Quality is `pm review criteria`.
   require_acceptance_criteria: true
-  # Any of these phrases counts as "has acceptance criteria".
-  acceptance_criteria_markers: ["acceptance criteria", "given ", "when ",
-                                "then ", "ac:"]
   # Require a story-point estimate on in-scope stories?
   require_estimate: true
 
@@ -226,6 +227,19 @@ cache:
   enabled: true
   path: "~/.pm/cache"
   ttl_seconds: 300
+  # Model replies are kept much longer than Jira fetches. The key includes
+  # the prompt, so an edited issue misses and is asked again. `pm warm`
+  # fills this cache. --cached / --refresh apply to it too.
+  model_ttl_seconds: 604800
+
+# ----------------------------------------------------------------------------
+#  5g2. Blocked — the statuses and labels that mean blocked in this workflow
+# ----------------------------------------------------------------------------
+#  Matched exactly, so a status named Unblocked does not count. `pm workstreams
+#  check` warns when a status here is not a status on the project.
+blocked:
+  statuses: [Blocked]
+  labels: [blocked]
 
 # ----------------------------------------------------------------------------
 #  5h. Today — the one command you type on a normal day

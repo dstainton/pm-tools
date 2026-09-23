@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.9.0 - 2026-09-23
+
+### Tranche 3
+
+- `pm metrics` classifies Done and in-flight from the project's status
+  category, using the status id on the changelog. A workflow named Complete
+  or Shipped counts. The old English name lists remain only when the status
+  list cannot be loaded. Sprint scope change matches sprint ids, so Sprint
+  42 no longer matches Sprint 421.
+- Blocked is configuration. `blocked.statuses` and `blocked.labels` match
+  exactly. The default is a status named Blocked and a label named blocked.
+  `Unblocked` does not count. `pm workstreams check` warns when a configured
+  status is not a status on the project.
+- `pm triage` treats an `@mention` as the account id on the comment, and
+  falls back to a whole-word name match. A link counts as blocked-by only
+  in that direction, not when this issue is the one doing the blocking.
+- `pm brief` loads risk pages by the Confluence label, not by the word
+  "risk" in the title.
+- `pm lint` flags a title that is too short or that is only a vague word.
+  It no longer flags a clear title because it contains "fix". Acceptance
+  criteria count when the field is filled, or the description has an
+  acceptance-criteria heading or a Given/When/Then scenario. The word
+  "when" on its own does not. Both findings point at `pm review`.
+- Model replies are cached under the fetch cache, keyed on the prompt.
+  `--cached` and `--refresh` apply. A second `pm inbox` on an unchanged
+  inbox does not call the model. `model.total_timeout` caps a whole run.
+  A multi-call command prints the call count and an estimate from the
+  round trip `pm doctor` last measured.
+- `pm warm` fills that cache. It is read-only. `pm schedule add warm --at
+  07:00` runs it on the scheduler that already ships. There is no
+  background service.
+
+### Config
+
+- `config_version` 3. `pm update` inserts `blocked.statuses`,
+  `blocked.labels`, `model.total_timeout`, and `cache.model_ttl_seconds`
+  when those keys are missing. A value you already set is not replaced.
+  Products and workstreams are left alone.
+
 ## 0.8.0 - 2026-09-23
 
 ### Tranche 2

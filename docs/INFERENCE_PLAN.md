@@ -13,8 +13,12 @@ This document answers both and proposes the work. Nothing here is built yet.
 
 ## Status
 
-Proposed. Not started. `docs/PLAN.md` tranches 0-2 shipped in 0.7.0 and
-0.8.0; this is the next body of work and would land as tranche 3.
+Shipped in 0.9.0 (`config_version` 3). The review below is unchanged. What
+landed: status category and sprint identity from Jira ids, configurable
+blocked names, mention account ids, link direction, risk pages by label,
+narrower `pm lint` rules, a model-result cache, call counts and an estimate
+from `pm doctor`, `model.total_timeout`, and read-only `pm warm` on the
+existing scheduler. No daemon.
 
 ---
 
@@ -333,11 +337,12 @@ Two facts jump out.
 calls. The commands people run every morning are already instant. A background
 service would make none of them faster, because there is nothing to pre-compute.
 
-**Nothing is ever cached.** Running `pm inbox` twice on an unchanged inbox
-costs ten model calls to produce two identical outputs. `core/cache.py` caches
-Jira search payloads (`FetchCache`, 300s TTL) and nothing else — there is no
-model-result cache anywhere in the repo. `pm inbox` then pays an eleventh call
-in `pm inbox create` to re-derive the suggestion it just showed you.
+**Nothing was cached, before 0.9.0.** Running `pm inbox` twice on an unchanged
+inbox cost ten model calls to produce two identical outputs. `core/cache.py`
+cached Jira search payloads (`FetchCache`, 300s TTL) and nothing else.
+`pm inbox create` then paid an eleventh call to re-derive the suggestion it
+just showed you. After 0.9.0 the same measurement is 5 calls, then 0, then 0:
+the second list and the create both hit the model cache.
 
 ## 2.2 How it scales
 

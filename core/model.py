@@ -18,9 +18,13 @@ Prompts and sampling are tuned for **Qwen3.8-27B Q3_K_M** in instruct
 """
 
 import json
+import os
 import re
+import time
 
 import requests
+
+from core import model_cache
 
 
 # ---------------------------------------------------------------------------
@@ -155,22 +159,150 @@ def build_payload(model_cfg, system_prompt, user_content, temperature=None):
 #  The two call flavours
 # ---------------------------------------------------------------------------
 
-def call_model(model_cfg, system_prompt, user_content, temperature=None):
+BUDGET_MESSAGE = (
+    "_The model budget for this run is used up. "
+    "Raise model.total_timeout, or run `pm warm` first._"
+)
+
+
+def _used_temperature(model_cfg, temperature):
+    if temperature is None:
+        return model_cfg.get("temperature")
+    return temperature
+
+
+def _over_budget(model_cfg):
+    deadline = model_cfg.get("_deadline")
+    return deadline is not None and time.monotonic() > deadline
+
+
+def attach(cfg, mode="default"):
+    """Point model calls at the result cache and arm the run budget.
+
+    Called once from `pm` after the fetch cache is attached. Commands that
+    call the model directly in a test skip this and simply do not cache.
+    """
+    from core import cache as fetch_cache
+    from core import paths
+
+    model_cfg = cfg.setdefault("model", {})
+    opts = fetch_cache.settings(cfg)
+    block = cfg.get("cache") if isinstance(cfg.get("cache"), dict) else {}
+    try:
+        model_ttl = int(block.get("model_ttl_seconds", model_cache.DEFAULT_TTL)
+                        or model_cache.DEFAULT_TTL)
+    except (TypeError, ValueError):
+        model_ttl = model_cache.DEFAULT_TTL
+    model_cfg["_cache_mode"] = mode if mode in ("default", "cached", "refresh") else "default"
+    model_cfg["_model_cache_enabled"] = bool(opts["enabled"])
+    model_cfg["_model_cache_path"] = os.path.join(opts["path"], "model")
+    model_cfg["_model_ttl"] = max(0, model_ttl)
+    model_cfg["_timing_path"] = os.path.join(paths.local_dir(cfg), "model_timing.json")
+    model_cfg["_calls"] = 0
+    model_cfg["_cache_hits"] = 0
+    total = model_cfg.get("total_timeout") or 0
+    try:
+        total = float(total)
+    except (TypeError, ValueError):
+        total = 0
+    if total > 0:
+        model_cfg["_deadline"] = time.monotonic() + total
+    else:
+        model_cfg.pop("_deadline", None)
+    return model_cfg
+
+
+def announce(model_cfg, count, what):
+    """Print the call count and an estimate before a multi-call run."""
+    model_cfg["_progress_total"] = count
+    model_cfg["_progress_done"] = 0
+    if count < 2:
+        return
+    seconds, measured = _read_rate(model_cfg)
+    if seconds:
+        minutes = max(1, int(round(count * seconds / 60.0)))
+        when = f", {measured}" if measured else ""
+        print(f"{what} — {count} model calls. "
+              f"Last measured: {seconds:.0f}s per call (pm doctor{when}). "
+              f"Estimate: ~{minutes} minute{'s' if minutes != 1 else ''}.")
+    else:
+        print(f"{what} — {count} model calls. "
+              f"Run `pm doctor` once to time the model on this machine.")
+
+
+def tick(model_cfg, detail):
+    """One line of progress for a run `announce` already counted."""
+    total = int(model_cfg.get("_progress_total") or 0)
+    done = int(model_cfg.get("_progress_done") or 0) + 1
+    model_cfg["_progress_done"] = done
+    if total >= 2:
+        print(f"  [{done}/{total}] {detail}")
+
+
+def _read_rate(model_cfg):
+    path = model_cfg.get("_timing_path")
+    if not path or not os.path.exists(path):
+        return None, None
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None, None
+    seconds = data.get("seconds")
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or seconds <= 0:
+        return None, None
+    return float(seconds), str(data.get("measured") or "")
+
+
+def _remember_rate(model_cfg, elapsed):
+    path = model_cfg.get("_timing_path")
+    if not path:
+        return
+    folder = os.path.dirname(path)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+    import datetime as dt
+    record = {
+        "seconds": round(float(elapsed), 2),
+        "measured": dt.date.today().isoformat(),
+        "model": model_cfg.get("name") or "",
+    }
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(record, fh)
+    os.replace(tmp, path)
+
+
+def call_model(model_cfg, system_prompt, user_content, temperature=None,
+               use_cache=True):
     """Send one system+user turn and return the visible assistant text.
 
     Returns a readable error string (never raises) so a single failed call
-    does not sink a whole run.
+    does not sink a whole run. A cached reply is returned without a call.
+    `pm doctor` passes use_cache=False so a ping times the model itself.
     """
+    used = _used_temperature(model_cfg, temperature)
+    if use_cache:
+        cached = model_cache.lookup(model_cfg, system_prompt, user_content, used)
+        if cached is not None:
+            model_cfg["_cache_hits"] = int(model_cfg.get("_cache_hits") or 0) + 1
+            return cached
+    if _over_budget(model_cfg):
+        return BUDGET_MESSAGE
     payload = build_payload(model_cfg, system_prompt, user_content, temperature)
+    model_cfg["_calls"] = int(model_cfg.get("_calls") or 0) + 1
     try:
         resp = requests.post(model_cfg["endpoint"], json=payload,
                              timeout=model_cfg["timeout"])
         resp.raise_for_status()
         text = message_text(resp.json())
-        return text or "_The model returned an empty reply._"
+        text = text or "_The model returned an empty reply._"
     except requests.RequestException as err:
         return (f"_Could not reach the model endpoint ({err}). "
                 f"Is the local OpenAI-compatible server running?_")
+    if use_cache:
+        model_cache.store(model_cfg, system_prompt, user_content, used, text)
+    return text
 
 
 def call_model_json(model_cfg, system_prompt, user_content):
@@ -270,13 +402,14 @@ def ping(model_cfg):
     import time
     start = time.monotonic()
     text = call_model(model_cfg, "Reply with the single word pong and nothing else.",
-                      "pong")
+                      "pong", use_cache=False)
     elapsed = time.monotonic() - start
     thinking = "thinking on" if model_cfg.get("enable_thinking") else "thinking off"
     if text.startswith("_Could not reach"):
         return False, f"{text} ({elapsed:.1f}s)"
     if text.startswith("_The model returned an empty"):
         return False, f"empty reply in {elapsed:.1f}s, {thinking}"
+    _remember_rate(model_cfg, elapsed)
     return True, f"answered in {elapsed:.1f}s, {thinking}"
 
 

@@ -15,6 +15,7 @@ import os
 import sys
 
 from commands import lint, ready
+from core import blocked as blocked_core
 from core import filters
 from core import products as product_core
 from core import sources, workstreams, writes
@@ -95,19 +96,15 @@ def _is_unassigned(issue):
     return (not name) or name.lower() == "unassigned"
 
 
-def _is_blocked(issue):
-    status = (issue.get("status") or "").lower()
-    if "blocked" in status:
-        return True
-    labels = [str(l).lower() for l in (issue.get("labels") or [])]
-    return "blocked" in labels
+def _is_blocked(issue, cfg=None):
+    return blocked_core.is_blocked(issue, cfg)
 
 
 def _is_not_started(issue):
     return (issue.get("status_category") or "").lower() == "new"
 
 
-def sprint_risk_sentence(sprint, issues, today=None):
+def sprint_risk_sentence(sprint, issues, today=None, cfg=None):
     """Days left, not-started count, and blocked count. No goal-path claim.
 
     Jira does not link an issue to the Sprint Goal text, so this sentence
@@ -126,7 +123,7 @@ def sprint_risk_sentence(sprint, issues, today=None):
             continue
         if _is_not_started(issue):
             not_started += 1
-        if _is_blocked(issue):
+        if _is_blocked(issue, cfg):
             blocked += 1
     days = (end - today).days
     if days < 0:
@@ -147,7 +144,7 @@ def _is_overdue(issue, today=None):
     return bool(due and due < today and not _is_done(issue))
 
 
-def classify_need(issue, untouched_days, today=None):
+def classify_need(issue, untouched_days, today=None, cfg=None):
     """Return the highest-priority need kind, or None.
 
     Priority: overdue, blocked, unassigned, untouched. Only open items
@@ -161,7 +158,7 @@ def classify_need(issue, untouched_days, today=None):
         return None
     if _is_overdue(issue, today=today):
         return "overdue"
-    if _is_blocked(issue):
+    if _is_blocked(issue, cfg):
         return "blocked"
     if _is_unassigned(issue):
         return "unassigned"
@@ -223,7 +220,7 @@ def preview_payload(kind, issue, today=None):
     return {"method": "GET", "path": path, "body": None}
 
 
-def need_tags(issue, kind):
+def need_tags(issue, kind, cfg=None):
     bits = [issue.get("issuetype") or "item"]
     if kind == "unassigned" or _is_unassigned(issue):
         bits.append("unassigned")
@@ -234,7 +231,7 @@ def need_tags(issue, kind):
             bits.append(f"due {days} day{'s' if days != 1 else ''} ago")
         else:
             bits.append("overdue")
-    if kind == "blocked" or _is_blocked(issue):
+    if kind == "blocked" or _is_blocked(issue, cfg):
         bits.append("blocked")
     if kind == "untouched":
         age = _age_days(issue)
@@ -337,11 +334,11 @@ def gather(cfg):
     }
 
 
-def build_needs(open_items, opts, today=None):
+def build_needs(open_items, opts, today=None, cfg=None):
     """Rank and cap the NEEDS YOU list; attach numbered actions."""
     candidates = []
     for issue in open_items:
-        kind = classify_need(issue, opts["untouched_days"], today=today)
+        kind = classify_need(issue, opts["untouched_days"], today=today, cfg=cfg)
         if not kind:
             continue
         age = _age_days(issue) or 0
@@ -359,7 +356,7 @@ def build_needs(open_items, opts, today=None):
             "product": issue.get("product"),
             "workstream": issue.get("workstream"),
             "url": issue.get("url"),
-            "tags": need_tags(issue, kind),
+            "tags": need_tags(issue, kind, cfg=cfg),
             "description": describe_action(kind, issue, today=today),
             "preview": preview_payload(kind, issue, today=today),
         })
@@ -392,7 +389,7 @@ def _short(text, limit=52):
     return sources.short(text or "", limit)
 
 
-def render_screen(bundle, actions, aging, today=None):
+def render_screen(bundle, actions, aging, today=None, cfg=None):
     today = today or dt.date.today()
     open_n = len(bundle["open_items"])
     lines = [
@@ -413,7 +410,8 @@ def render_screen(bundle, actions, aging, today=None):
             if sprint.get("goal"):
                 lines.append(f"  {prefix}: {sprint['goal']}")
             sentence = sprint_risk_sentence(
-                sprint, items_by_project.get(project) or [], today=today)
+                sprint, items_by_project.get(project) or [],
+                today=today, cfg=cfg)
             if sentence:
                 lines.append(f"  {sentence}")
         lines.append("")
@@ -491,7 +489,8 @@ def render_screen(bundle, actions, aging, today=None):
 def run_today(cfg, args):
     print("Gathering today's picture ...")
     bundle = gather(cfg)
-    actions, needs_total = build_needs(bundle["open_items"], bundle["opts"])
+    actions, needs_total = build_needs(
+        bundle["open_items"], bundle["opts"], cfg=cfg)
     bundle["needs_total"] = needs_total
     aging = build_aging(bundle["open_items"], bundle["stale_days"],
                         bundle["opts"]["max_aging"])
@@ -502,7 +501,7 @@ def run_today(cfg, args):
         "actions": actions,
     }
     save_actions(bundle["opts"]["state_file"], payload)
-    print(render_screen(bundle, actions, aging))
+    print(render_screen(bundle, actions, aging, cfg=cfg))
     print(f"\nActions saved to {bundle['opts']['state_file']}.")
 
 

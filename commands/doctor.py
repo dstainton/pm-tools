@@ -17,6 +17,8 @@ import re
 import sys
 
 from core import cache as cache_core
+from core import model_cache
+from core import statuses as status_core
 from core import config_edit
 from core import filters
 from core import migrations
@@ -209,9 +211,33 @@ def _check_model(cfg):
 def _check_cache(cfg):
     path, count, state = cache_core.status_line(cfg)
     detail = f"{path}, {count} entries, {state}"
+    model_path, model_count, model_state = model_cache.status_line(
+        cfg.get("model") or {})
+    if model_path:
+        detail += f"; model {model_count} {model_state}"
     if state == "disabled":
         return _warn("cache", detail)
     return _ok("cache", detail)
+
+
+def _check_statuses(cfg):
+    """How many statuses resolved to a category, and where we fell back."""
+    projects = _projects_in_play(cfg)
+    if not projects:
+        return _ok("statuses", "no projects")
+    bits = []
+    fallback = 0
+    for project in projects:
+        _index, detail = status_core.load_index(cfg["jira"], project)
+        if detail.startswith("unavailable"):
+            fallback += 1
+            bits.append(f"{project} name fallback")
+        else:
+            bits.append(f"{project} {detail}")
+    text = " · ".join(bits)
+    if fallback:
+        return _warn("statuses", text)
+    return _ok("statuses", text)
 
 
 FIELD_HINTS = (
@@ -297,6 +323,7 @@ def run(cfg, args):
         problems += _check_custom_fields(cfg, fields)
 
     problems += _check_membership(cfg)
+    problems += _check_statuses(cfg)
     problems += _check_model(cfg)
     problems += _check_cache(cfg)
 
