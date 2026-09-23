@@ -2,6 +2,8 @@
 
 Reads the YAML config and expands ${ENV:VAR} placeholders found in VALUES
 (not comments), so tokens can be kept in environment variables if you prefer.
+A placeholder inside a block with `enabled: false` may be unset. It expands
+to an empty string. Everywhere else, a missing variable stops the command.
 """
 
 import os
@@ -105,20 +107,24 @@ def load_config(path):
     with open(path, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
 
-    def sub(match):
-        var = match.group(1)
-        value = os.environ.get(var)
-        if value is None:
-            sys.exit(f"Config refers to ${{ENV:{var}}} but that "
-                     f"environment variable is not set.")
-        return value
-
-    def walk(node):
+    def walk(node, optional=False):
         if isinstance(node, dict):
-            return {k: walk(v) for k, v in node.items()}
+            # A switched-off feature (Teams, SharePoint) can name a secret
+            # it does not need yet. `pm products` must not demand it.
+            here = optional or node.get("enabled") is False
+            return {k: walk(v, here) for k, v in node.items()}
         if isinstance(node, list):
-            return [walk(v) for v in node]
+            return [walk(v, optional) for v in node]
         if isinstance(node, str):
+            def sub(match):
+                var = match.group(1)
+                value = os.environ.get(var)
+                if value is None:
+                    if optional:
+                        return ""
+                    sys.exit(f"Config refers to ${{ENV:{var}}} but that "
+                             f"environment variable is not set.")
+                return value
             return re.sub(r"\$\{ENV:([A-Za-z0-9_]+)\}", sub, node)
         return node
 

@@ -290,6 +290,8 @@ publish:
     parent_page: "Weekly Reports"
   teams:
     enabled: false
+    # Read only when enabled is true. An unset variable is fine while this
+    # stays false, including the ${ENV:PM_TEAMS_WEBHOOK} line below.
     webhook: "${ENV:PM_TEAMS_WEBHOOK}"
 
 # ----------------------------------------------------------------------------

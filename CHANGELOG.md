@@ -7,6 +7,9 @@
   first on PATH. An older `pm.exe` in Python's Scripts folder, left by
   `pm-helper`, is uninstalled so `pm` is not the old Product Manager Helper
   command.
+- A `${ENV:VAR}` inside a block with `enabled: false` may be unset. The
+  Teams webhook in the template no longer stops `pm products` when
+  `PM_TEAMS_WEBHOOK` is not set. Turning Teams on still requires it.
 
 ## 0.9.0 - 2026-09-23
 
