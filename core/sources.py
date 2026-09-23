@@ -386,12 +386,39 @@ def resolve_assignee(cfg, name):
     }
 
 
+def _sprint_identity(sprint):
+    """The sprint id when Jira sent one, otherwise the text we would print.
+
+    The board search returns every board whose filter mentions the project,
+    and the same sprint is active on each of them.
+    """
+    sprint_id = sprint.get("id")
+    if sprint_id is not None:
+        return ("id", sprint_id)
+    return ("text", sprint.get("project"), sprint.get("name"),
+            sprint.get("goal"), sprint.get("end"))
+
+
+def dedupe_sprints(sprints):
+    """Keep the first copy of each sprint."""
+    seen = set()
+    unique = []
+    for sprint in sprints:
+        key = _sprint_identity(sprint)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(sprint)
+    return unique
+
+
 def fetch_active_sprints(cfg, project):
     """Active sprints (and their Sprint Goals) for a project, if Agile is on.
 
-    Uses `/rest/agile/1.0`. Returns [] when the endpoint is missing, the
-    project has no board, or anything else goes wrong — callers treat an
-    empty list as "no Sprint Goal to show", not an error.
+    Uses `/rest/agile/1.0`. A sprint that is active on more than one board
+    is returned once. Returns [] when the endpoint is missing, the project
+    has no board, or anything else goes wrong — callers treat an empty list
+    as "no Sprint Goal to show", not an error.
     """
     if not project:
         return []
@@ -430,7 +457,7 @@ def fetch_active_sprints(cfg, project):
                 })
         except requests.RequestException:
             continue
-    return sprints
+    return dedupe_sprints(sprints)
 
 
 # ---------------------------------------------------------------------------

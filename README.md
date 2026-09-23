@@ -291,7 +291,11 @@ pm do 1                   # confirm once, then write
 ```
 
 The screen is the same shape every day: Sprint Goal (when Jira's Agile API
-exposes one), and under it a line when the sprint has an end date —
+exposes one; a sprint on several boards is shown once). The sprint name is
+its own line, and each numbered goal is its own line. A wrapped goal line
+starts under the first word of that item. Issue keys are links when the
+terminal can open them — Windows Terminal, which hosts PowerShell, can. A
+pipe stays plain text. When the sprint has an end date, the next line is
 "Sprint ends in N days. Not started: K. Blocked: M." That line does not
 name an issue or claim one is on the goal path. "Blocked" means a status or
 label listed under `blocked:` in the config (default: a status named Blocked,

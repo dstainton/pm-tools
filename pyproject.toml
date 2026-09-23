@@ -24,7 +24,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pm-tools"
-version = "0.10.0"
+version = "0.10.1"
 description = "pm-tools — products, today, triage, refine, inbox, metrics, brief, publish, doctor, workstreams, report, lint, ready, daily, coverage, release-notes, warm"
 requires-python = ">=3.9"
 dependencies = [

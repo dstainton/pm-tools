@@ -110,7 +110,8 @@ class RenderTests(unittest.TestCase):
         text = today.render_screen(bundle, actions, ([], 0),
                                    today=dt.date(2026, 9, 3))
         self.assertIn("SPRINT GOAL", text)
-        self.assertIn("Ship certificate rotation", text)
+        self.assertIn("  APS / Sprint 42\n    Ship certificate rotation", text)
+        self.assertNotIn("Sprint 42:", text)
         self.assertIn("NEEDS YOU", text)
         self.assertIn("APS-30", text)
         self.assertIn("pm do 1", text)
@@ -118,6 +119,80 @@ class RenderTests(unittest.TestCase):
         self.assertIn("AGING", text)
         self.assertIn("REFINEMENT GAPS", text)
         self.assertIn("pm refine -w SDX", text)
+
+    def test_numbered_goals_hang_under_the_first_word(self):
+        goal = (
+            "1. SDX milestone is met\n"
+            "2. ITK M0 is launched to DevHub Production providing access"
+        )
+        bundle = {
+            "open_items": [],
+            "moved": [],
+            "ready_gaps": [],
+            "sprints": [{"project": "APS", "name": "APS SP138", "goal": goal}],
+            "stale_days": 14,
+            "days": 1,
+            "opts": {"max_moved": 8, "max_aging": 3, "max_needs_you": 5,
+                     "untouched_days": 3},
+            "products": 1,
+            "streams": 1,
+            "needs_total": 0,
+        }
+        text = today.render_screen(
+            bundle, [], ([], 0), today=dt.date(2026, 9, 23), width=36)
+        lines = text.splitlines()
+        self.assertIn("  APS / APS SP138", lines)
+        name_at = lines.index("  APS / APS SP138")
+        self.assertTrue(lines[name_at + 1].startswith("    1. "))
+        # "2. " is three columns, including the space. Dropping that space
+        # leaves the continuation one column short of the first word.
+        hang = next(line for line in lines
+                    if line.strip().startswith("Production"))
+        self.assertEqual(len("    2. "), len(hang) - len(hang.lstrip(" ")))
+        self.assertTrue(hang.startswith("       "))
+
+    def test_issue_keys_are_terminal_links(self):
+        url = "https://example.atlassian.net/browse/APS-30"
+        moved = [{
+            "key": "APS-32",
+            "url": "https://example.atlassian.net/browse/APS-32",
+            "summary": "Trust sign",
+            "transitions": [{"from": "In Progress", "to": "Done",
+                             "who": "James Elson", "when": None}],
+        }]
+        aging_issue = dict(
+            ISSUE, key="APS-31", status="In Progress",
+            status_category="indeterminate",
+            url="https://example.atlassian.net/browse/APS-31")
+        bundle = {
+            "open_items": [ISSUE],
+            "moved": moved,
+            "ready_gaps": [],
+            "sprints": [],
+            "stale_days": 14,
+            "days": 1,
+            "opts": {"max_moved": 8, "max_aging": 3, "max_needs_you": 5,
+                     "untouched_days": 3},
+            "products": 1,
+            "streams": 1,
+            "needs_total": 1,
+        }
+        actions, _total = today.build_needs(
+            [ISSUE], bundle["opts"], today=dt.date(2026, 9, 3))
+        plain = today.render_screen(
+            bundle, actions, ([{"age": 20, "issue": aging_issue}], 1),
+            today=dt.date(2026, 9, 3), links=False)
+        self.assertNotIn("\033]8;;", plain)
+        linked = today.render_screen(
+            bundle, actions, ([{"age": 20, "issue": aging_issue}], 1),
+            today=dt.date(2026, 9, 3), links=True)
+        for key, href in (
+                ("APS-30", url),
+                ("APS-31", aging_issue["url"]),
+                ("APS-32", moved[0]["url"])):
+            self.assertIn(f"\033]8;;{href}\033\\{key}\033]8;;\033\\", linked)
+        # Padding stays outside the link, so the summary column does not move.
+        self.assertIn("APS-30\033]8;;\033\\   Rotate", linked)
 
 
 if __name__ == "__main__":

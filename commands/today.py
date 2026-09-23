@@ -12,7 +12,10 @@ writes to Jira, and appends a line to the write log.
 import datetime as dt
 import json
 import os
+import re
+import shutil
 import sys
+import textwrap
 
 from commands import lint, ready
 from core.paths import HOME
@@ -390,7 +393,84 @@ def _short(text, limit=52):
     return sources.short(text or "", limit)
 
 
-def render_screen(bundle, actions, aging, today=None, cfg=None):
+_GOAL_ITEM = re.compile(r"^(\d+)\.\s+(.*)$")
+_GOAL_INDENT = "    "
+
+
+def terminal_links(stream=None):
+    """True when this terminal can turn an OSC 8 sequence into a click.
+
+    Windows Terminal, which hosts PowerShell, does. A pipe or a file cannot,
+    so those stay plain text.
+    """
+    stream = stream if stream is not None else sys.stdout
+    try:
+        return bool(stream.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
+def terminal_width(stream=None):
+    """Column count when stdout is a terminal. None means do not reflow."""
+    if not terminal_links(stream):
+        return None
+    try:
+        columns = shutil.get_terminal_size().columns
+    except OSError:
+        return None
+    return columns if columns and columns > 20 else None
+
+
+def _hyperlink(label, url):
+    # OSC 8. The terminator is ST (ESC \). Windows Terminal opens this.
+    return f"\033]8;;{url}\033\\{label}\033]8;;\033\\"
+
+
+def _issue_cell(key, url, width, links):
+    """Pad on the visible key. The link sequence has no width of its own."""
+    key = "" if key is None else str(key)
+    shown = _hyperlink(key, url) if links and url and key else key
+    return shown + (" " * max(0, width - len(key)))
+
+
+def _hanging(marker, body, indent, width):
+    """Wrap one goal so the next line starts under the first word.
+
+    ``marker`` is ``1. `` including the space after the dot. Leaving that
+    space out puts the continuation one column short of the text.
+    """
+    prefix = indent + marker
+    text = (body or "").strip()
+    full = prefix + text
+    room = (width - len(prefix)) if width else 0
+    if not text or not width or room < 8 or len(full) <= width:
+        return [full]
+    parts = textwrap.wrap(
+        text, width=room, break_long_words=False, break_on_hyphens=False)
+    if not parts:
+        return [full]
+    hang = " " * len(prefix)
+    return [prefix + parts[0]] + [hang + part for part in parts[1:]]
+
+
+def _goal_lines(goal, width):
+    """One line per numbered goal, under the sprint name."""
+    lines = []
+    for raw in (goal or "").splitlines():
+        text = raw.strip()
+        if not text:
+            continue
+        match = _GOAL_ITEM.match(text)
+        if match:
+            lines.extend(_hanging(
+                f"{match.group(1)}. ", match.group(2), _GOAL_INDENT, width))
+        else:
+            lines.extend(_hanging("", text, _GOAL_INDENT, width))
+    return lines
+
+
+def render_screen(bundle, actions, aging, today=None, cfg=None,
+                  links=False, width=None):
     today = today or dt.date.today()
     open_n = len(bundle["open_items"])
     lines = [
@@ -408,8 +488,9 @@ def render_screen(bundle, actions, aging, today=None, cfg=None):
             label = sprint.get("name") or "Sprint"
             project = sprint.get("project") or ""
             prefix = f"{project} / {label}" if project else label
+            lines.append(f"  {prefix}")
             if sprint.get("goal"):
-                lines.append(f"  {prefix}: {sprint['goal']}")
+                lines.extend(_goal_lines(sprint["goal"], width))
             sentence = sprint_risk_sentence(
                 sprint, items_by_project.get(project) or [],
                 today=today, cfg=cfg)
@@ -426,8 +507,9 @@ def render_screen(bundle, actions, aging, today=None, cfg=None):
         loc = ""
         if action.get("product") or action.get("workstream"):
             loc = f"  {action.get('product') or '-'}/{action.get('workstream') or '-'}"
+        key = _issue_cell(action.get("key"), action.get("url"), 8, links)
         lines.append(
-            f"  {action['n']:<2} {action['key']:<8} {_short(action['summary'])}{loc}")
+            f"  {action['n']:<2} {key} {_short(action['summary'])}{loc}")
         lines.append(f"     {action['tags']}")
         lines.append(f"     → pm do {action['n']}     {action['description']}")
     lines.append("")
@@ -449,8 +531,9 @@ def render_screen(bundle, actions, aging, today=None, cfg=None):
                 stamp = f" ({local:%H:%M})"
             except (TypeError, ValueError):
                 stamp = ""
+        key = _issue_cell(card.get("key"), card.get("url"), 8, links)
         lines.append(
-            f"  {card['key']:<8} {arrow}{who}{stamp}  {_short(card.get('summary'), 40)}")
+            f"  {key} {arrow}{who}{stamp}  {_short(card.get('summary'), 40)}")
     lines.append("")
 
     aging_rows, aging_total = aging
@@ -461,8 +544,9 @@ def render_screen(bundle, actions, aging, today=None, cfg=None):
     for row in aging_rows:
         issue = row["issue"]
         loc = issue.get("product_name") or issue.get("workstream") or ""
+        key = _issue_cell(issue.get("key"), issue.get("url"), 8, links)
         lines.append(
-            f"  {issue['key']:<8} {issue.get('status')} {row['age']} days, "
+            f"  {key} {issue.get('status')} {row['age']} days, "
             f"untouched {row['age']} — {_short(issue.get('summary'), 36)}"
             f"{('  (' + loc + ')') if loc else ''}")
     lines.append("")
@@ -502,7 +586,8 @@ def run_today(cfg, args):
         "actions": actions,
     }
     save_actions(bundle["opts"]["state_file"], payload)
-    print(render_screen(bundle, actions, aging, cfg=cfg))
+    print(render_screen(bundle, actions, aging, cfg=cfg,
+                        links=terminal_links(), width=terminal_width()))
     print(f"\nActions saved to {bundle['opts']['state_file']}.")
 
 
