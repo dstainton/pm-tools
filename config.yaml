@@ -218,7 +218,7 @@ scopes:
   daily_wip:     {status: in-progress}
 
 # ----------------------------------------------------------------------------
-#  5g. Cache — reused Jira fetches, so `pm today` stays fast
+#  5g. Cache — Jira fetches (five minutes) and model replies (seven days)
 # ----------------------------------------------------------------------------
 #  Hits younger than ttl_seconds are reused. `pm ... --cached` uses a hit
 #  even if it is stale (a plane / offline run). `pm ... --refresh` ignores

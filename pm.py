@@ -12,7 +12,7 @@ Commands:
     pm workstreams       List, add, remove or check your workstreams.
     pm today             One bounded daily screen (the habit command).
     pm do N              Preview, then write, the action `pm today` numbered N.
-    pm doctor            Verify the setup; `--discover-fields` finds field IDs.
+    pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
@@ -41,8 +41,8 @@ Common options (every command except init and update):
   --workstream NAMES   Only these workstreams, by abbreviation or full name.
                        Comma-separated, case-insensitive. e.g. --workstream SDX
                        or --workstream "Secure Data Exchange". Omit for all.
-  --cached             Reuse the fetch cache even if it is past its TTL.
-  --refresh            Ignore the fetch cache and talk to Jira again.
+  --cached             Reuse a cached Jira fetch or model reply past its TTL.
+  --refresh            Ignore cached Jira fetches and model replies.
   --out DIR            Write this run's files under DIR instead of
                        output.directory (default ~/.pm/out).
 
@@ -150,9 +150,10 @@ def build_parser():
                              "name, comma-separated (e.g. SDX or "
                              "\"Secure Data Exchange\"). Default: all.")
     common.add_argument("--cached", action="store_true",
-                        help="Reuse cached Jira fetches even if they are stale")
+                        help="Reuse cached Jira fetches and model replies "
+                             "even if they are stale")
     common.add_argument("--refresh", action="store_true",
-                        help="Ignore the fetch cache and query Jira again")
+                        help="Ignore cached Jira fetches and model replies")
     common.add_argument("--out", default=None, metavar="DIR",
                         help="Write this run's files under DIR instead of "
                              "output.directory")
@@ -231,7 +232,7 @@ def build_parser():
     p_do.set_defaults(func=today.run_do, needs_config=True)
 
     p_doctor = sub.add_parser("doctor", parents=[common],
-                              help="Verify config, Jira, fields, model, cache")
+                              help="Verify config, Jira, statuses, fields, model, cache")
     p_doctor.add_argument("--discover-fields", action="store_true",
                           help="List custom-field IDs that look like story "
                                "points, start date, or acceptance criteria")

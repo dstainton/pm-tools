@@ -8,9 +8,12 @@ priority order, with a config sketch for each.
 > **Historical.** The ten portfolio features shipped in 0.4.0–0.6.0; see
 > `docs/PORTFOLIO_PROPOSALS.md`. Install, `pm update`, and `pm daily` shipped
 > in 0.7.0. `pm coverage`, `pm release-notes`, and `pm metrics --sprint`
-> shipped in 0.8.0; see `docs/PLAN.md`. Where this document says `pm standup`,
-> the command is now `pm daily`. Part 1 describes the tool as it was when this
-> note was written, not the current tree.
+> shipped in 0.8.0; see `docs/PLAN.md`. Tranche 3 shipped in 0.9.0; see
+> `docs/INFERENCE_PLAN.md`. The `vague_title_terms` row below is done: a
+> title is flagged for being short or for being only a vague word, not for
+> containing one. Where this document says `pm standup`, the command is now
+> `pm daily`. Part 1 describes the tool as it was when this note was written,
+> not the current tree.
 
 Two constraints shape every proposal here:
 

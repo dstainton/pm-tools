@@ -5,11 +5,13 @@
 
 Checks, in order: the config, Jira credentials, every product/workstream
 project, the custom-field IDs lint depends on, membership (including
-unclaimed work), the local model, and the fetch cache.
+unclaimed work), the project's status list, the local model, and both
+caches (Jira fetches and model replies).
 
 `--discover-fields` lists fields whose names look like story points, start
-date, acceptance criteria or Epic Link, and prints a YAML snippet to paste.
-It does not write the config — that is still a human edit.
+date, acceptance criteria or Epic Link, and prints a YAML snippet.
+`--discover-fields --yes` writes a blank field ID. It does not replace one
+that is already set.
 """
 
 import os

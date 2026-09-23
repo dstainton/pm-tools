@@ -541,8 +541,8 @@ Do not build these in the tranches above:
    migrations. `pm coverage` and the Sprint Goal line first.
 
 The first install was package 0.7.0 with `config_version: 1`. Package 0.8.0
-ships `config_version: 2`. Later releases bump `config_version` only when a
-migration ships.
+shipped `config_version: 2`. Package 0.9.0 ships `config_version: 3`. Later
+releases bump `config_version` only when a migration ships.
 
 ---
 
@@ -553,8 +553,9 @@ migration ships.
 - `pipx install git+https://github.com/dstainton/pm-tools.git` produces
   both `pm` and `pm-tools`.
 - `pm init` on a machine with no config creates `~/.pm/config.yaml` at
-  the template's `config_version` (2 as of 0.8.0), including
-  `output.directory` and `ready.max_points`.
+  the template's `config_version` (3 as of 0.9.0), including
+  `output.directory`, `ready.max_points`, `blocked`, and
+  `model.total_timeout`.
 - `pm init` a second time does not change that file.
 - `pm update` on that fresh file reports the config current and does not
   rewrite it.
