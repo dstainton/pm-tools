@@ -127,5 +127,45 @@ class ChangelogTests(unittest.TestCase):
                 sources.fetch_jira_changelog(CFG, "project = APS", 1), [])
 
 
+class ActiveSprintTests(unittest.TestCase):
+    def _get(self, boards, by_board):
+        def get(url, **kwargs):
+            if url.rstrip("/").endswith("/board"):
+                return FakeResponse({"values": boards})
+            board_id = url.rstrip("/").split("/")[-2]
+            return FakeResponse({"values": by_board.get(board_id, [])})
+        return get
+
+    def test_the_same_sprint_on_several_boards_is_returned_once(self):
+        sprint = {
+            "id": 138,
+            "name": "APS SP138",
+            "goal": "1. SDX milestone\n2. ITK launch",
+            "endDate": "2026-09-24T00:00:00.000Z",
+        }
+        boards = [{"id": 1, "name": "APS board"},
+                  {"id": 2, "name": "Filter board"},
+                  {"id": 3, "name": "Kanban"}]
+        with patch("core.sources.requests.get",
+                   side_effect=self._get(boards, {"1": [sprint], "2": [sprint],
+                                                  "3": [dict(sprint)]})):
+            found = sources.fetch_active_sprints(CFG, "APS")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["id"], 138)
+        self.assertEqual(found[0]["name"], "APS SP138")
+        self.assertEqual(found[0]["board"], "APS board")
+
+    def test_two_active_sprints_are_both_kept(self):
+        first = {"id": 138, "name": "APS SP138", "goal": "Ship it",
+                 "endDate": "2026-09-24T00:00:00.000Z"}
+        second = {"id": 139, "name": "APS SP139", "goal": "Next",
+                  "endDate": "2026-10-08T00:00:00.000Z"}
+        boards = [{"id": 1, "name": "APS board"}]
+        with patch("core.sources.requests.get",
+                   side_effect=self._get(boards, {"1": [first, second]})):
+            found = sources.fetch_active_sprints(CFG, "APS")
+        self.assertEqual([s["id"] for s in found], [138, 139])
+
+
 if __name__ == "__main__":
     unittest.main()

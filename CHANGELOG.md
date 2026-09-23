@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 - 2026-09-23
+
+- `pm today` shows each Sprint Goal once. Jira's board search returns every
+  board whose filter mentions the project, so the same active sprint was
+  printed once per board.
+
 ## 0.10.0 - 2026-09-23
 
 - `pm report`, `pm brief`, `pm daily`, and `pm release-notes` read Jira
