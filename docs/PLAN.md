@@ -8,6 +8,10 @@ those describe what was proposed and what already shipped.
 The portfolio list of ten is built (0.4.0 through 0.6.0). The gap now is
 identity, setup, and a few holes in the tools that are already there.
 
+## Status
+
+Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm/out`, exit codes, discover-fields write-if-blank, and CI. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Tranche 2 is still open. New config keys from here on are migrations.
+
 ---
 
 ## Decisions this plan settles
@@ -40,9 +44,9 @@ identity, setup, and a few holes in the tools that are already there.
 
 ---
 
-## Where things stand
+## Where things stood at 0.6.0
 
-| Thing | Today |
+| Thing | At 0.6.0 |
 |-------|--------|
 | Repo | `github.com/dstainton/pm-tools` |
 | Package name | `pm-helper` in `pyproject.toml` |

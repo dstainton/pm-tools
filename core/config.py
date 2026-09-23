@@ -244,10 +244,10 @@ def _validate_membership(cfg):
 def filter_workstreams(cfg, selector):
     """Narrow cfg['workstreams'] to those named in `selector`.
 
-    `selector` is a comma-separated string of abbreviations (case-insensitive),
-    e.g. "SDX" or "sdx,itk". Returns the filtered list. Exits with a helpful
-    message if a name doesn't match any workstream, so a typo fails loudly
-    rather than silently doing nothing.
+    `selector` is a comma-separated string of abbreviations or full names
+    (case-insensitive), e.g. "SDX" or "Secure Data Exchange". Returns the
+    filtered list. Exits with a helpful message if a name doesn't match any
+    workstream, so a typo fails loudly rather than silently doing nothing.
     """
     if not selector:
         return cfg["workstreams"]

@@ -16,6 +16,10 @@ item 2 (`pm today`). Tranche 2 is built: item 6 (decisions stick), item 4
 built: item 8 (`pm metrics`), item 7 (`pm brief`), item 9 (`pm publish`
 and `pm schedule`).
 
+Where this document says `pm standup`, the command is now `pm daily` (0.7.0,
+no alias). Remaining tool work is tranche 2 of `docs/PLAN.md`, which is a
+different list from the tranches above.
+
 ---
 
 ## The two people
