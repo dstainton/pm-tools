@@ -259,13 +259,84 @@ def fetch_project_statuses(cfg, project):
     return rows
 
 
-def fetch_comments(cfg, key):
-    """Comments on one issue, newest last."""
-    resp = send("GET",_api(cfg, f"issue/{key}/comment"),
-                        auth=_auth(cfg),
-                        headers={"Accept": "application/json"}, timeout=60)
-    resp.raise_for_status()
-    return resp.json().get("comments") or []
+def parse_timestamp(value):
+    """Jira's ISO timestamp, or a YYYY-MM-DD date at UTC midnight."""
+    if isinstance(value, dt.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+    if isinstance(value, dt.date):
+        return dt.datetime(value.year, value.month, value.day,
+                           tzinfo=dt.timezone.utc)
+    if not value:
+        return None
+    text = str(value).strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        text = text + "T00:00:00+00:00"
+    text = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", text.replace("Z", "+00:00"))
+    for candidate in (text, text.split(".")[0]):
+        try:
+            parsed = dt.datetime.fromisoformat(candidate)
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed
+    return None
+
+
+def fetch_comments(cfg, key, cutoff=None, limit=None):
+    """Comments on one issue.
+
+    With no cutoff and no limit, every comment is returned in the order
+    Jira sends. With either, comments are read newest-first and the result
+    is the kept ones, oldest first. Reading stops at `cutoff` or once
+    `limit` comments are kept, so a long thread is not downloaded whole.
+    """
+    cache = cfg.get("_fetch_cache")
+    cache_id = None
+    if cache is not None:
+        stamp = cutoff.isoformat() if cutoff is not None else None
+        cache_id = cache_key("comments", key, stamp, limit)
+        hit = cache.get(cache_id)
+        if hit is not None:
+            return hit
+
+    kept = []
+    start = 0
+    page_size = 50
+    windowed = cutoff is not None or limit is not None
+    for _page in range(40):
+        params = {"startAt": start, "maxResults": page_size}
+        if windowed:
+            params["orderBy"] = "-created"
+        resp = send("GET", _api(cfg, f"issue/{key}/comment"),
+                    params=params, auth=_auth(cfg),
+                    headers={"Accept": "application/json"}, timeout=60)
+        resp.raise_for_status()
+        data = resp.json() or {}
+        comments = data.get("comments") or []
+        stop = False
+        for comment in comments:
+            created = parse_timestamp(comment.get("created"))
+            if cutoff is not None and created is not None and created < cutoff:
+                stop = True
+                break
+            kept.append(comment)
+            if limit is not None and len(kept) >= limit:
+                stop = True
+                break
+        if stop or not comments:
+            break
+        total = data.get("total")
+        start += len(comments)
+        if total is not None and start >= int(total):
+            break
+        if len(comments) < page_size:
+            break
+    if windowed:
+        kept.reverse()
+    if cache is not None and cache_id is not None:
+        cache.put(cache_id, kept)
+    return kept
 
 
 def fetch_issue_links(cfg, key):
@@ -404,7 +475,7 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
         if priority:
             meta += f" | Priority: {priority}"
         ref = f"{tag_prefix}-J{idx}"
-        items.append(make_item(
+        item = make_item(
             ref=ref,
             source="Jira",
             title=f"{iss['key']}: {short(f.get('summary'), 140)}",
@@ -413,7 +484,9 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
             meta=meta,
             uid=iss["key"],       # e.g. SDX-101 — stable across weeks
             watch=status,          # we flag a change when status moves
-        ))
+        )
+        item["updated"] = f.get("updated")
+        items.append(item)
         idx += 1
     return items, idx
 

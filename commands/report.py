@@ -10,7 +10,7 @@ narrowed if --workstream was given.
 
 import datetime as dt
 
-from core import checklist, output, sources, model, state, workstreams
+from core import checklist, comments, output, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -124,7 +124,13 @@ def prepare(cfg, ws, previous):
                                         ws.get("sharepoint_query"), prefix, idx)
     items += got
     prev_snapshot = previous.get(prefix, {})
+    if not isinstance(prev_snapshot, dict):
+        prev_snapshot = {}
     first_run = prefix not in previous
+    jira_items = [it for it in items if it.get("source") == "Jira"]
+    comments.attach(
+        cfg, cfg.get("jira") or {}, jira_items,
+        comments.report_cutoff(prev_snapshot, comments.settings(cfg)))
     new, changed, dropped = state.compute_changes(prev_snapshot, items)
     change_block = state.build_change_block(new, changed, dropped, first_run)
     return {
@@ -157,7 +163,9 @@ def run(cfg, args):
                   f"{len(row['changed'])} changed, "
                   f"{len(row['dropped'])} dropped")
         prepared.append((ws, row))
-        new_state[ws["abbrev"]] = row["snapshot"]
+        snapshot = dict(row["snapshot"])
+        snapshot["_ran_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        new_state[ws["abbrev"]] = snapshot
 
     sections = []
     all_items = []
@@ -168,7 +176,8 @@ def run(cfg, args):
         model.tick(cfg["model"], ws["abbrev"])
         body = model.infer_report_section(
             cfg["model"], cfg["output"]["audience"],
-            ws, row["items"], row["change_block"])
+            ws, row["items"], row["change_block"],
+            comment_budget=comments.settings(cfg)["section_chars"])
         sections.append((ws, body))
         all_items += row["items"]
 

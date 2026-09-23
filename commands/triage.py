@@ -11,7 +11,10 @@ import re
 import sys
 
 from commands import today as today_cmd
-from core import paths, products as product_core, sources, workstreams, writes
+from core import (
+    comments as comment_core, paths, products as product_core, sources,
+    workstreams, writes,
+)
 
 
 def settings(cfg):
@@ -32,43 +35,12 @@ def settings(cfg):
 
 
 def _comment_text(comment):
-    body = comment.get("body")
-    if isinstance(body, str):
-        return body
-    texts = []
-
-    def walk(node):
-        if isinstance(node, dict):
-            if node.get("type") == "text":
-                texts.append(node.get("text") or "")
-            for child in node.get("content") or []:
-                walk(child)
-        elif isinstance(node, list):
-            for child in node:
-                walk(child)
-
-    walk(body)
-    return " ".join(texts)
+    return comment_core.comment_text(comment)
 
 
 def _mention_ids(comment):
     """accountIds on ADF mention nodes. Plain text has none."""
-    found = []
-
-    def walk(node):
-        if isinstance(node, dict):
-            if node.get("type") == "mention":
-                account = str((node.get("attrs") or {}).get("id") or "")
-                if account:
-                    found.append(account)
-            for child in node.get("content") or []:
-                walk(child)
-        elif isinstance(node, list):
-            for child in node:
-                walk(child)
-
-    walk(comment.get("body"))
-    return found
+    return comment_core.mention_ids(comment)
 
 
 def _name_mentioned(text, name):
@@ -78,7 +50,7 @@ def _name_mentioned(text, name):
     return re.search(r"\b" + re.escape(name) + r"\b", text, re.IGNORECASE) is not None
 
 
-def _mentioned(issue, me, within_days, jira_cfg):
+def _mentioned(issue, me, within_days, jira_cfg, cfg=None):
     if not within_days or not me:
         return False
     updated = today_cmd._parse_datetime(issue.get("updated"))
@@ -88,21 +60,25 @@ def _mentioned(issue, me, within_days, jira_cfg):
             return False
     account = str(me.get("accountId") or "")
     names = [n for n in (me.get("displayName"), me.get("emailAddress")) if n]
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=within_days)
     try:
-        comments = sources.fetch_comments(jira_cfg, issue["key"])
+        thread = sources.fetch_comments(jira_cfg, issue["key"], cutoff=cutoff)
     except Exception:                              # noqa: BLE001
         return False
-    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=within_days)
-    for comment in comments:
+    matched = None
+    for comment in thread:
         created = today_cmd._parse_datetime(comment.get("created"))
         if created and created < cutoff:
             continue
-        if account and account in _mention_ids(comment):
-            return True
+        named = account and account in _mention_ids(comment)
         text = _comment_text(comment)
-        if any(_name_mentioned(text, name) for name in names):
-            return True
-    return False
+        if named or any(_name_mentioned(text, name) for name in names):
+            matched = comment
+    if matched is None:
+        return False
+    excerpt = comment_core.settings(cfg or {})["excerpt_chars"]
+    issue["mention_comment"] = comment_core.format_line(matched, excerpt)
+    return True
 
 
 def _is_blocked_by(link):
@@ -152,7 +128,7 @@ def classify(issue, opts, me, jira_cfg, cfg=None):
         return "blocked"
     if opts["unassigned_in_sprint"] and today_cmd._is_unassigned(issue):
         return "unassigned"
-    if _mentioned(issue, me, opts["mentions_me_within_days"], jira_cfg):
+    if _mentioned(issue, me, opts["mentions_me_within_days"], jira_cfg, cfg):
         return "mention"
     if _is_new_bug(issue, opts["new_bugs_within_days"]):
         return "new-bug"
@@ -168,6 +144,9 @@ KIND_RANK = {"overdue": 0, "blocked": 1, "mention": 2, "unassigned": 3,
 
 def describe(kind, issue):
     if kind == "mention":
+        quoted = issue.get("mention_comment")
+        if quoted:
+            return f"reply to the comment that named you — {quoted}"
         return "reply to the comment that named you"
     if kind == "new-bug":
         return "triage this bug (assign it or set a due date)"

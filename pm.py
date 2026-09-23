@@ -14,8 +14,10 @@ Commands:
     pm do N              Preview, then write, the action `pm today` numbered N.
     pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
+                         Includes Jira comments since the last report.
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
+                         A mention quotes the comment.
     pm refine            BA queue: draft titles, criteria, estimates.
     pm review            Without --apply, the old model judgement. With --apply,
                          the refine worksheet. Deprecated.
@@ -23,13 +25,16 @@ Commands:
     pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
-    pm release-notes     Done issues since a date or in a fixVersion.
+    pm release-notes     Done issues since a date or in a fixVersion,
+                         with comments from that window.
     pm brief             Meeting prep for one audience, or a debrief.
+                         Prep quotes comments since you last met them.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
     pm warm              Fill the model cache ahead of time (read-only).
     pm ready             Team working agreement: pass/fail per ticket.
-    pm daily             Daily Scrum movement + work in progress (no model).
+    pm daily             Daily Scrum movement, comments from that window,
+                         and work in progress (no model).
     pm update            Upgrade pm-tools and migrate the config. Never
                          replaces it.
 
@@ -242,7 +247,8 @@ def build_parser():
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
     p_report = sub.add_parser("report", parents=[common, write_opts],
-                              help="Weekly state-of-product report")
+                              help="Weekly state-of-product report, with "
+                                   "comments since the last report")
     p_report.add_argument("--publish", action="store_true",
                           help="Also send the report to Confluence and/or Teams")
     p_report.set_defaults(func=report.run, needs_config=True)
@@ -335,7 +341,8 @@ def build_parser():
     p_metrics.set_defaults(func=metrics.run, needs_config=True)
 
     p_brief = sub.add_parser("brief", parents=[common, write_opts],
-                             help="Meeting prep for one audience, or a debrief")
+                             help="Meeting prep for one audience, or a debrief. "
+                                  "Prep includes comments since you last met them")
     p_brief.add_argument("--for", dest="for_audience", metavar="AUDIENCE",
                          help="Who the page is for (memory is per audience)")
     p_brief.add_argument("--debrief", metavar="FILE",
@@ -402,7 +409,8 @@ def build_parser():
     p_ready.set_defaults(func=ready.run, needs_config=True)
 
     p_daily = sub.add_parser("daily", parents=[common],
-                             help="Daily Scrum movement and work in progress")
+                             help="Daily Scrum movement, comments from that "
+                                  "window, and work in progress")
     p_daily.add_argument("--days", type=int, default=1,
                          help="How many days back to count as 'moved' "
                               "(default: 1)")
@@ -427,8 +435,9 @@ def build_parser():
         "release-notes", parents=[common],
         help="Done issues since a date or in a fixVersion",
         description="Done issues since a date or in a fixVersion, grouped by "
-                    "product and workstream. The model drafts prose when it "
-                    "is up and does not choose the issues.")
+                    "product and workstream. Comments from that window sit "
+                    "on the bullets. The model drafts prose when it is up "
+                    "and does not choose the issues.")
     p_notes.add_argument("--since", metavar="YYYY-MM-DD",
                          help="Include issues resolved on or after this date")
     p_notes.add_argument("--version", metavar="NAME",

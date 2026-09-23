@@ -37,6 +37,14 @@ def date(days_from_now):
     return (NOW.date() + dt.timedelta(days=days_from_now)).isoformat()
 
 
+def comment(days_ago, who, text):
+    return {
+        "created": stamp(days_ago),
+        "author": {"displayName": who},
+        "body": text,
+    }
+
+
 AC = "Acceptance criteria: the endpoint returns the current status."
 
 
@@ -62,7 +70,10 @@ def backlog():
          "parent": "APS-1", "status_name": "In Review",
          "status_category": "In Progress", "sprint": "open",
          "assignee": "A. Lee", "story_points": 3, "description": AC,
-         "updated": stamp(0), "changelog": [
+         "updated": stamp(0), "comments": [
+             comment(0, "A. Lee", "Waiting on the certificate review."),
+             comment(30, "A. Lee", "Old note from last quarter."),
+         ], "changelog": [
              {"created": stamp(0), "author": {"displayName": "A. Lee"},
               "items": [{"field": "status", "fromString": "To Do",
                          "toString": "In Review"}]}]},
@@ -129,7 +140,9 @@ def backlog():
          "summary": "Ship the exchange retry budget", "components": [],
          "parent": "APS-1", "status_name": "Done", "status_category": "Done",
          "sprint": None, "story_points": 5, "description": AC,
-         "updated": stamp(5), "changelog": [
+         "updated": stamp(5), "comments": [
+             comment(5, "A. Lee", "Shipped the retry budget."),
+         ], "changelog": [
              {"created": stamp(12), "author": {"displayName": "A. Lee"},
               "items": [{"field": "status", "fromString": "To Do",
                          "toString": "In Progress"}]},
@@ -161,7 +174,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
-config_version: 3
+config_version: 4
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -480,13 +493,19 @@ class LintTests(CliTestCase):
 
 class DailyTests(CliTestCase):
     def test_movement_and_work_in_progress(self):
+        before = len(self.jira.calls)
         self.run_pm("daily", "-w", "SDX")
+        fresh = self.jira.calls[before:]
         report = self.read_output(r"daily_.*\.md")
         self.assertIn("APS-10", report)
         self.assertIn("To Do → In Review", report)
         self.assertIn("A. Lee", report)
+        self.assertIn("Waiting on the certificate review.", report)
+        self.assertNotIn("Old note from last quarter.", report)
         self.assertIn("APS-11", report)              # in progress now
         self.assertNotIn("APS-20", report)           # moved 40 days ago
+        self.assertFalse(any(
+            c[0] == "POST" and "/v1/chat/completions" in c[1] for c in fresh))
 
     def test_widening_the_window_picks_up_older_moves(self):
         self.run_pm("daily", "--days", "60", "-w", "APS")
@@ -497,8 +516,19 @@ class DailyTests(CliTestCase):
 
 class ReportTests(CliTestCase):
     def test_weekly_report_is_written_with_real_links(self):
+        before = len(self.jira.calls)
         out = self.run_pm("report", "-w", "SDX")
         self.assertIn("Done. Report written to", out)
+        posts = [c for c in self.jira.calls[before:]
+                 if c[0] == "POST" and "/v1/chat/completions" in c[1]]
+        import json
+        blob = json.dumps(posts)
+        self.assertIn("Waiting on the certificate review.", blob)
+        self.assertNotIn("Old note from last quarter.", blob)
+        with open(os.path.join(self.dir, "report_state.json"),
+                  encoding="utf-8") as fh:
+            saved = json.load(fh)
+        self.assertIn("_ran_at", saved["SDX"])
 
         report = self.read_output(r"weekly_report_.*\.md")
         self.assertIn("Fake model reply for the end-to-end test", report)
@@ -877,6 +907,9 @@ class BriefTests(CliTestCase):
         out = self.run_pm("brief", "--for", "standup", "--product", "IP", "-w", "SDX")
         self.assertIn("Brief — standup", out)
         self.assertIn("first time with this audience", out)
+        self.assertIn("APS-10 — ", out)
+        self.assertIn("Waiting on the certificate review.", out)
+        self.assertNotIn("Old note from last quarter.", out)
         self.assertTrue(os.path.exists(
             os.path.join(self.dir, "briefs", "standup.json")))
         second = self.run_pm("brief", "--for", "standup", "-w", "SDX")

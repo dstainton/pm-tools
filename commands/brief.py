@@ -13,7 +13,10 @@ import re
 import sys
 
 from commands import today as today_cmd
-from core import checklist, filters, model, output, paths, sources, state, workstreams, writes
+from core import (
+    checklist, comments, filters, model, output, paths, sources, state,
+    workstreams, writes,
+)
 from core import products as product_core
 
 
@@ -100,6 +103,9 @@ def gather(cfg, audience):
             jql = workstreams.scope_jql(cfg, ws, "lint")
             issues = (sources.fetch_jira_detailed(cfg["jira"], jql)
                       if jql else [])
+            comments.attach(
+                cfg, cfg.get("jira") or {}, issues,
+                comments.audience_cutoff(last, comments.settings(cfg)))
             for issue in issues:
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
             risks.extend(_risks(cfg, ws))
@@ -144,6 +150,13 @@ def render_prep(audience, sections, last):
         lines.append("### What changed")
         lines.append("")
         lines.append(section["change"])
+        notes = []
+        for issue in section["issues"]:
+            for line in issue.get("comments") or []:
+                notes.append(f"- {issue['key']} — {line}")
+        if notes:
+            lines.append("")
+            lines.extend(notes)
         lines.append("")
         lines.append("### Decisions needed")
         lines.append("")
