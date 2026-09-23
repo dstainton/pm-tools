@@ -23,7 +23,7 @@ movement window for one run.
 
 import datetime as dt
 
-from core import output, sources, workstreams
+from core import comments, output, sources, workstreams
 
 
 def _fmt_when(when):
@@ -99,6 +99,8 @@ def build_markdown(cfg, results, days, group_by):
                 lines.append(
                     f"- **[{m['key']}]({m['url']})** {sources.short(m['summary'], 80)} "
                     f"— {arrow}{who} ({when})")
+                for line in m.get("comments") or []:
+                    lines.append(f"  - {line}")
         lines.append("")
 
         # --- In progress now ----------------------------------------------
@@ -143,6 +145,13 @@ def run(cfg, args):
 
         moved = sources.fetch_jira_changelog(cfg["jira"], moved_jql, days) \
             if moved_jql else []
+        # The card already moved inside this window. Mark it current so the
+        # comment reader asks for it; the cutoff still drops older comments.
+        now = dt.datetime.now(dt.timezone.utc)
+        cutoff = now - dt.timedelta(days=days)
+        for card in moved:
+            card["updated"] = now.isoformat()
+        comments.attach(cfg, cfg.get("jira") or {}, moved, cutoff)
         wip = sources.fetch_jira_cards(cfg["jira"], wip_jql) if wip_jql else []
 
         print(f"  {len(moved)} moved, {len(wip)} in progress.")

@@ -81,6 +81,14 @@ SECTION_DEFAULTS = {
         "overdue": True,
     },
     "metrics": {"weeks": 8},
+    "comments": {
+        "enabled": True,
+        "max_per_issue": 3,
+        "max_issues": 25,
+        "excerpt_chars": 240,
+        "report_days": 7,
+        "section_chars": 6000,
+    },
 }
 
 

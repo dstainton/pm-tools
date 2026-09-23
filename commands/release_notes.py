@@ -11,7 +11,7 @@ When the model is down, the command prints the bullets and says so.
 import datetime as dt
 import sys
 
-from core import filters, model, output, sources, workstreams
+from core import comments, filters, model, output, sources, workstreams
 from core import products as product_core
 
 
@@ -53,6 +53,8 @@ def _row(product, ws, issue):
         "key": issue.get("key"),
         "summary": issue.get("summary") or "",
         "url": issue.get("url") or "",
+        "updated": issue.get("updated"),
+        "comments": [],
     }
 
 
@@ -90,13 +92,28 @@ def collect(cfg, since, version):
                 {"name": "Unassigned", "abbrev": "UNASSIGNED"},
                 {"name": "Unclaimed", "abbrev": "—"},
                 issue))
+    _attach_comments(cfg, rows, since)
     return rows
 
 
-def bullet_lines(rows):
+def _attach_comments(cfg, rows, since):
+    """Comments on or after --since. A version with no date keeps the newest few."""
+    if not rows:
+        return
+    cutoff = sources.parse_timestamp(since) if since else None
+    groups = {}
+    for row in rows:
+        groups.setdefault(row.get("workstream_abbrev") or "—", []).append(row)
+    jira = cfg.get("jira") or {}
+    for group in groups.values():
+        comments.attach(cfg, jira, group, cutoff)
+
+
+def bullet_lines(rows, comment_budget=6000):
     """Markdown bullets grouped by product, then workstream."""
     if not rows:
         return ["_No done issues in that window._", ""]
+    limit = 0 if comment_budget is None else int(comment_budget)
     lines = []
     order = []
     by_product = {}
@@ -120,8 +137,23 @@ def bullet_lines(rows):
         for stream in block["streams"]:
             lines.append(f"### {stream['name']} ({stream['abbrev']})")
             lines.append("")
+            used = 0
+            omitted = 0
             for issue in stream["issues"]:
                 lines.append(f"- {issue['key']}: {issue['summary']}")
+                wrote = False
+                for line in issue.get("comments") or []:
+                    if used + len(line) > limit:
+                        break
+                    lines.append(f"  - {line}")
+                    used += len(line)
+                    wrote = True
+                if (issue.get("comments") or []) and not wrote:
+                    omitted += 1
+            if omitted:
+                lines.append(
+                    f"(+{omitted} commented issues omitted "
+                    f"to keep the prompt short.)")
             lines.append("")
     return lines
 
@@ -140,7 +172,7 @@ def draft(cfg, bullets):
     return raw.strip()
 
 
-def render(since, version, rows, prose):
+def render(since, version, rows, prose, comment_budget=6000):
     bits = []
     if since:
         bits.append(f"since {since}")
@@ -152,7 +184,7 @@ def render(since, version, rows, prose):
         f"_{window}. The model does not choose which issues are included._",
         "",
     ]
-    bullets = bullet_lines(rows)
+    bullets = bullet_lines(rows, comment_budget)
     if prose:
         lines.append(prose)
         lines.append("")
@@ -174,9 +206,10 @@ def run(cfg, args):
                  "  pm release-notes --version 2026.9")
     print("Gathering done issues ...")
     rows = collect(cfg, since, version)
-    bullets = bullet_lines(rows)
+    budget = comments.settings(cfg)["section_chars"]
+    bullets = bullet_lines(rows, budget)
     prose = draft(cfg, bullets) if rows else None
-    text = render(since, version, rows, prose)
+    text = render(since, version, rows, prose, budget)
     path = output.place(
         cfg, f"release_notes_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

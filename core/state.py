@@ -43,14 +43,18 @@ def compute_changes(prev_snapshot, items):
       changed - items whose watched value (e.g. Jira status) moved
       dropped - uids present last week but absent this week (done / moved out)
     """
+    previous = {}
+    if isinstance(prev_snapshot, dict):
+        previous = {uid: snap for uid, snap in prev_snapshot.items()
+                    if isinstance(snap, dict) and not str(uid).startswith("_")}
     current = {it["uid"]: it for it in items}
     new, changed = [], []
     for uid, it in current.items():
-        if uid not in prev_snapshot:
+        if uid not in previous:
             new.append(it)
-        elif prev_snapshot[uid].get("watch") != it["watch"]:
-            changed.append((it, prev_snapshot[uid].get("watch")))
-    dropped = [(uid, snap) for uid, snap in prev_snapshot.items()
+        elif previous[uid].get("watch") != it["watch"]:
+            changed.append((it, previous[uid].get("watch")))
+    dropped = [(uid, snap) for uid, snap in previous.items()
                if uid not in current]
     return new, changed, dropped
 

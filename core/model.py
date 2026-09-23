@@ -69,6 +69,9 @@ exactly: First report — no prior week to compare against.
 3. After a fact, cite its tag like [SDX-J3]. Use only tags that appear in \
 the Material.
 4. Do not add a title, a workstream heading, or a reference list.
+5. A dated line under an item is a comment from this window. Use it for \
+what changed, decisions, blockers, and risks, and cite that item's tag. \
+A comment is not a status change.
 
 Example of one filled section:
 ### Progress this sprint
@@ -369,24 +372,42 @@ def _first_json_array(text):
 #  Report assembly
 # ---------------------------------------------------------------------------
 
-def build_material(items, max_items=40, detail_limit=180):
+def build_material(items, max_items=40, detail_limit=180, comment_budget=6000):
     """Turn gathered items into a compact, taggable block for the model.
 
     Q3_K_M loses the plot when the prompt is a wall of text, so we cap both
-    how many items go in and how long each detail line is.
+    how many items go in and how long each detail line is. Comment lines
+    keep their own length and share `comment_budget` characters across the
+    section. The status line stays on `detail_limit`.
     """
     if not items:
         return "(No items were found for this workstream.)"
     lines = []
     shown = items[:max_items]
+    used = 0
+    omitted_comments = 0
+    limit = 0 if comment_budget is None else int(comment_budget)
     for it in shown:
         block = f"[{it['ref']}] ({it['source']}) {it['title']}"
         if it.get("detail"):
             block += f"\n    {short_detail(it['detail'], detail_limit)}"
+        wrote = False
+        for line in it.get("comments") or []:
+            if used + len(line) > limit:
+                break
+            block += f"\n    {line}"
+            used += len(line)
+            wrote = True
+        if (it.get("comments") or []) and not wrote:
+            omitted_comments += 1
         lines.append(block)
     omitted = len(items) - len(shown)
     if omitted:
         lines.append(f"(+{omitted} more items omitted to keep the prompt short.)")
+    if omitted_comments:
+        lines.append(
+            f"(+{omitted_comments} commented issues omitted "
+            f"to keep the prompt short.)")
     return "\n".join(lines)
 
 
@@ -413,9 +434,10 @@ def ping(model_cfg):
     return True, f"answered in {elapsed:.1f}s, {thinking}"
 
 
-def infer_report_section(model_cfg, audience, workstream, items, change_block):
+def infer_report_section(model_cfg, audience, workstream, items, change_block,
+                         comment_budget=6000):
     """Ask the local model to write the report section for one workstream."""
-    material = build_material(items)
+    material = build_material(items, comment_budget=comment_budget)
     user_content = (
         f"Workstream: {workstream['name']} ({workstream['abbrev']})\n\n"
         f"CHANGE SUMMARY:\n{change_block}\n\n"

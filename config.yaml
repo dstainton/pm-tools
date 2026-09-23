@@ -13,7 +13,7 @@
 #  you have already filled in.
 # ============================================================================
 
-config_version: 3
+config_version: 4
 
 # ----------------------------------------------------------------------------
 #  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
@@ -71,6 +71,29 @@ jira:
   # company-managed projects. Keep "parent" unless your site still exposes a
   # legacy custom Epic Link field that you specifically need.
   epic_link_field: "parent"
+
+# ----------------------------------------------------------------------------
+#  2b. Comments — read by the commands that narrate a period
+# ----------------------------------------------------------------------------
+#  The whole thread is not kept. Each command uses the window it already
+#  has, and only issues updated inside that window are asked:
+#    pm report         since the last report; the first run uses report_days
+#    pm brief          since that audience was last briefed; first run uses
+#                      report_days
+#    pm daily          the same --days window as movement
+#    pm release-notes  on or after --since; with only --version, the newest
+#                      max_per_issue comments
+#    pm triage         still reads comments when this block is off, so a
+#                      mention is not missed; the reply line quotes it
+#  section_chars is how much comment text one report or release-notes
+#  section may send to the model.
+comments:
+  enabled: true
+  max_per_issue: 3
+  max_issues: 25
+  excerpt_chars: 240
+  report_days: 7
+  section_chars: 6000
 
 # ----------------------------------------------------------------------------
 #  3. Confluence (Cloud)

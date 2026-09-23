@@ -172,6 +172,36 @@ def to_version_3(text):
 MIGRATIONS.append((2, to_version_3))
 
 
+_COMMENT_LINES = (
+    ("enabled", "  enabled: true"),
+    ("max_per_issue", "  max_per_issue: 3"),
+    ("max_issues", "  max_issues: 25"),
+    ("excerpt_chars", "  excerpt_chars: 240"),
+    ("report_days", "  report_days: 7"),
+    ("section_chars", "  section_chars: 6000"),
+)
+
+
+def to_version_4(text):
+    """Add the comments block. Leave a value that is already set.
+
+    Narrative commands read Jira comments inside their own window. The
+    block holds the caps. A switched-off `enabled` stays off.
+    """
+    if not has_top_level(text, "comments"):
+        text = insert_missing_block(
+            text, "comments", [line for _key, line in _COMMENT_LINES],
+            before_key="confluence")
+    else:
+        for key, line in reversed(_COMMENT_LINES):
+            if not _block_has_key(text, "comments", key):
+                text = _insert_under(text, "comments", line)
+    return set_version(text, 4)
+
+
+MIGRATIONS.append((3, to_version_4))
+
+
 def apply_migrations(text, migrations, target):
     """Walk `migrations` until `text` is at `target`.
 

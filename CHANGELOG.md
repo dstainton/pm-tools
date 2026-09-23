@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0 - 2026-09-23
+
+- `pm report`, `pm brief`, `pm daily`, and `pm release-notes` read Jira
+  comments inside the window that command already uses. The whole thread
+  is not kept. `pm report` uses the time of the last report, or 7 days on
+  the first run and when an older state file has no timestamp. `pm brief`
+  uses the last time that audience was briefed. `pm daily` uses `--days`.
+  `pm release-notes` uses `--since`, or the newest few comments when only
+  a fixVersion is given. `pm triage` quotes the comment that named you.
+- Caps, in the `comments` block: 3 comments per issue, 25 issues per
+  workstream, 240 characters each, and 6000 characters of comment text in
+  one model section. `comments.enabled: false` turns that fetch off for
+  report, brief, daily, and release notes. `pm triage` still reads
+  comments so it can notice a mention. `pm lint`, `pm ready`, `pm review`,
+  `pm refine`, `pm metrics`, and `pm coverage` stay on the ticket fields
+  they already use.
+- `config_version` 4. `pm update` inserts the `comments` block when it is
+  missing. A value you already set, including `enabled: false`, is not
+  replaced.
+
 ## 0.9.1 - 2026-09-23
 
 - `pm update` reinstalls a pipx install from git. `pipx upgrade` was leaving

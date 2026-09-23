@@ -10,7 +10,7 @@ identity, setup, and a few holes in the tools that are already there.
 
 ## Status
 
-Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm-tools/out`, exit codes, discover-fields write-if-blank, and CI. Tranche 2 shipped in 0.8.0 (`config_version` 2): `pm coverage`, the Sprint Goal risk line, Product Goal, `too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`, `pm release-notes`, and `pm inbox edit`. The migration adds `ready.max_points` only. Tranche 3 shipped in 0.9.0 (`config_version` 3): see `docs/INFERENCE_PLAN.md`. User data lives in `~/.pm-tools`. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Section 2.8 is still not built.
+Tranches 0 and 1 shipped in 0.7.0: the pm-tools name, `install.ps1`, `pm update`, `pm daily`, `missing-parent`, files under `~/.pm-tools/out`, exit codes, discover-fields write-if-blank, and CI. Tranche 2 shipped in 0.8.0 (`config_version` 2): `pm coverage`, the Sprint Goal risk line, Product Goal, `too-big-for-a-sprint`, Definition of Done, `pm metrics --sprint`, `pm release-notes`, and `pm inbox edit`. The migration adds `ready.max_points` only. Tranche 3 shipped in 0.9.0 (`config_version` 3): see `docs/INFERENCE_PLAN.md`. Windowed Jira comments shipped in 0.10.0 (`config_version` 4). User data lives in `~/.pm-tools`. The table under "Where things stood at 0.6.0" is the starting point this plan was written against, not the current tree. Section 2.8 is still not built.
 
 ---
 

@@ -10,7 +10,7 @@ and `pm ready --deep` ask the same questions, so warming one warms the other.
 """
 
 from commands import inbox, review
-from core import model, output, state
+from core import comments, model, output, state
 
 
 def _wanted(args):
@@ -36,7 +36,8 @@ def _warm_report(cfg):
         model.tick(cfg["model"], ws["abbrev"])
         model.infer_report_section(
             cfg["model"], cfg["output"]["audience"],
-            ws, row["items"], row["change_block"])
+            ws, row["items"], row["change_block"],
+            comment_budget=comments.settings(cfg)["section_chars"])
 
 
 def _warm_inbox(cfg):

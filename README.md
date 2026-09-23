@@ -481,7 +481,8 @@ Gathers in-sprint work, roadmap, decisions, risks and dependencies per
 workstream, works out **what changed since last week**, and asks the local model
 to write a concise section. Ends with a reference table of real links. Output:
 `weekly_report_<date>.md`. Remembers last week in `report_state.json` — keep
-that file between runs.
+that file between runs. Jira comments since that last report are part of the
+material (7 days on the first run). A comment is not treated as a status change.
 
 ### `pm lint` — Product Backlog checks
 
@@ -535,7 +536,8 @@ pm triage --apply 2 --yes
 
 What counts is in the `triage:` block: unassigned in the Sprint, blocked
 (status, label, or a blocked-by link), comments that named you, new bugs,
-in-sprint items untouched for N days, and overdue work.
+in-sprint items untouched for N days, and overdue work. The reply line quotes
+the comment that named you.
 
 ### `pm refine` — the BA's queue
 
@@ -595,6 +597,9 @@ pm brief --for standup --product IP
 pm brief --debrief notes.md --for "Monthly portfolio review"
 pm brief --debrief notes.md --apply
 ```
+
+Prep quotes Jira comments since you last briefed that audience (7 days the
+first time). The debrief still uses the notes you pass in.
 
 ### `pm publish` and `pm schedule`
 
@@ -663,7 +668,8 @@ pm schedule add coverage --at 08:45
 Done issues since a date or in a fixVersion, grouped by product and
 workstream. The model drafts prose when it is up. Otherwise the command
 prints the bullet list and says the model was skipped. The model does not
-choose which issues are included.
+choose which issues are included. Each bullet can carry comments from
+`--since`. With only `--version`, it carries the newest few.
 
 ```
 pm release-notes --since 2026-08-01
@@ -673,8 +679,9 @@ pm release-notes --version 2026.9
 ### `pm daily` — Daily Scrum snapshot
 
 **No model.** The two things the Daily Scrum actually needs, per workstream: what
-*moved* since yesterday (real status transitions from the Jira changelog), and
-what's *in progress now* and who owns it.
+*moved* since yesterday (real status transitions from the Jira changelog),
+comments on those cards from the same window, and what's *in progress now*
+and who owns it.
 
 ```
 pm daily                      # yesterday's movement + today's WIP
@@ -751,6 +758,7 @@ pm-tools/
 │   ├── decisions.py     #   snooze / accept / assign memory
 │   ├── metrics.py       #   throughput, cycle time, forecast, sprint snapshot
 │   ├── checklist.py     #   Product Goal sentence and Definition of Done
+│   ├── comments.py      #   windowed Jira comments for narrative commands
 │   ├── output.py        #   places files under output.directory
 │   ├── paths.py         #   local ~/.pm-tools vs shared state folder
 │   ├── migrations.py    #   config_version steps for pm update
@@ -811,6 +819,9 @@ membership come from Jira ids, not English word lists. `pm lint` no longer
 treats a word list as a judgement. Model replies are cached, `pm warm` fills
 that cache, and `pm schedule add warm --at 07:00` runs it ahead of time.
 There is no background service.
+
+0.10.0 (`config_version` 4) reads Jira comments inside each narrative
+command's own window. `pm update` inserts the `comments` block.
 
 `docs/PORTFOLIO_PROPOSALS.md` is the previous plan: the ten features chosen
 for a PM running several products and the BA who refines with them. Those

@@ -436,7 +436,22 @@ class _Handler(BaseHTTPRequestHandler):
         if match:
             issue = next((i for i in self.backlog
                           if i["key"] == match.group(1)), None)
-            return self._send({"comments": (issue or {}).get("comments") or []})
+            comments = list((issue or {}).get("comments") or [])
+            query = parse_qs(parsed.query)
+            order = (query.get("orderBy") or [""])[0]
+            comments.sort(key=lambda c: c.get("created") or "",
+                          reverse=order.startswith("-"))
+            total = len(comments)
+            start = int((query.get("startAt") or ["0"])[0] or 0)
+            page_size = int((query.get("maxResults") or [str(total or 0)])[0]
+                            or 0)
+            page = comments[start:start + page_size] if page_size else comments[start:]
+            return self._send({
+                "startAt": start,
+                "maxResults": page_size or total,
+                "total": total,
+                "comments": page,
+            })
 
         match = re.match(r"/rest/api/3/issue/([^/]+)/?$", path)
         if match:
