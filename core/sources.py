@@ -412,16 +412,16 @@ def dedupe_sprints(sprints):
     return unique
 
 
-def fetch_active_sprints(cfg, project):
-    """Active sprints (and their Sprint Goals) for a project, if Agile is on.
+def fetch_sprints(cfg, project, states=("active",)):
+    """Sprints for a project, if Agile is on.
 
-    Uses `/rest/agile/1.0`. A sprint that is active on more than one board
-    is returned once. Returns [] when the endpoint is missing, the project
-    has no board, or anything else goes wrong — callers treat an empty list
-    as "no Sprint Goal to show", not an error.
+    `states` is passed to the Agile API (`active`, `closed`, `future`).
+    A sprint on more than one board is returned once. Returns [] when the
+    endpoint is missing or the project has no board.
     """
     if not project:
         return []
+    state = ",".join(states) if not isinstance(states, str) else states
     base = cfg["base_url"].rstrip("/")
     auth = _auth(cfg)
     headers = {"Accept": "application/json"}
@@ -442,7 +442,7 @@ def fetch_active_sprints(cfg, project):
         try:
             resp = send("GET",
                 f"{base}/rest/agile/1.0/board/{board_id}/sprint",
-                params={"state": "active"},
+                params={"state": state},
                 auth=auth, headers=headers, timeout=30)
             resp.raise_for_status()
             for sprint in resp.json().get("values") or []:
@@ -454,10 +454,71 @@ def fetch_active_sprints(cfg, project):
                     "project": project,
                     "start": (sprint.get("startDate") or "")[:10] or None,
                     "end": (sprint.get("endDate") or sprint.get("end") or "")[:10] or None,
+                    "state": sprint.get("state") or "active",
                 })
         except requests.RequestException:
             continue
     return dedupe_sprints(sprints)
+
+
+def fetch_active_sprints(cfg, project):
+    """Active sprints only. `pm today` wants the Sprint that is open now."""
+    return fetch_sprints(cfg, project, states=("active",))
+
+
+def fetch_projects(cfg):
+    """Projects the token can see. `pm setup` offers these instead of a blank."""
+    base = cfg["base_url"].rstrip("/")
+    resp = send(
+        "GET", f"{base}/rest/api/3/project/search",
+        params={"maxResults": 50},
+        auth=_auth(cfg), headers={"Accept": "application/json"}, timeout=30)
+    resp.raise_for_status()
+    out = []
+    for project in resp.json().get("values") or []:
+        out.append({
+            "key": project.get("key") or "",
+            "name": project.get("name") or "",
+        })
+    return out
+
+
+def fetch_confluence_spaces(cfg):
+    """Spaces on the Confluence site. Empty when Confluence is not configured."""
+    base = (cfg.get("base_url") or "").rstrip("/")
+    if not base:
+        return []
+    resp = send(
+        "GET", f"{base}/rest/api/space",
+        params={"limit": 50},
+        auth=(cfg.get("email"), cfg.get("api_token")),
+        headers={"Accept": "application/json"}, timeout=30)
+    resp.raise_for_status()
+    out = []
+    for space in resp.json().get("results") or []:
+        out.append({
+            "key": space.get("key") or "",
+            "name": space.get("name") or "",
+        })
+    return out
+
+
+def fetch_model_ids(endpoint):
+    """Model ids from an OpenAI-compatible `/v1/models` (llama.cpp, Lemonade)."""
+    url = endpoint.rstrip("/")
+    if not url.endswith("/models"):
+        url = url + "/models" if url.endswith("/v1") else url + "/v1/models"
+    resp = send("GET", url, headers={"Accept": "application/json"}, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    rows = data.get("data") if isinstance(data, dict) else data
+    ids = []
+    for row in rows or []:
+        if isinstance(row, dict) and row.get("id"):
+            ids.append(row["id"])
+        elif isinstance(row, str):
+            ids.append(row)
+    return ids
 
 
 # ---------------------------------------------------------------------------

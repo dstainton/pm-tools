@@ -1,0 +1,1232 @@
+# Tranche 4 — usefulness, accessibility, and fewer commands
+
+A review of the whole CLI from the seat of the person who uses it: a product
+manager for one agile team. It asks of every command *what does a PM do
+differently because this exists*, and treats accessibility — including the
+way the tool reads to someone with ADHD or on the autism spectrum — as part
+of whether it works, not as a coat of paint.
+
+Nothing here is built. This is a plan.
+
+Vocabulary follows `docs/TERMINOLOGY.md`: Daily Scrum, refinement, Sprint
+Goal, Product Goal, Definition of Done, team working agreement, throughput
+and cycle time (never velocity), forecast (never committed), assignee,
+stakeholders, and `workstream` stays `workstream`.
+
+---
+
+## How this review was done
+
+Every command was run for real against the stand-in Jira in `tests/fake_jira.py`
+with the end-to-end backlog, and the output read as a user reads it. Findings
+below quote that output. Nothing in this document is inferred from source
+alone.
+
+---
+
+## The verdict in one page
+
+**What is genuinely good.** The daily habit is real. `pm today` answers a
+question a PM actually has at 8:30am and hands back five numbered things to
+do. Capture (`pm note`) is frictionless. Every Jira write previews and asks
+once. `pm lint` and the fast `pm ready` are rules, not opinions, and say so.
+`pm doctor` names its own fix. The local-model boundary is drawn in the right
+place: the model writes prose, rules decide what is true. `pm brief` is the
+strongest idea in the tool and the least finished.
+
+**The hurdle before any of that.** There is no guided way in. `pm init`
+copies a 409-line annotated template and stops; from there you hand-edit
+YAML across twenty sections, and the concepts you must get right first —
+workstreams, Components, custom-field IDs — are the ones a new user
+understands least. Every piece needed to do this conversationally already
+exists (`pm doctor` verifies, `core/config_edit.py` writes without
+disturbing comments, `pm workstreams add` appends an entry,
+`sources.fetch_project_components` lists what Jira already knows). Nobody
+meets the defects below if they cannot get past the config file. See Part 3.
+
+**The three things most worth fixing once you are in.**
+
+1. **Two numbered queues for one queue.** `pm today` and `pm triage` classify
+   the same tickets with the same code and hand out *different numbers* for
+   the same ticket, into two state files, applied by two different commands.
+   In the live run, `pm do 4` and `pm triage --apply 6` were the same write to
+   the same issue. This is the single worst usability defect in the tool and
+   it lands hardest on the user who most needs a stable list.
+
+2. **The answer is in a file you have to go and open.** `pm lint` prints
+   `7 issues checked — 3 findings` and a filename. `pm ready` prints a count
+   and a filename. `pm report` prints nothing but a filename. The findings
+   exist; the tool declines to say them. For a PM whose hard part is
+   *starting*, "the answer is in `~/.pm-tools/out/lint_report_2026-09-24.md`"
+   is a tax, not a result.
+
+3. **Severity is a coloured circle and every link says "open".** The weekly
+   report's reference table came back with thirteen links, every one of them
+   reading `open`; the lint report conveyed error, warn and review only as
+   🔴 / 🟠 / 🔵. Both fail for a screen-reader user, and both fail for anyone
+   who does not hold a colour-to-severity map in working memory.
+
+**And one source is being wasted.** Confluence is fetched by `pm report` and
+`pm brief`, and then a whole decision page reaches the model as its title
+plus the first **180 characters** of its body, on a fixed seven-day window
+that no command can vary. Jira comments got a windowed reader and a
+6000-character budget in 0.10.0; the pages where a team actually writes its
+decisions down got neither. The report section named "Decisions since last
+report" is fed the thinnest source in the tool. See Part 4.
+
+**And you cannot ask for a period.** Every report answers "since the last
+time you ran me", which is the right default and the only option. Five
+commands spell "how far back" three different ways, and a Sprint is
+reachable only as "the one open right now" — so the report you want in front
+of you at Sprint Review, for the Sprint that just closed, cannot be
+produced. Part 5.
+
+**What is missing around the tool, not in it.** There is no page that
+answers "I have ten minutes, what do I type?", no page per command, and only
+two commands can emit JSON — which is the one thing standing between `pm`
+and every form of automation, including an MCP server that would let Copilot
+call it. Parts 10 and 11.
+
+**The shape of the fix.** The tool has 23 commands. The answer to most of the
+gaps below is *fewer commands with better answers*, not new verbs — with one
+exception, `pm setup`, which earns a verb because it runs before the front
+door exists. Rule 1 of `docs/PORTFOLIO_PROPOSALS.md` is "one front door". The
+command list has since grown past what one front door can cover.
+
+---
+
+## Part 1 — Command by command
+
+For each: what it does now, what it should do for this user, and the call.
+
+### `pm today` — keep, and make it the only queue
+
+**Now.** Date line, Sprint Goal, NEEDS YOU (5 of 7), MOVED SINCE YESTERDAY,
+AGING, REFINEMENT GAPS, and a footer. Numbered actions persist to
+`today.json` for `pm do N`.
+
+**Defects seen in the live run.**
+
+- The same ticket appeared twice with two numbers, because it is claimed by
+  two workstreams: `4 APS-50 … IP/SDX` and `5 APS-50 … IP/APS`. Both wrote
+  the same `PUT /rest/api/3/issue/APS-50`. Overlap is deliberate at the
+  membership layer and `pm coverage` exists to surface it — but a numbered
+  action list must be a list of *things to do*, and doing this one twice is
+  not a thing to do. De-duplicate by issue key at the action layer; show the
+  extra workstream as a tag on the single row.
+- A finished sprint printed under the `SPRINT GOAL` heading with the line
+  `Sprint ended 14 days ago.` A goal that ended two weeks ago is not today's
+  goal; it is an alert that no sprint is open.
+- Nothing says how old the numbers are. `pm do 4` at 4pm silently uses the
+  snapshot taken at 8:30am.
+
+**Should.** Same shape every day (predictability is a feature — keep it),
+one row per ticket, an explicit line when the list is stale, and an honest
+line when a sprint is not open.
+
+### `pm triage` — fold into `pm today`
+
+**Now.** The same classifier as `pm today` over a wider net: it adds mentions
+of you, blocked-by links, and new bugs, groups by product/workstream, writes
+`triage.json`, and applies with `pm triage --apply N`.
+
+The live run is the argument. `pm today` listed 5 of 7; `pm triage` listed
+the same 7, renumbered. `APS-30` was `1` in both. `APS-50` was `4` and `5` in
+today, `6` and `7` in triage.
+
+**Call.** Keep the mention, blocked-by-link, and new-bug classifiers — they
+are the valuable part and `pm today` lacks them. Retire the second list.
+`pm today` shows the top few; `pm today --all` shows the whole queue with the
+*same numbers*; `pm do N` applies either. Keep `pm triage` as an alias for
+`pm today --all` for one release, as `pm review` was kept.
+
+### `pm lint` — keep, print the findings
+
+**Now.** Seven deterministic rules. Prints counts, writes Markdown or JSON.
+Exits non-zero with `--fail-on`. Snooze / accept / assign memory.
+
+**Defects.** The findings never reach the screen. Severity in the file is
+emoji-only. Link text is `open`. Findings for `vague-title` and
+`missing-acceptance-criteria` instruct the user to run `pm review titles` and
+`pm review criteria` — a command the tool itself prints a deprecation notice
+for. The tool is routing users to a command it is retiring. Count lines read
+`1 issues checked — 1 findings`.
+
+**Should.** Print the top findings grouped by rule, with the file as the
+archive. Point at `pm refine`, which drafts the fix, rather than at a
+deprecated verb.
+
+### `pm ready` — keep; it is the gate, and it should answer a planning question
+
+**Now.** Maps lint rules to named criteria, applies the team working
+agreement, adds `too-big-for-a-sprint`, reports a percentage and a gap table.
+
+**Should.** A PM runs this before Sprint Planning. The question is not "what
+percent is ready" but "can we fill a sprint from what is ready?" The tool
+already computes throughput and cycle time in `pm metrics` and story points
+here. Joining them — *N ready items, M points, against a recent throughput of
+X per week* — turns a statistic into a planning answer. Keep the percentage
+for `--fail-under` and CI.
+
+### `pm refine` — keep; lower the ceremony
+
+**Now.** Finds items failing the agreement, drafts titles and acceptance
+criteria with the model, suggests an estimate from the median of done
+stories, writes a worksheet you edit by hand, writes back on `--apply`.
+
+The no-blank-page idea is right and the write-back is well guarded.
+
+**Defect.** An item that fails *only* on `too-big-for-a-sprint`, or whose
+findings are all hidden by an earlier decision, is silently absent from the
+queue — so a ticket can be blocked by the agreement and invisible to the
+command whose job is to unblock it.
+
+### `pm review` — finish the deprecation
+
+**Now.** A half-state. The `pm review` verb prints a deprecation note and
+delegates to `refine`; `review.py` is live library code used by `pm ready
+--deep` and `pm warm`; and `pm lint` messages send users to the deprecated
+verb.
+
+**Call.** Remove the verb. Keep `review.py` as the model-judgement library
+under a name that says so. Repoint the lint messages at `pm refine`. This is
+a naming cleanup, not a capability cut.
+
+### `pm coverage` — keep, fold the surface into `pm doctor`
+
+**Now.** Unclaimed open issues, overlaps, unused components. Exits 1 on
+unclaimed work. Honest and correctly scoped. This is a setup-and-drift
+command, run rarely.
+
+**Call.** Keep the code and the exit code. It belongs next to `pm doctor` and
+`pm workstreams check`, which answer the same question — *does my config
+still match Jira?* — from three different verbs.
+
+### `pm metrics` — keep; stop forecasting from two data points
+
+**Now.** Throughput per week, cycle time median and p85, open count, a
+landing date, scope added, forecast points. `--sprint` reports the open
+sprint. No model.
+
+**Defect.** `landing_date` divides open items by the weekly rate with no
+minimum sample. The live run produced `Landing: 26 Aug 2027` from one
+completed item in eight weeks, printed in a table beside real numbers with
+no qualifier. A PM who repeats that in a stakeholder meeting has been let
+down by the tool. Suppress the forecast below a sample threshold and say why:
+*not enough completed work to forecast*.
+
+**Should.** Say what the numbers mean for the next sprint, not only what they
+were.
+
+### `pm brief` — keep; the best idea here, and the least finished
+
+**Now.** Per-audience memory, what changed since you last met them, comments
+from that window, decisions needed, risks from Confluence. `--debrief` turns
+meeting notes into decisions and actions and can create the tickets.
+
+**Defects.** No links anywhere — bare keys, and a Confluence risk rendered as
+a raw URL after an em dash. "Decisions needed" is the triage queue relabelled,
+so it lists things waiting on *you*, not things this room can decide. The
+risk pages are fetched in full and then only their titles are printed, on a
+seven-day window regardless of when you last met this audience (Part 4).
+
+**Should.** The prep page is what a PM reads walking into a room. Link every
+key. Say what each risk page actually says. Separate *what I owe this room*
+from *what I need from this room* — that second list is the reason the
+meeting exists.
+
+### `pm report` — keep; let the shape follow the content
+
+**Now.** Model writes seven fixed headings per workstream; deterministic
+wrapper, portfolio table, references, metrics appendix. Prints nothing but a
+filename.
+
+**Defects.** Seven headings are emitted whether or not there is anything
+under them, so a quiet week produces a page of `No update this week`.
+"Decisions we are waiting on" — the only section that asks the reader to act
+— is sixth. The references table shows the key as plain text and puts the
+link on the word `open`. Metrics rendering is wrapped in a bare
+`except Exception: pass`, so a broken appendix is invisible. And the section
+called "Decisions since last report" is fed Confluence pages truncated to 180
+characters (Part 4).
+
+### `pm daily` — keep; print it
+
+**Now.** Movement in the window and work in progress, grouped by assignee,
+with comments. Markdown links to Jira — the only command that links keys in
+its file. Writes a file; `--print` echoes it.
+
+**Defect.** This is the one artifact read aloud in a meeting at 9:15, and by
+default it goes to a file. Print by default; keep the file.
+
+### `pm note` / `pm inbox` — keep; keep them instant
+
+**Now.** `pm note "…"` captures in one line and answers
+`Captured #1. Nothing else needed now.` — the best single line in the tool.
+`pm inbox` lists notes with a model-suggested product, workstream, title and
+acceptance criteria, and can create the ticket.
+
+**Defect.** `pm inbox` calls the model once per note on every list, so the
+latency of reviewing your own notes grows with the number of notes. A capture
+tool must stay instant at both ends. Cache the suggestion with the note and
+refresh on request.
+
+### `pm publish` — rework; it silently degrades the artifact
+
+**Now.** Markdown to Confluence storage format and/or a Teams webhook, behind
+preview and confirmation.
+
+**Defect.** The converter handles headings, bullets, code fences and
+paragraphs. It does not handle tables or links. So publishing a weekly report
+to Confluence drops the entire references table into escaped text and turns
+every link into literal `[open](https://…)` characters. The command reports
+success. The one place the tool speaks to the whole organisation is the place
+it quietly mangles the output.
+
+### `pm doctor` — keep; fix the column
+
+**Now.** Config, Jira, projects, custom fields, membership, statuses, model
+timing, caches, each with `ok` / `warn` / `FAIL` as a word. Status as text
+rather than colour is exactly right.
+
+**Defect.** The status column is placed by padding the detail to a fixed
+width. A long config path pushes `ok` past the column and the alignment that
+carries the meaning is gone, as it was in the live run.
+
+### `pm schedule`, `pm update`, `pm products`, `pm workstreams` — keep
+
+Infrastructure, and sound. `pm update` never replacing a filled-in config is
+a promise worth the code it takes. Read-only scheduling is the right line.
+
+### `pm warm` — keep; warm the things that do not change
+
+**Now.** Fills the model cache for review, report and inbox. Read-only.
+
+**Defect.** `--report` warms the whole per-workstream section prompt, which
+contains every issue in the workstream. One ticket moving invalidates the
+entire section, so an overnight warm is wasted by the first morning edit.
+The cache is keyed at the granularity of the report rather than of the thing
+that changed. Part 4.4 proposes the first fix — per-page Confluence summaries
+keyed on the page version, which is stable for weeks — and the principle
+generalises.
+
+### `pm init` — keep as the manual path; it should no longer be the only one
+
+**Now.** Copies a 409-line annotated template and stops. Refuses to overwrite.
+
+Both behaviours are right, and neither is a way in for someone who has not
+used the tool before. Part 3.
+
+---
+
+## Part 2 — Defects found by running the tool
+
+| # | Command | What happens | Why it matters |
+|---|---------|--------------|----------------|
+| 1 | `today`, `triage` | One issue claimed by two workstreams gets two action numbers and two identical writes | Duplicate work, and a numbered list you cannot trust |
+| 2 | `today`, `triage` | The same ticket has different numbers in the two lists | Working-memory hazard |
+| 3 | `today` | An ended sprint prints under `SPRINT GOAL` | Reads as the current goal |
+| 4 | `do N` | Writes from the snapshot with no staleness check or warning | Silent write against old state |
+| 5 | `do N` | Overdue suggestion is always today + 14 days | Ignores the sprint end date |
+| 6 | `lint`, `ready` | Severity is emoji-only in the Markdown | Colour as the sole carrier of meaning |
+| 7 | all Markdown | Every link's text is `open` | "open, open, open" in a link list |
+| 8 | `lint`, `ready` | Findings point at `pm review`, which prints a deprecation notice | The tool routes users to a retiring command |
+| 9 | `metrics` | Landing date extrapolated from one completed item | False confidence in a stakeholder-facing number |
+| 10 | `publish` | Tables and links are dropped converting to Confluence | Report loses its references, reports success |
+| 11 | `doctor` | Status column breaks on a long config path | Alignment carries the meaning |
+| 12 | `report` | Metrics appendix wrapped in `except Exception: pass` | Failures invisible |
+| 13 | `lint`, `ready` | `1 issues checked — 1 findings` | Small, constant, and reads as unfinished |
+| 14 | `brief` | Confluence risk rendered as a bare URL after an em dash | Unreadable aloud, unclickable in the file |
+| 15 | `refine` | Items failing only `too-big-for-a-sprint` never enter the queue | The gate blocks work the fixer cannot see |
+| 16 | `coverage`, `triage` | `--out` is accepted and ignored | A flag that does nothing |
+| 17 | `report` | A Confluence page body is cut to 180 characters | The decisions source is the thinnest input |
+| 18 | `report`, `brief` | Confluence window is one fixed global number | Ignores the window the command already has |
+| 19 | `report`, `brief` | Confluence fetches are never cached | `--cached` and `pm warm` cannot help |
+| 20 | `brief` | Risk pages are fetched in full, then only the title is shown | The body is discarded at the moment it is needed |
+
+---
+
+## Part 3 — Getting started: `pm setup`
+
+The tool is unusable until `config.yaml` is right, and the only help on
+offer is a well-commented template. This is the largest barrier to anyone
+adopting it, and it lands on exactly the people Part 7 is about: a
+409-line YAML file across twenty sections is a wall, and the sections you
+must get right first are the ones whose vocabulary you have not learned yet.
+
+### 3.1 What already exists
+
+Most of a guided setup is already written and only needs to be sequenced:
+
+| Piece | Where | Does |
+|---|---|---|
+| Verify and name the fix | `commands/doctor.py` | config, Jira login, projects, fields, membership, statuses, model timing, caches |
+| Write without breaking comments | `core/config_edit.py` | `set_jira_field_if_blank`, `add_list_entry`, `remove_list_entry` |
+| Append a workstream or product | `commands/workstreams.py`, `commands/products.py` | the exact YAML a setup step needs to emit |
+| Find custom-field IDs | `pm doctor --discover-fields --yes` | writes only blank values |
+| List a project's Components | `sources.fetch_project_components` | already used by `pm coverage` and `pm workstreams check` |
+| Count what a query would see | `sources.approximate_count` | already used by `pm workstreams check` |
+
+### 3.2 What is missing
+
+Four lookups the tool never makes, plus the conversation itself:
+
+- **The Jira project list.** `GET /rest/api/3/project/search`. Today you must
+  know your project key before you start.
+- **The Confluence space list.** `GET /wiki/rest/api/space`. Same problem,
+  once per workstream.
+- **The model list.** `GET {model base}/v1/models`. Both llama.cpp and
+  Lemonade serve it; the bundled PowerShell scripts even tell you to curl it
+  by hand. Nothing in the Python ever asks.
+- **Opening a browser.** Python's `webbrowser` module, to land the user on
+  the API-token page rather than describing where it is.
+
+### 3.3 The shape of `pm setup`
+
+One question at a time, each step verified against the live service before
+it is written.
+
+| Step | Asks for | Verified by | Writes |
+|---|---|---|---|
+| 1. Site | the site name, `dpdd` | — | `jira.base_url: https://dpdd.atlassian.net` |
+| 2. Login | your Atlassian email | — | `jira.email` |
+| 3. Token | opens the API-token page, you paste | `GET /rest/api/3/myself` → greets you by name | `jira.api_token`, preferring `${ENV:…}` |
+| 4. Project | pick from the projects you can see | — | `jira.project` |
+| 5. Workstreams | confirms one per Jira Component, with an issue count each | `approximate_count` | the `workstreams:` entries |
+| 6. Products | group those workstreams, or skip | — | `products:` and each `product:` line |
+| 7. Fields | story points, start date, acceptance criteria | the existing field discovery | the three `jira.*_field` keys |
+| 8. Confluence | a space per workstream, then which labels exist there | a page count | `confluence_space`, `confluence_labels` |
+| 9. Model | pick a model id from the server | times one round trip | `model.endpoint`, `model.name` |
+
+Step 5 above is the one that matters most. Workstreams are the concept a
+new user least understands, and the Jira project already contains the
+answer — the Component list *is* the proposal. Turning "read the README
+section on membership, then write YAML" into "these are your Components,
+which of them are workstreams?" is the difference between adopting the tool
+and not.
+
+### 3.4 Rules it must hold to
+
+Setup is not a licence to break the invariants the rest of the tool keeps.
+
+- **Never change a value that is already set.** The same promise `pm update`
+  makes. Re-running is safe, and it picks up only what is unset.
+- **Resumable and skippable.** Every step can be skipped, and says what it
+  leaves unset and which command fixes it later.
+- **Show the line before writing it.** Same contract as a Jira write:
+  preview, then confirm.
+- **Prefer the environment variable for the token.** The config documents
+  `${ENV:VAR_NAME}` and nothing helps anyone use it. Default to writing the
+  reference and printing the one command that sets it; pasting the secret
+  into the file is the fallback, not the default.
+- **Read-only against Jira and Confluence.** Setup writes one local file.
+- **Refuse to prompt when stdin is not a terminal**, and name the flags,
+  exactly as the write path already does.
+- `pm setup --section jira|model|workstreams|confluence` fixes one thing
+  later, so `pm doctor` can stop describing a fix and start naming a command:
+  *run `pm setup --section model`*.
+
+`pm init` stays as the "I will edit it myself" path.
+
+### 3.5 Why this is also an accessibility item
+
+Everything Part 7 asks for — bounded, predictable, resumable, one thing at a
+time, always says what it will do before it does it — is what a guided setup
+is. The current alternative is the opposite of all four. This is the single
+largest executive-function barrier the tool has, and it is at the front door
+where it turns people away silently.
+
+---
+
+## Part 4 — Confluence and the other sources
+
+### 4.1 What happens today
+
+Confluence is read by two commands and written by one.
+
+- **`pm report`** calls `sources.fetch_confluence` per workstream with CQL
+  built from `confluence_space` and `confluence_labels`, filtered to
+  `lastmodified >= today - confluence.lookback_days`. Pages become items with
+  `detail` set to the HTML-stripped body and `watch` set to the version date,
+  so `core/state.py` does detect a page that changed since last week. They
+  reach the model as material and appear in the references table.
+- **`pm brief`** fetches only the risk-labelled pages, takes the top three,
+  and prints the title and a raw URL.
+- **`pm publish`** writes a page. Nothing else touches Confluence.
+
+So the answer to "are we bringing Confluence in?" is: fetched, largely
+discarded.
+
+### 4.2 The four problems
+
+**The body is cut to 180 characters.** `model.build_material` renders each
+item's detail through `short_detail(detail, detail_limit)` with
+`detail_limit=180`. A decision page arrives as its title and the first 180
+characters — which is the preamble, not the decision.
+
+A 452-character decision page, put through `build_material` as it stands:
+
+```
+[SDX-C1] (Confluence) Decision: certificate rotation cadence
+    The team met on 18 September to decide the certificate rotation
+    cadence. Options considered were 30, 60 and 90 days. Security argued
+    for 30 on the grounds of exposure window; platf...
+```
+
+The page says `DECISION: rotate every 90 days, automated from October`. That
+sentence is not in the prompt. The model is handed the options and denied the
+outcome, and then asked to write a section called "Decisions since last
+report". Jira comments were given a windowed reader and a 6000-character
+section budget in 0.10.0. The page where the decision is actually recorded
+was left on 180 characters and cut mid-word.
+
+**The window is one global number.** `confluence.lookback_days` (default 7)
+applies to every caller. 0.10.0 taught Jira comments to follow each
+command's own window — since the last report, since you last briefed that
+audience, `--days`. Confluence never learned it. Brief an audience you last
+met six weeks ago and you still see seven days of pages.
+
+**Nothing is cached.** The fetch cache wraps `search_issues`,
+`approximate_count` and `fetch_comments`. `fetch_confluence` and
+`fetch_sharepoint` are outside it, so every run re-fetches, `--cached` does
+nothing for them, and `pm warm` cannot pre-fetch them.
+
+**`pm brief` throws the body away.** It fetches the whole risk page and
+prints a title and a bare URL. What the risk actually says — the one thing
+you need walking into the room — is fetched and dropped.
+
+### 4.3 What to build: a windowed page reader
+
+Mirror `core/comments.py`, which already solved this problem once. A new
+`core/pages.py` with the same shape: per-command cutoff, caps
+(`max_pages`, `excerpt_chars`, `section_chars`), and an `enabled` switch,
+under a `pages:` config block.
+
+- `pm report` uses the last report's timestamp, as its comments already do.
+- `pm brief` uses the last time that audience was briefed.
+- `pm daily` does not read Confluence and should not start.
+- A real excerpt budget in the material, so a decision page gets the space a
+  decision needs.
+- Cache the fetch on the same discipline as comments:
+  `("confluence", cql, cutoff, limit)`.
+
+### 4.4 Summarising a page — and why it belongs in `pm warm`
+
+A changed Confluence page is the ideal thing to summarise with a local model,
+for one reason: **it changes rarely, and it has a version number.** Key a
+one-paragraph summary on the page id and its version, and a page that has
+not been edited is never summarised twice. That is what makes it warmable in
+a way today's warming is not.
+
+`pm warm --report` currently warms the whole per-workstream section prompt.
+That prompt contains every issue, so a single ticket moving invalidates the
+entire section and the overnight warm is wasted. A per-page summary keyed on
+`(page id, version)` is stable for weeks. On a machine where inference is
+slow, the difference between those two cache granularities is the difference
+between warming being worth running and not.
+
+So: **`pm warm --pages`**, warming per-page summaries. And the more general
+lesson — *cache the model at the granularity of the thing that changes, not
+the granularity of the report* — is worth applying beyond Confluence.
+
+This stays inside the project's rules. Summarising a page a human wrote, and
+citing it, is prose about a source, not a claim about what is true. The
+summary must cite the page, and the page must stay in the reference table.
+
+### 4.5 What that unlocks
+
+- **`pm brief`** can say what a risk page actually says, in a sentence, with
+  a link — instead of a title and a URL.
+- **`pm report`**'s "Decisions since last report" section gets a real source.
+- **A "what changed in the wiki" view.** Pages changed inside the window,
+  each with a one-line summary and a link. As a section of `pm report` and
+  `pm brief` rather than a new verb, per rule 1.
+
+### 4.6 SharePoint has the same shape
+
+`fetch_sharepoint` reaches the model through the same 180-character detail,
+on the same global `lookback_days`, uncached, and is disabled by default so
+nobody has noticed. Whatever `core/pages.py` does for Confluence should cover
+it, or SharePoint should be honestly marked as unfinished.
+
+---
+
+## Part 5 — Time periods, and running a report for a Sprint
+
+"Since the last time you ran it" is the right default and the wrong only
+option. You cannot currently ask `pm report` or `pm brief` for a period at
+all, and no command anywhere can be pointed at a named Sprint.
+
+### 5.1 Five windows, no sprint
+
+| Command | How its window is chosen | Can you override it? |
+|---|---|---|
+| `report` | the `_ran_at` in `report_state.json` | **no flag at all** |
+| `brief` | the `_last` in that audience's state file | **no flag at all** |
+| `daily` | `--days N`, default 1 | yes |
+| `metrics` | `--weeks N`, default 8; `--sprint` is a boolean meaning the open one | partly |
+| `release-notes` | `--since YYYY-MM-DD` or `--version` | yes |
+| comments | derived per command (0.10.0) | through the above |
+| Confluence | one global `lookback_days` | **no** (Part 4) |
+
+Five mechanisms, three spellings of "how far back", and a Sprint is only
+ever reachable as "the one that is open right now". A report for the Sprint
+that just closed — the thing you want in front of you at Sprint Review —
+cannot be produced.
+
+### 5.2 A Sprint is two things at once
+
+This is the point that makes the feature correct rather than approximate.
+`--sprint 138` has to resolve to **both**:
+
+- a **membership**: `sprint = 1234` in the JQL, so the report covers the
+  issues that were in that Sprint; and
+- a **date range**: its start and end, so the comment cutoff and the
+  Confluence page cutoff cover that fortnight and not the last seven days.
+
+Resolve one without the other and you get a report about the right issues
+with the wrong commentary, or the right fortnight with the wrong issues.
+
+### 5.3 One window selector
+
+`core/window.py`, shared by the commands that narrate a period, accepting:
+
+```
+                        since the last run of this command   (today's default)
+--since YYYY-MM-DD      an explicit start
+--days N  /  --weeks N  relative
+--sprint                the open Sprint
+--sprint 138            by number or name — APS SP138, SP138, 138
+--sprint last           the Sprint that most recently closed
+```
+
+It returns a start, an end, a JQL clause and a label, and that one answer
+feeds three consumers that currently each decide for themselves: the Jira
+scope, `core/comments.py`'s cutoff, and the `core/pages.py` cutoff from
+Part 4. The existing per-command defaults stay exactly as they are when no
+flag is given, so nothing anyone relies on changes.
+
+Applies to `report`, `brief`, `release-notes`, `metrics` and `daily`.
+It does not apply to `today` (which means now), to `lint`, `ready` and
+`refine` (which judge the backlog as it stands, not a period), or to
+`doctor` and `coverage` (which check configuration).
+
+### 5.4 What the plumbing already knows, and what it lacks
+
+`fetch_active_sprints` already reads the Agile API, already captures each
+sprint's `id`, `name`, `goal`, `start` and `end`, and already uses the id to
+de-duplicate across boards. The ids are in hand; nothing ever queries by one.
+
+Three gaps:
+
+- **Only active sprints are fetched.** The call passes `state=active`. A
+  closed or future Sprint is invisible, so `--sprint last` has nothing to
+  resolve against. It needs a `fetch_sprints` that takes the states it wants,
+  and it should be cached — the list is stable.
+- **`filters.SPRINT_VALUES` has four values**: `any`, `open`, `future`,
+  `none`. It needs an id form compiling to `sprint = 1234`.
+- **Nothing resolves a number to a Sprint.** `138` should match `APS SP138`
+  by name and by id, and an ambiguous answer should list the candidates
+  rather than guess — the same manner as an unknown `--workstream`, which
+  already replies `Available: SDX, APS, ITK.`
+
+### 5.5 Two consequences worth designing for
+
+**An explicit window must not move the memory.** `pm report` advances
+`report_state.json` as a side effect of running. Run a report for Sprint 137
+retroactively and it would overwrite the "last report" timestamp, quietly
+corrupting next week's "what changed". A run with an explicit window is a
+read-only run: it reports, and it does not advance the memory. The same
+applies to `pm brief`, which records when you last met an audience.
+
+**Output files are named by run date.** `weekly_report_2026-09-24.md` means
+two Sprint reports produced on the same afternoon overwrite each other. A
+windowed run should carry its window in the name.
+
+---
+
+## Part 6 — Improvements that benefit every command
+
+### 6.1 One shared render layer
+
+`pm today` gained OSC 8 terminal hyperlinks in 0.10.1, implemented privately
+in `commands/today.py` as `terminal_links`, `terminal_width`, `_hyperlink`
+and `_issue_cell`. That work should be promoted to `core/render.py` and used
+everywhere, so that **every Jira reference is a link in every command**:
+
+- Terminal: OSC 8 on the key when stdout is a terminal; plain when piped.
+  Gaps today are `pm triage`, `pm coverage`, the aging block in `pm metrics`,
+  `pm refine`, the `pm lint` and `pm ready` count lines, `pm inbox create`,
+  and every `writes.preview`.
+- Markdown: link text is the key, never `open`. `[APS-30](…)`, not
+  `[open](…)`. Gaps are `pm lint`, `pm ready`, `pm report` references, and
+  the whole of `pm brief` and `pm release-notes`.
+- One helper for "issue key as a link", so a new command cannot get it wrong.
+
+### 6.2 One identity for an issue
+
+Three schemes are live: `pm report` cites `SDX-J1`, `pm brief` uses the Jira
+key as the same field, everything else uses the key. The report's tag scheme
+exists so the model can cite a source without inventing a key — that is
+sound and should stay — but the references table should show and link the
+key, and the two commands should not use one field for two meanings.
+
+### 6.3 Answer on screen; keep the file as the archive
+
+`pm lint`, `pm ready`, `pm report` and `pm review` write a file and tell you
+its name. Print the bounded answer — the same "top few, never a wall" rule
+already applied to `pm today` — and keep writing the file.
+
+### 6.4 One way of saying when
+
+The live output mixes `due 4 days ago`, `(09:12)`, `2026-09-20`,
+`26 Aug 2027`, `19 days`, and `today 09:12`. Pair relative and absolute
+everywhere: `20 Sep 2026 (4 days ago)`. Relative alone assumes the reader is
+tracking today's date; absolute alone assumes they will do the arithmetic.
+
+### 6.5 Say what is not there
+
+`--out` is accepted by every config-driven command and ignored by `pm today`,
+`pm triage` and `pm coverage`. Either honour it or reject it.
+
+---
+
+## Part 7 — Accessibility
+
+Two audiences, overlapping: someone using a screen reader or a
+non-monospace/high-zoom display, and someone whose attention, working memory
+or sense of time works differently. Most fixes serve both.
+
+### 7.1 Meaning carried by colour or symbol alone
+
+- **Lint severity is 🔴 / 🟠 / 🔵 with no word.** The severity names already
+  exist in the code and in the JSON output. Print them: `Error · bad-dates`.
+  Keep the glyph if it helps; do not let it be the only carrier.
+- **`pm ready` section headings** (`### 🔴 Not ready`) already carry the
+  words. That is the pattern to copy.
+- **`→` is the only marker for "this is a command you can type"** in
+  `pm today`, `pm triage` and `pm inbox`. Add a word: `Run: pm do 1`.
+- **`·` as a separator** in date lines and inbox suggestions reads as
+  nothing or as "middle dot" depending on the screen reader.
+- Add a `--plain` flag (and honour `NO_COLOR`) that drops OSC 8, glyphs and
+  padding and prints one labelled fact per line. This is the accessible path,
+  not a degraded one.
+
+### 7.2 Link purpose
+
+Thirteen links in one weekly report, all reading `open`. A screen reader's
+link list is thirteen identical entries, and "open" is also the least useful
+thing to read aloud: it describes the action, not the destination. Link text
+must identify the target — the issue key.
+
+### 7.3 Layout that only exists in a monospace terminal
+
+`pm today`, `pm triage`, `pm coverage`, `pm doctor`, `pm schedule` and the
+aging blocks align with space padding (`{key:<8}`, `{n:<2}`, `{abbrev:<6}`)
+and have no column headers. The relationship between a key and its status is
+positional and visual only. Fixes:
+
+- Under `--plain`, emit labelled lines instead of columns.
+- Give the terminal tables a header row where columns carry meaning.
+- Stop hard-coding the status column position (`pm doctor` already breaks on
+  a long path).
+
+### 7.4 Truncation and terminal width
+
+Titles are cut at fixed widths — 52, 40 and 36 characters in `pm today`, 60
+and 55 in the Markdown — regardless of the terminal. `pm today` learned to
+wrap Sprint Goal lines to the real width in 0.10.1; nothing else did. A
+`NEEDS YOU` row runs to roughly 75 characters before the terminal wraps it
+with no indent, breaking the alignment that is doing the work. Use the real
+width everywhere, and hang-indent the wrap as the Sprint Goal now does.
+
+### 7.5 For ADHD and autistic users specifically
+
+This is where the tool is closest to being genuinely good, and where the
+remaining defects cost the most.
+
+**What the tool already gets right, and must not lose**
+
+- The same screen shape every day. Predictable structure is a feature; empty
+  sections should keep their heading and say they are empty, exactly as they
+  do now.
+- Bounded output. "Top few, never a wall."
+- One-line capture with an explicit end: `Captured #1. Nothing else needed
+  now.` — it closes the loop and asks nothing further.
+- Preview, then one confirmation. No irreversible surprise.
+- Decisions stick: snooze and accept mean a dismissed thing stays dismissed.
+
+**What to fix**
+
+- **One queue, one numbering.** Two lists that number the same ticket
+  differently is the highest-cost defect in this document for a user who
+  relies on external structure to hold state.
+- **Numbers must not go stale silently.** `pm do 4` uses whenever you last
+  ran `pm today`. Print the age of the list (`from pm today at 08:31, 7 hours
+  ago`) and warn past a threshold before writing. Time blindness is the
+  expected case, not the edge case.
+- **Put the answer where the attention already is.** A filename is a second
+  task. Print the findings.
+- **Give the day an end.** `pm today` always closes with a prompt to do more.
+  When the queue is clear it should say so plainly. Completion is not a
+  decoration; it is what makes a daily habit survivable.
+- **Keep capture and review instant.** `pm inbox` calling the model per note
+  on every list turns a two-second check into an unpredictable wait, and
+  unpredictable waits are where a capture habit dies.
+- **One sensory vocabulary.** Emoji appear in files but never the terminal;
+  arrows in the terminal but never files. Decide once.
+- **Say the next action in words, not punctuation.** `→ pm do 1` should read
+  `Run: pm do 1`.
+- **Never present a guess as a fact.** `Landing: 26 Aug 2027` from one data
+  point is the kind of false precision that is very expensive to a person who
+  will anchor on it.
+
+### 7.6 What to measure
+
+Add a test that renders each command's screen with `--plain` and asserts no
+line depends on a glyph, a colour or a fixed column for its meaning. That
+keeps the property from decaying.
+
+---
+
+## Part 8 — Code and refactoring
+
+### 8.1 `core/sources.py` (904 lines) — one Jira item model
+
+Five near-duplicate fetchers each build their own dict from the same search:
+
+| Function | Shape |
+|---|---|
+| `fetch_jira` → `make_item` | citation shape: `ref`, `title`, `watch`, `uid` |
+| `fetch_jira_detailed` | the full lint shape, 18 keys |
+| `fetch_jira_cards` | a strict subset of the above |
+| `fetch_jira_changelog` | subset + `transitions`, **no `updated`** |
+| `fetch_jira_history` | subset + `transitions` (status and sprint) |
+
+They agree on `key`, `url`, `summary`, `status`, `assignee`, `issuetype`.
+The missing `updated` on changelog rows is already worked around in
+`commands/daily.py`, which stamps `card["updated"] = now` so the comment
+reader will look at it — a workaround that marks the seam.
+
+Proposal: one normalizer (raw issue plus a field spec, out comes the core
+item, optionally with transitions), with `make_item` reduced to a thin report
+adapter. Three datetime parsers (`parse_timestamp`, `parse_jira_datetime`,
+and an inline `_parse`) collapse to one.
+
+### 8.2 Two HTTP layers, one used
+
+`core/http.py` implements `send` with 429 handling and is exercised by tests
+but imported by no production path; `core/sources.py:send` duplicates the
+policy and is what actually runs. Make one real.
+
+### 8.3 Error messages a PM can act on
+
+Jira failures surface as `raise_for_status()` text. A 401 reads
+`401 Client Error: Unauthorized for url: …`. The fix a user needs is "your
+API token is wrong or expired — regenerate it at id.atlassian.com". `pm
+doctor` has the right voice; the rest of the tool should borrow it.
+
+### 8.4 Config validation stops short of Jira
+
+`core/config.py` validates products, workstreams, membership, ready, blocked,
+scopes and the model budget, and reports typos well. There are no defaults or
+validation for the `jira:` block, so a missing `base_url` surfaces as a
+`KeyError` from whichever command touches it first — the one part of the
+config a first-time user is guaranteed to touch is the one part that fails
+late. Separately, `vague_title_terms` and `acceptance_criteria_markers`
+survive in the test fixtures after 0.9.0 replaced them with
+`vague_title_alone`; the shipped template is already correct.
+
+### 8.5 Functions worth splitting
+
+`ready.build_markdown` (~103), `today.render_screen` (~100), `lint.check_issue`
+(~84), `daily.build_markdown` (~88), `refine.run` (~76), `today.gather` (~76),
+`report.build_report` (~71), `sources.fetch_jira_changelog` (~69). The common
+shape is gather, decide and render in one function; the render half is what
+the shared layer in §6.1 wants anyway.
+
+### 8.6 Duplication to retire alongside the merges
+
+`today.classify_need` / `triage.classify`; `today.render_screen` /
+`triage.render`; `today.build_aging` / `metrics.aging_wip`; `review._batches`
+/ `refine._chunks`; `today.run_do` / `writes._fill_current_user`; the summary
+table in `lint.build_markdown` / `ready.build_markdown`.
+
+### 8.7 Cache invalidation on write
+
+`pm do` can change a due date and the search cache keeps the old value for up
+to five minutes, with nothing connecting the write log to the cache. Drop the
+affected entries after a successful write.
+
+### 8.8 Keep
+
+304 tests that run with no network, and `tests/fake_jira.py` evaluating real
+JQL against an in-memory backlog, are the reason this review could be done by
+running the tool. That infrastructure is an asset.
+
+---
+
+## Part 9 — Gaps worth filling
+
+Ranked by how often a PM hits them. Each is a view on data the tool already
+fetches, and — respecting "one front door" — most are flags, not new verbs.
+
+Parts 3 and 4 are the two largest and have their own sections: a guided
+`pm setup`, and a windowed Confluence reader with warmable per-page
+summaries. Everything below assumes both.
+
+1. **One issue, everything about it.** `pm show APS-30`: status, assignee,
+   dates, parent, lint findings, readiness verdict, recent comments, links,
+   and what changed lately. When a stakeholder messages you about a ticket,
+   the tool currently has no answer that is not a whole report. This is the
+   largest missing piece and the cheapest to build.
+2. **Sprint Planning support.** `pm metrics --sprint` covers the Sprint
+   Review case and `docs/PLAN.md` deliberately dropped `pm sprint-review`.
+   Nothing covers planning. `pm ready --plan` — ready items, ranked, with
+   points against recent throughput — is the joining of two things already
+   computed. (The Sprint Retrospective stays out, per `docs/TERMINOLOGY.md`.)
+3. **What is blocking what.** `sources.fetch_issue_links` exists and
+   `pm triage` uses blocked-by to classify, but nothing shows the chain. As a
+   section of `pm today --all`, not a new verb, and distinct from the
+   standalone risk register that `docs/PLAN.md` §2.8 deferred.
+4. **What did I change, and when.** Every write appends to
+   `write-log.jsonl` and nothing reads it. `pm log` — or `pm today --log` —
+   answers "when did we move that due date?" from data already on disk.
+5. **Epic-level rollup.** Workstream and issue are covered; the Epic, which
+   is how a PM talks to stakeholders about a feature, is not.
+
+---
+
+## Part 10 — Documentation
+
+`README.md` is about 890 lines and is currently the quick start, the
+reference, the conceptual explanation and the roadmap at once. Everything in
+`docs/` is a plan written for whoever builds the tool, not for whoever uses
+it. There is no per-command page and no answer to "I have ten minutes, what
+do I type?"
+
+### 10.1 Four documents by depth, plus a page per command
+
+```
+docs/
+  START.md        the first fifteen minutes
+  EVERYDAY.md     the habit, once it is set up
+  DEPTH.md        the fuller ways to use each command
+  AUTOMATION.md   scripts, schedules, JSON, exit codes, MCP
+  commands/       one page per command
+```
+
+`README.md` shrinks to what it should be: what the tool is, the promise about
+staying on your machine, install, and links into the four.
+
+### 10.2 `START.md` — five commands
+
+The honest shortest path from nothing to value:
+
+| | Command | Why it is in the first five |
+|---|---|---|
+| 1 | `pm setup` | the guided config from Part 3, then `pm doctor` to confirm |
+| 2 | `pm today` | the front door; the one command to run every morning |
+| 3 | `pm do N` | acting on what `pm today` found, with a preview and one confirmation |
+| 4 | `pm note "…"` | capture, in one line, without leaving what you were doing |
+| 5 | `pm daily` | the Daily Scrum snapshot, for 9:15 |
+
+Then one line pointing onward: `pm brief --for "…"` before a meeting, and
+`pm report` on a Friday. Five is the number a person will actually keep.
+
+### 10.3 Generate the reference half, write the judgement half
+
+A hand-maintained flag list per command will be wrong within two releases.
+Each page in `docs/commands/` should be two halves:
+
+- **Generated** from the argparse parser — usage, flags, defaults, choices —
+  with a test asserting the file matches the parser, so `pm --help` and the
+  docs cannot disagree.
+- **Hand-written** — what the command is for, when you would reach for it,
+  what it deliberately does not do, and what it costs (does it call the
+  model, does it write to Jira, how long does it take).
+
+The second half is the part worth a person's time, and it is the part the
+README does well today for some commands and not at all for others.
+
+### 10.4 Where the layers split
+
+- **`START.md`** — the five above. No flags beyond `--product` / `--workstream`.
+- **`EVERYDAY.md`** — `brief`, `report`, `lint`, `ready`, `refine`, the inbox,
+  scoping, and the windows from Part 5. This is where a Sprint-scoped report
+  is explained, because that is an everyday need and not an advanced one.
+- **`DEPTH.md`** — membership and how a workstream is resolved, scopes, the
+  working agreement and its criteria, the model and `pm warm`, the caches,
+  shared state between a PM and a BA, `pm coverage`, custom fields.
+- **`AUTOMATION.md`** — Part 11.
+
+---
+
+## Part 11 — Automation, and an MCP interface for Copilot
+
+### 11.1 `--json` everywhere is the one thing that unlocks all of this
+
+Only `pm lint` and `pm metrics` can emit JSON. Everything else is Markdown or
+prose on a terminal — fine for a person, unusable for a script, a flow, or a
+tool call.
+
+A uniform `--json` on every read command is the single foundation under
+scripting, Power Automate, and MCP alike. Build it once and all three follow.
+It is also the unfinished half of an existing proposal: P1.4 in
+`docs/FEATURE_PROPOSALS.md` asked for `output.formats` and `--stdout`, and
+only `output.directory` and `--out` were built.
+
+Alongside it, **a documented exit-code contract**. Today `pm lint --fail-on`,
+`pm ready --fail-under` and `pm coverage` all exit non-zero under different
+conditions, and none of it is written down in one place. A script cannot
+branch on behaviour it has to read the source to learn.
+
+### 11.2 Scripts and schedules
+
+Mostly already there. `pm schedule` registers read-only commands on Task
+Scheduler or cron and refuses anything that writes, which is the right line
+and needs no change. What it needs is documentation and the JSON above.
+
+### 11.3 Power Automate — what actually works
+
+Worth being precise, because the obvious approach does not work. A Power
+Automate **cloud** flow cannot invoke a CLI on your laptop; there is nothing
+for it to call. Two patterns do work:
+
+- **Power Automate Desktop** runs a local command directly. This is the
+  straightforward route for anything that starts on your machine.
+- **File drop.** `pm` writes JSON or Markdown into a OneDrive- or
+  SharePoint-synced folder and a cloud flow triggers on the file appearing.
+  This needs no new code beyond `--json`, and the config already supports it:
+  `state.shared_path` exists precisely to point at a synced folder.
+
+The third option — a cloud flow calling a local endpoint — needs a listener
+or a gateway, and a listener is the resident daemon `docs/INFERENCE_PLAN.md`
+rejects. Not proposed. See §12.1.
+
+### 11.4 An MCP server: `pm mcp`
+
+This is a good fit, and a small one. MCP tools are bounded operations with
+typed arguments returning structured results, which is what `pm` already is.
+Over stdio, spawned by the client and exiting with it, `pm mcp` would be a
+thin wrapper over the `--json` work in §11.1 — most of its weight is a tool
+schema per command, generated from the same argparse parser that generates
+the docs in §10.3.
+
+**Read-only, and the allowlist already exists.** `commands/schedule.py`
+already curates exactly this distinction: a `SAFE` map of commands fit to run
+unattended and an `UNSAFE` set — `do`, `refine`, `triage`, `inbox`, `note`,
+`publish`, `review`. The MCP server should read that same list, so a
+command added later cannot become writable over MCP by omission. One list,
+two consumers.
+
+The reason is rule 8 of `docs/PORTFOLIO_PROPOSALS.md`: nothing reaches Jira
+without a preview and one confirmation. A model deciding to call a write tool
+is the thing that rule exists to prevent. Writing stays something a person
+types.
+
+**Lean on the deterministic commands.** `pm today`, `pm lint`, `pm ready`,
+`pm daily`, `pm metrics` and `pm coverage` call no model at all — they are
+the fast ones, and they are the ones worth exposing. The model-backed
+commands are slow on this hardware and would mostly be asking Copilot to wait
+for a local model to write prose that Copilot could write itself. The natural
+division is: **`pm` supplies the facts, Copilot does the talking.**
+
+**One tool per command, not per flag combination.** Typed arguments are what
+MCP is for. The tool surface should be no larger than the CLI surface.
+
+### 11.5 The honest cost: it changes the promise
+
+The README's first claim is that nothing leaves your laptop. An MCP server is
+local, but Copilot is not. Anything a tool returns becomes context sent to
+GitHub — issue summaries, comments, whatever a report says. That does not
+make this a bad idea; the tool is for work you are already doing in systems
+your employer runs. But it must be stated plainly rather than discovered:
+
+- `pm mcp` is **opt-in and off by default**.
+- Its documentation says, in the first paragraph, what leaves the machine.
+- The local-model promise is unchanged for every other command, and the
+  README's claim needs the qualifier "unless you turn on `pm mcp`".
+
+Sequence it after `--json`, never alongside it. The JSON work is valuable on
+its own and carries its own tests; MCP is a wrapper that is only worth
+writing once the thing it wraps is stable.
+
+---
+
+## Part 12 — What this plan does not propose, and why
+
+### 12.1 Considered here and dumped
+
+Each of these came up while working through Parts 5, 10 and 11. Each is
+plausible. None is included, and the reason matters more than the verdict.
+
+**A documentation website — MkDocs, GitHub Pages or similar.** Markdown in
+`docs/` already renders on GitHub, which is where the user said they want the
+docs. A site adds a build, a deploy, a theme to maintain and a second place
+for the same sentence to live and then drift. The layered structure in
+Part 10 is what delivers the value; the hosting adds nothing to it.
+
+**A GitHub wiki.** Same content, worse properties: a wiki is a separate
+repository with its own history, so a page can happily describe a version you
+do not have installed. `docs/` ships with the tag, gets reviewed in the pull
+request that changes the behaviour, and is right by construction.
+
+**A hand-written flag reference for each command.** This is the half of
+§10.3 that is generated from argparse instead. Hand-maintained flag tables are
+wrong within two releases — not because anyone is careless, but because the
+flag and its documentation are edited in different sittings. Generate it,
+test that it matches, and spend the writing effort on the judgement half.
+
+**A Power Automate cloud flow that calls `pm` directly.** There is nothing on
+your laptop for a cloud flow to call. Making it work needs a listener or an
+on-premises data gateway, and a listener is exactly the resident daemon
+`docs/INFERENCE_PLAN.md` rejected. §11.3's two patterns — Power Automate
+Desktop, and the file drop through `state.shared_path` — get the same
+outcome with no new process and no open port.
+
+**An HTTP or REST API for `pm`.** A daemon by another name, with the added
+cost of an authentication story for a tool whose current security model is
+"it is a program you run". MCP over stdio gives the integration without the
+resident process: the client spawns it, and it exits when the client does.
+
+**MCP tools that write to Jira.** Rule 8 of `docs/PORTFOLIO_PROPOSALS.md` is
+that nothing reaches Jira without a preview and one confirmation, and
+unattended Jira writes are already rejected in the portfolio. A model
+choosing to call `do` or `refine` is precisely the event that rule exists to
+prevent. The read/write line already exists in code as
+`schedule.SAFE` / `schedule.UNSAFE`, and §11.4 reuses it rather than
+inventing a second one that can fall out of step.
+
+**A free-form JQL tool, or "chat with your backlog" over MCP.** The standing
+rule across this project is that the user never writes JQL — `pm` builds it
+from products, workstreams and scopes. A tool taking arbitrary JQL would hand
+that constraint to a model and make the blast radius of a bad query the whole
+instance. Named commands with typed arguments keep the query surface the one
+that has been tested.
+
+**An MCP tool per flag combination.** One tool per command with typed
+arguments, and nothing more. The tool surface should be no larger than the CLI
+surface; a client that has to choose between `today_open`, `today_all` and
+`today_workstream` is a worse client than one that calls `today` with
+arguments.
+
+**`--sprint` on every command.** It belongs on the commands that narrate a
+period. `pm today` means now. `pm lint`, `pm ready` and `pm refine` judge the
+backlog as it stands — a finding about a ticket is true today or it is not,
+and a Sprint-scoped lint report would invite acting on a stale judgement.
+`pm doctor` and `pm coverage` check configuration, which has no period at all.
+Adding the flag everywhere would be consistency for its own sake and would
+cost more in explaining than it returns.
+
+**A second state file to remember windows per Sprint.** §5.5 gets the same
+protection for free by making an explicit window a read-only run: it reports
+and does not advance the memory. No new file, no new thing to corrupt.
+
+### 12.2 Already decided elsewhere, and not reopened
+
+With reasons recorded in `docs/PLAN.md` §2.8, `docs/PORTFOLIO_PROPOSALS.md`
+and `docs/INFERENCE_PLAN.md`: `pm duplicates`; a standalone risk register;
+`membership.parent_depth`, label and fixVersion membership; a keyring
+backend; a GUI or dashboard ("a dashboard is another place to have to go and
+look"); a resident daemon; unattended Jira writes; model-written claims about
+what is true; a second capture command; a thread pool; `pm done`; and
+retrospective automation.
+
+Nothing in this plan needs any of them.
+
+---
+
+## Part 13 — Sequence
+
+Grouped so each step ships something usable on its own. Earlier steps are
+mostly deletion and consolidation, which makes the later ones smaller.
+
+**Step 0 — `pm setup`.** First, because it gates adoption and because it
+depends on nothing else here. The four missing lookups (project list,
+Confluence space list, model list, browser open), then the step sequence in
+§3.3 on top of the existing verification and comment-preserving write
+helpers. Confluence steps can land with the rest and simply write the space
+and labels; Part 4 makes those fields earn their place afterwards.
+*Touches a new `commands/setup.py`, small additions to `core/sources.py` and
+`core/config_edit.py`; no existing command changes behaviour.*
+
+**Step 1 — correctness of the daily habit.** De-duplicate actions by issue
+key. Print the age of the numbered list and warn before a stale write. Treat
+an ended sprint as an alert, not a goal. Suggest the sprint end date rather
+than today + 14. Suppress the landing-date forecast below a sample threshold.
+Fix the `pm doctor` status column. Fix the count-line plurals.
+*Touches `commands/today.py`, `commands/doctor.py`, `core/metrics.py`.*
+
+**Step 2 — `core/render.py`.** Promote the OSC 8 helpers out of
+`commands/today.py`. Every issue key becomes a link in every command,
+terminal and Markdown. Link text becomes the key. Severity gains its word.
+Add `--plain` and honour `NO_COLOR`. Add the rendering test from §7.6.
+*Touches every command's render path; no fetch logic.*
+
+**Step 3 — answers on screen.** `pm lint`, `pm ready` and `pm report` print
+their bounded answer. `pm daily` prints by default. `pm inbox` caches its
+suggestions. `pm today` says when the queue is clear.
+
+**Step 4 — one queue.** `pm today --all` absorbs the triage classifiers with
+one numbering and one state file. `pm triage` becomes an alias for a release.
+Retire the `pm review` verb, rename the library, repoint the lint messages.
+This is where the duplication in §8.6 is deleted rather than refactored.
+
+**Step 5 — one window selector.** `core/window.py` from Part 5, plus the
+three pieces of plumbing it needs: `fetch_sprints` with a state argument and
+a cache, an id form in `filters.SPRINT_VALUES`, and the resolver that turns
+`138` into a Sprint or lists the candidates. Then `--since`, `--days`,
+`--weeks` and `--sprint` on `report`, `brief`, `release-notes`, `metrics` and
+`daily`, with every existing default unchanged when no flag is given. An
+explicit window is a read-only run and names its output file after the
+window, not the day.
+*Before Confluence, so that the page reader is written against the selector
+instead of being retrofitted onto it.*
+
+**Step 6 — Confluence earns its place.** `core/pages.py` as the windowed
+reader, modelled on `core/comments.py`: a cutoff taken from step 5, caps, an
+`enabled` switch, and the fetch inside the cache. A real excerpt budget in
+the material. Per-page summaries keyed on page id and version, and
+`pm warm --pages` to fill them. `pm brief` says what a risk page says. The
+same treatment decides SharePoint's fate.
+*Needs a `pages:` config block, so this is the `config_version` bump.*
+
+**Step 7 — the comms artifacts.** Teach the Confluence converter tables and
+links so `pm publish` stops degrading a report. Drop empty sections from
+`pm report` and lead with what the reader must act on. Split `pm brief`'s
+"decisions needed" into what you owe the room and what you need from it.
+
+**Step 8 — the documentation set.** Here, rather than earlier, because
+steps 1 to 7 change what there is to describe and nobody should write the
+same page twice. `START.md` and the five commands first — it is the piece
+with the most reach and the least to go wrong. Then `docs/commands/` with
+the generated reference half and the test that keeps it honest, then
+`EVERYDAY.md`, then `DEPTH.md`. `README.md` shrinks as each one lands.
+*`AUTOMATION.md` waits for step 10, since most of what it documents does not
+exist until then.*
+
+**Step 9 — the refactor.** One Jira item model, one HTTP layer, one datetime
+parser, `jira:` config validation, actionable HTTP errors, cache
+invalidation on write. Internal, and much smaller once steps 2 and 4 have
+removed the duplicate render and classify paths.
+
+**Step 10 — `--json` and the exit codes.** A uniform `--json` on every read
+command, from the one render layer built in step 2 so the JSON and the text
+come from the same structure rather than two. The exit-code contract written
+down. `AUTOMATION.md` covering scripts, `pm schedule`, and the two Power
+Automate patterns. Valuable on its own even if step 11 is never built.
+
+**Step 11 — `pm mcp`.** Only after step 10 is stable, and never alongside it.
+Tool schemas generated from the same parsers as the docs, the allowlist read
+from `schedule.SAFE`, opt-in and off by default, and the first paragraph of
+its documentation saying what leaves the machine.
+
+**Step 12 — the gaps.** `pm show` first; it is the most-wanted and the
+cheapest. Then planning support, the blocking chain, and the write log.
+
+Step 6 needs a `config_version` bump for the `pages:` block, and
+`pm update`'s existing migration path carries it — the same way the
+`comments:` block arrived in 0.10.0. Nothing else here has to be
+configuration: `--plain`, the forecast threshold and every window flag can
+all be behaviour.

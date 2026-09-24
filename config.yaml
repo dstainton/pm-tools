@@ -13,7 +13,7 @@
 #  you have already filled in.
 # ============================================================================
 
-config_version: 4
+config_version: 5
 
 # ----------------------------------------------------------------------------
 #  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
@@ -94,6 +94,15 @@ comments:
   excerpt_chars: 240
   report_days: 7
   section_chars: 6000
+
+# Pages (Confluence, and SharePoint when it is enabled). The window follows
+# the command: since the last report, since you last briefed that audience,
+# or an explicit --since / --sprint. Caps only. enabled: false skips both.
+pages:
+  enabled: true
+  max_pages: 20
+  excerpt_chars: 2000
+  section_chars: 8000
 
 # ----------------------------------------------------------------------------
 #  3. Confluence (Cloud)

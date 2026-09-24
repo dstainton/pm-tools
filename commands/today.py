@@ -172,15 +172,23 @@ def classify_need(issue, untouched_days, today=None, cfg=None):
     return None
 
 
-def suggested_due(today=None):
+def suggested_due(today=None, sprint_end=None):
+    """Prefer the Sprint end. Today + 14 is only the fallback."""
     today = today or dt.date.today()
+    if isinstance(sprint_end, str):
+        try:
+            sprint_end = dt.date.fromisoformat(sprint_end[:10])
+        except ValueError:
+            sprint_end = None
+    if sprint_end and sprint_end >= today:
+        return sprint_end
     return today + dt.timedelta(days=14)
 
 
-def describe_action(kind, issue, today=None):
+def describe_action(kind, issue, today=None, sprint_end=None):
     """Human-facing `pm do N` line for one need kind."""
     if kind == "overdue":
-        when = suggested_due(today)
+        when = suggested_due(today, sprint_end=sprint_end)
         return f"set a realistic due date (suggests {when.day} {when.strftime('%b')})"
     if kind == "blocked":
         who = issue.get("assignee")
@@ -197,7 +205,7 @@ def describe_action(kind, issue, today=None):
     return "review this item"
 
 
-def preview_payload(kind, issue, today=None):
+def preview_payload(kind, issue, today=None, sprint_end=None):
     """The Jira write `pm do` will send after one confirmation."""
     key = issue["key"]
     path = f"/rest/api/3/issue/{key}"
@@ -205,7 +213,7 @@ def preview_payload(kind, issue, today=None):
         return {
             "method": "PUT",
             "path": path,
-            "body": {"fields": {"duedate": suggested_due(today).isoformat()}},
+            "body": {"fields": {"duedate": suggested_due(today, sprint_end=sprint_end).isoformat()}},
         }
     if kind == "unassigned":
         return {
@@ -338,20 +346,62 @@ def gather(cfg):
     }
 
 
-def build_needs(open_items, opts, today=None, cfg=None):
-    """Rank and cap the NEEDS YOU list; attach numbered actions."""
+def _open_sprint_end(sprints, today=None):
+    today = today or dt.date.today()
+    ends = []
+    for sprint in sprints or []:
+        raw = sprint.get("end")
+        if not raw:
+            continue
+        try:
+            end = dt.date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+        if end >= today:
+            ends.append(end)
+    return min(ends) if ends else None
+
+
+def build_needs(open_items, opts, today=None, cfg=None, sprint_end=None,
+                include_triage=False):
+    """Rank and cap the NEEDS YOU list; one number per issue key."""
     candidates = []
     for issue in open_items:
         kind = classify_need(issue, opts["untouched_days"], today=today, cfg=cfg)
+        if not kind and include_triage:
+            from commands import triage as triage_cmd
+            kind = triage_cmd.classify(
+                issue, triage_cmd.settings(cfg or {}), {},
+                (cfg or {}).get("jira") or {}, cfg=cfg)
         if not kind:
             continue
         age = _age_days(issue) or 0
-        candidates.append((KIND_RANK[kind], -age, issue, kind))
+        rank = KIND_RANK.get(kind, 9)
+        candidates.append((rank, -age, issue, kind))
     candidates.sort(key=lambda row: (row[0], row[1], row[2].get("key") or ""))
+
+    seen = set()
+    chosen = []
+    for row in candidates:
+        key = row[2].get("key")
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        chosen.append(row)
 
     actions = []
     for n, (_rank, _age, issue, kind) in enumerate(
-            candidates[: opts["max_needs_you"]], start=1):
+            chosen[: opts["max_needs_you"]], start=1):
+        if kind in ("mention", "new-bug"):
+            from commands import triage as triage_cmd
+            description = triage_cmd.describe(kind, issue)
+            preview = triage_cmd.preview_for(kind, issue)
+        else:
+            description = describe_action(
+                kind, issue, today=today, sprint_end=sprint_end)
+            preview = preview_payload(
+                kind, issue, today=today, sprint_end=sprint_end)
         actions.append({
             "n": n,
             "key": issue["key"],
@@ -360,11 +410,11 @@ def build_needs(open_items, opts, today=None, cfg=None):
             "product": issue.get("product"),
             "workstream": issue.get("workstream"),
             "url": issue.get("url"),
-            "tags": need_tags(issue, kind, cfg=cfg),
-            "description": describe_action(kind, issue, today=today),
-            "preview": preview_payload(kind, issue, today=today),
+            "tags": need_tags(issue, kind if kind in KIND_RANK else "unassigned", cfg=cfg),
+            "description": description,
+            "preview": preview,
         })
-    return actions, len(candidates)
+    return actions, len(chosen)
 
 
 def build_aging(open_items, stale_days, limit):
@@ -480,11 +530,22 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
         "",
     ]
 
+    def _ended(sprint):
+        raw = sprint.get("end")
+        if not raw:
+            return False
+        try:
+            return dt.date.fromisoformat(str(raw)[:10]) < today
+        except ValueError:
+            return False
+
     visible = [s for s in bundle["sprints"] if s.get("goal") or s.get("end")]
-    if visible:
+    current = [s for s in visible if not _ended(s)]
+    ended = [s for s in visible if _ended(s)]
+    if current:
         lines.append("SPRINT GOAL")
         items_by_project = bundle.get("sprint_items") or {}
-        for sprint in visible:
+        for sprint in current:
             label = sprint.get("name") or "Sprint"
             project = sprint.get("project") or ""
             prefix = f"{project} / {label}" if project else label
@@ -493,6 +554,21 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
                 lines.extend(_goal_lines(sprint["goal"], width))
             sentence = sprint_risk_sentence(
                 sprint, items_by_project.get(project) or [],
+                today=today, cfg=cfg)
+            if sentence:
+                lines.append(f"  {sentence}")
+        lines.append("")
+    if ended:
+        lines.append("ENDED SPRINT")
+        for sprint in ended:
+            label = sprint.get("name") or "Sprint"
+            lines.append(f"  {label} ended {sprint.get('end')}. "
+                         "This is not the current Sprint Goal.")
+            if sprint.get("goal"):
+                lines.extend(_goal_lines(sprint["goal"], width))
+            project = sprint.get("project") or ""
+            sentence = sprint_risk_sentence(
+                sprint, (bundle.get("sprint_items") or {}).get(project) or [],
                 today=today, cfg=cfg)
             if sentence:
                 lines.append(f"  {sentence}")
@@ -511,7 +587,8 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
         lines.append(
             f"  {action['n']:<2} {key} {_short(action['summary'])}{loc}")
         lines.append(f"     {action['tags']}")
-        lines.append(f"     → pm do {action['n']}     {action['description']}")
+        lines.append(
+            f"     Run: pm do {action['n']}     {action['description']}")
     lines.append("")
 
     moved = bundle["moved"][: bundle["opts"]["max_moved"]]
@@ -574,8 +651,11 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
 def run_today(cfg, args):
     print("Gathering today's picture ...")
     bundle = gather(cfg)
+    sprint_end = _open_sprint_end(bundle["sprints"])
     actions, needs_total = build_needs(
-        bundle["open_items"], bundle["opts"], cfg=cfg)
+        bundle["open_items"], bundle["opts"], cfg=cfg,
+        sprint_end=sprint_end,
+        include_triage=bool(getattr(args, "all", False)))
     bundle["needs_total"] = needs_total
     aging = build_aging(bundle["open_items"], bundle["stale_days"],
                         bundle["opts"]["max_aging"])
@@ -586,8 +666,11 @@ def run_today(cfg, args):
         "actions": actions,
     }
     save_actions(bundle["opts"]["state_file"], payload)
+    if getattr(args, "json", False):
+        print(json.dumps({"actions": actions}, indent=2, default=str))
     print(render_screen(bundle, actions, aging, cfg=cfg,
-                        links=terminal_links(), width=terminal_width()))
+                        links=terminal_links() and not getattr(args, "plain", False),
+                        width=terminal_width()))
     print(f"\nActions saved to {bundle['opts']['state_file']}.")
 
 
@@ -600,6 +683,12 @@ def run_do(cfg, args):
     if not stored or not stored.get("actions"):
         sys.exit(f"No numbered list at {opts['state_file']}. "
                  f"Run `pm today` first.")
+
+    when = stored.get("date") or "an unknown day"
+    print(f"This numbered list is from {when}.")
+    if stored.get("date") and stored.get("date") != dt.date.today().isoformat():
+        print("Warning: this list is stale. Run `pm today` before writing, "
+              "or the number may mean a different issue.")
 
     action = next((a for a in stored["actions"] if a.get("n") == n), None)
     if action is None:

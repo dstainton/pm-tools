@@ -18,10 +18,15 @@ def config_file():
     return HOME + "/config.yaml"
 
 
+def _expand(path):
+    """Expand ~ and use the platform separator. expanduser leaves '/' on Windows."""
+    return os.path.normpath(os.path.expanduser(path))
+
+
 def local_dir(cfg=None):
     block = (cfg or {}).get("state") if isinstance((cfg or {}).get("state"), dict) else {}
     override = (block or {}).get("local_path")
-    return os.path.expanduser(override or HOME)
+    return _expand(override or HOME)
 
 
 def shared_dir(cfg):
@@ -30,7 +35,7 @@ def shared_dir(cfg):
     path = str(path).strip()
     if not path:
         return local_dir(cfg)
-    return os.path.expanduser(path)
+    return _expand(path)
 
 
 def _join(folder, name):
@@ -54,7 +59,7 @@ def today_path(cfg):
     block = cfg.get("today") if isinstance(cfg.get("today"), dict) else {}
     explicit = (block or {}).get("state_file")
     if explicit:
-        return os.path.expanduser(explicit)
+        return _expand(explicit)
     return os.path.join(local_dir(cfg), "today.json")
 
 

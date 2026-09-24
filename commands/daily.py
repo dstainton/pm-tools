@@ -165,6 +165,6 @@ def run(cfg, args):
         fh.write(report)
     print(f"\nDone. Daily Scrum written to: {out_path}")
 
-    if getattr(args, "print", False):
+    if getattr(args, "print", True):
         print("\n" + "=" * 60 + "\n")
         print(report)

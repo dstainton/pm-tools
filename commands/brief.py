@@ -158,11 +158,24 @@ def render_prep(audience, sections, last):
             lines.append("")
             lines.extend(notes)
         lines.append("")
-        lines.append("### Decisions needed")
+        owed = [(k, i) for k, i in section["needs"]
+                if k in ("overdue", "blocked")]
+        needed = [(k, i) for k, i in section["needs"]
+                  if k not in ("overdue", "blocked")]
+        lines.append("### What you owe the room")
         lines.append("")
-        if not section["needs"]:
+        if not owed:
+            lines.append("_Nothing you owe this room._")
+        for kind, issue in owed:
+            lines.append(
+                f"- {issue['key']}: {issue.get('summary')} "
+                f"({kind} — {today_cmd.describe_action(kind, issue)})")
+        lines.append("")
+        lines.append("### What you need from the room")
+        lines.append("")
+        if not needed:
             lines.append("_Nothing waiting on this room._")
-        for kind, issue in section["needs"]:
+        for kind, issue in needed:
             lines.append(
                 f"- {issue['key']}: {issue.get('summary')} "
                 f"({kind} — {today_cmd.describe_action(kind, issue)})")
@@ -172,8 +185,11 @@ def render_prep(audience, sections, last):
         if not section["risks"]:
             lines.append("_No recent risk pages._")
         for risk in section["risks"]:
-            lines.append(f"- {risk.get('title')} "
-                         f"{('— ' + risk['url']) if risk.get('url') else ''}")
+            from core import render as render_core
+            title = risk.get("title") or "page"
+            link = render_core.markdown_link(title, risk.get("url"))
+            sentence = sources.short(risk.get("detail") or "", 200)
+            lines.append(f"- {link}" + (f" — {sentence}" if sentence else ""))
         lines.append("")
     return "\n".join(lines)
 

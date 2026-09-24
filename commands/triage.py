@@ -203,7 +203,11 @@ def gather(cfg):
 
 
 def render(actions):
-    lines = [f"TRIAGE ({len(actions)})", ""]
+    lines = [
+        "Same queue as `pm today --all`. One number per issue.",
+        f"TRIAGE ({len(actions)})",
+        "",
+    ]
     if not actions:
         lines.append("Nothing waiting on you.")
         return "\n".join(lines)

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.11.0 - 2026-09-24
+
+- `pm setup` fills a blank config one step at a time and will not replace a
+  value that is already set. `pm init` remains the hand-edited path.
+- `pm today` gives one number per issue. An ended Sprint is an alert, not
+  the current Sprint Goal. A suggested due date uses the Sprint end.
+  `pm do` says when the numbered list was written.
+- `pm today --all` is the triage queue. `pm triage` says so.
+- Issue links use the key as the link text. Lint severity is a word.
+  `--plain` and `NO_COLOR` drop glyphs and terminal links.
+- `pm report` and `pm brief` take `--since` and `--sprint`. A named window
+  does not move the last-run memory. Confluence pages use a `pages:` budget
+  (`config_version` 5) instead of the 180-character issue detail cap.
+- `pm show KEY` prints one issue. `pm mcp` is a read-only stdio server and
+  stays off until `--yes-i-understand`.
+- Landing dates need three finished items in the window. `pm doctor` keeps
+  the status word when a config path is long.
+
 ## 0.10.1 - 2026-09-23
 
 - `pm today` shows each Sprint Goal once. Jira's board search returns every

@@ -9,6 +9,7 @@ narrowed if --workstream was given.
 """
 
 import datetime as dt
+import sys
 
 from core import checklist, comments, output, sources, model, state, workstreams
 from core import products as product_core
@@ -80,7 +81,7 @@ def build_report(cfg, sections, all_items, scope_note):
             title = it["title"].replace("|", "\\|")
             lines.append(
                 f"| {it['ref']} | {it['source']} | {title} | "
-                f"[open]({it['url']}) |")
+                f"[{it.get('ref') or 'link'}]({it['url']}) |")
     else:
         lines.append("_No source items were gathered this week._")
     lines.append("")
@@ -115,9 +116,13 @@ def prepare(cfg, ws, previous):
     got, idx = sources.fetch_jira(cfg["jira"], roadmap_jql, prefix, idx)
     items += got
     idx = 1
+    from core import pages as page_core
+    page_opts = page_core.settings(cfg)
+    cutoff = previous.get("_ran_at") if isinstance(previous, dict) else None
     got, idx = sources.fetch_confluence(cfg["confluence"],
                                         workstreams.confluence_cql(ws),
                                         prefix, idx)
+    got = page_core.apply_excerpt(got, page_opts, cutoff=cutoff)
     items += got
     idx = 1
     got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
@@ -181,7 +186,22 @@ def run(cfg, args):
         sections.append((ws, body))
         all_items += row["items"]
 
-    state.save_state(state_path, new_state)
+    from core import window as window_core
+    projects = []
+    for ws in selected:
+        project = (ws.get("project") or (cfg.get("jira") or {}).get("project"))
+        if project and project not in projects:
+            projects.append(project)
+    try:
+        window = window_core.resolve(
+            cfg, args, default_start=None, projects=projects)
+    except window_core.WindowError as exc:
+        sys.exit(str(exc))
+    if window.get("explicit"):
+        print(f"Window: {window['label']} (this run does not move the "
+              "last-report memory).")
+    else:
+        state.save_state(state_path, new_state)
 
     scope_note = ""
     if len(selected) < len(cfg["workstreams"]):
@@ -193,8 +213,8 @@ def run(cfg, args):
         from commands import metrics as metrics_cmd
         groups = metrics_cmd.gather(cfg, 8)
         report = report.rstrip() + "\n\n" + metrics_cmd.render(groups, 8)
-    except Exception:                              # noqa: BLE001
-        pass
+    except Exception as exc:                              # noqa: BLE001
+        print(f"Metrics appendix skipped: {exc}")
     out_path = output.place(
         cfg, cfg["output"]["file"].format(date=dt.date.today().isoformat()),
         getattr(args, "out", None))
@@ -202,6 +222,8 @@ def run(cfg, args):
         fh.write(report)
 
     print(f"\nDone. Report written to: {out_path}")
+    preview = "\n".join(report.splitlines()[:24])
+    print("\n" + preview)
     if getattr(args, "publish", False):
         from commands import publish as pub
         pub.publish_file(cfg, args, out_path)
