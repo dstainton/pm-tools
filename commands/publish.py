@@ -30,6 +30,23 @@ def settings(cfg):
     }
 
 
+_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+
+def _inline(text):
+    """Escape text and keep Markdown links as anchors."""
+    parts = []
+    pos = 0
+    for match in _LINK.finditer(text or ""):
+        parts.append(html.escape(text[pos:match.start()]))
+        label = html.escape(match.group(1))
+        url = html.escape(match.group(2), quote=True)
+        parts.append(f'<a href="{url}">{label}</a>')
+        pos = match.end()
+    parts.append(html.escape((text or "")[pos:]))
+    return "".join(parts)
+
+
 def markdown_to_storage(text):
     """Small Markdown → Confluence storage conversion (headings, lists, code)."""
     chunks = []
@@ -55,22 +72,31 @@ def markdown_to_storage(text):
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<h1>{html.escape(raw[2:].strip())}</h1>")
+            chunks.append(f"<h1>{_inline(raw[2:].strip())}</h1>")
         elif raw.startswith("## "):
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<h2>{html.escape(raw[3:].strip())}</h2>")
+            chunks.append(f"<h2>{_inline(raw[3:].strip())}</h2>")
         elif raw.startswith("### "):
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<h3>{html.escape(raw[4:].strip())}</h3>")
+            chunks.append(f"<h3>{_inline(raw[4:].strip())}</h3>")
+        elif raw.startswith("|") and "|" in raw[1:]:
+            if in_list:
+                chunks.append("</ul>")
+                in_list = False
+            cells = [_inline(cell.strip()) for cell in raw.strip().strip("|").split("|")]
+            if set(raw.replace("|", "").replace("-", "").replace(":", "").strip()) == set():
+                continue
+            tag = "td"
+            chunks.append("<tr>" + "".join(f"<{tag}>{cell}</{tag}>" for cell in cells) + "</tr>")
         elif raw.startswith("- ") or raw.startswith("* "):
             if not in_list:
                 chunks.append("<ul>")
                 in_list = True
-            chunks.append(f"<li>{html.escape(raw[2:].strip())}</li>")
+            chunks.append(f"<li>{_inline(raw[2:].strip())}</li>")
         elif not raw.strip():
             if in_list:
                 chunks.append("</ul>")
@@ -79,7 +105,7 @@ def markdown_to_storage(text):
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<p>{html.escape(raw)}</p>")
+            chunks.append(f"<p>{_inline(raw)}</p>")
     if in_list:
         chunks.append("</ul>")
     return "\n".join(chunks) or "<p></p>"

@@ -142,7 +142,11 @@ def compile_scope(options):
         if option == "status":
             clause = _choice(option, value, STATUS_VALUES)
         elif option == "sprint":
-            clause = _choice(option, value, SPRINT_VALUES)
+            if isinstance(value, int) or (
+                    isinstance(value, str) and value.strip().isdigit()):
+                clause = f"sprint = {int(value)}"
+            else:
+                clause = _choice(option, value, SPRINT_VALUES)
         elif option == "assignee":
             clause = _choice(option, value, ASSIGNEE_VALUES)
         elif option == "types":

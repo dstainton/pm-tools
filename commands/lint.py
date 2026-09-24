@@ -134,11 +134,11 @@ def check_issue(issue, lint_cfg, component_inherited=False):
     if len(title.split()) < min_words:
         add("vague-title", "review",
             f"Title is only {len(title.split())} word(s). "
-            f"Run `pm review titles` for a judgement.")
+            f"Run `pm refine` for a judgement.")
     elif normalized in alone:
         add("vague-title", "review",
             f"Title is only the vague word {normalized!r}. "
-            f"Run `pm review titles` for a judgement.")
+            f"Run `pm refine` for a judgement.")
 
     # --- Missing acceptance criteria (stories/bugs) -----------------------
     story_types = [t.lower() for t in lint_cfg.get("story_types",
@@ -148,7 +148,7 @@ def check_issue(issue, lint_cfg, component_inherited=False):
         if not has_ac:
             add("missing-acceptance-criteria", "warn",
                 "No acceptance criteria found. "
-                "Run `pm review criteria` for a judgement.")
+                "Run `pm refine` for a judgement.")
 
     # --- Missing estimate (stories only, and only if in scope) ------------
     if lint_cfg.get("require_estimate", True) and itype == "story" \
@@ -228,7 +228,7 @@ def build_markdown(cfg, results):
     lines.append("")
 
     # Detail per workstream.
-    icon = {"error": "🔴", "warn": "🟠", "review": "🔵"}
+    from core import render as render_core
     for ws, findings in results:
         lines.append(f"## {ws['name']} ({ws['abbrev']})")
         lines.append("")
@@ -245,8 +245,8 @@ def build_markdown(cfg, results):
             title = sources.short(f["title"], 60).replace("|", "\\|")
             lines.append(
                 f"| {f['key']}: {title} | {f['type']} | "
-                f"{icon[f['severity']]} {f['rule']} | {msg} | "
-                f"[open]({f['url']}) |")
+                f"{render_core.severity_mark(f['severity'])} {f['rule']} | {msg} | "
+                f"{render_core.markdown_link(f['key'], f['url'])} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -352,7 +352,12 @@ def run(cfg, args):
                 findings.append(fnd)
                 flat.append({**fnd, "workstream": ws["abbrev"]})
 
-        print(f"  {len(issues)} issues checked — {len(findings)} findings.")
+        from core import render as render_core
+        print(f"  {render_core.count_phrase(len(issues), 'issue')} checked — "
+              f"{render_core.count_phrase(len(findings), 'finding')}.")
+        for fnd in findings[:8]:
+            print(f"  {render_core.severity_mark(fnd['severity'])} · "
+                  f"{fnd['rule']} · {fnd['key']} {fnd['message']}")
         results.append((ws, findings))
 
     if hidden and not show_all:

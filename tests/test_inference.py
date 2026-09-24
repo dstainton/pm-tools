@@ -167,7 +167,7 @@ class LintJudgementTests(unittest.TestCase):
         findings = lint.check_issue(self._issue(summary="Fix stuff"), self.CFG)
         vague = [f for f in findings if f["rule"] == "vague-title"]
         self.assertEqual(len(vague), 1)
-        self.assertIn("pm review titles", vague[0]["message"])
+        self.assertIn("pm refine", vague[0]["message"])
 
     def test_the_word_when_is_not_acceptance_criteria(self):
         findings = lint.check_issue(self._issue(

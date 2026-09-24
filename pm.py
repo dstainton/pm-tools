@@ -4,7 +4,7 @@ Product Manager tools (`pm`).
 
 One tool, several commands, all sharing a single config.yaml and your defined
 workstreams. Runs entirely against your own Jira / Confluence / SharePoint and
-your local model — nothing leaves your machine.
+your local model — nothing leaves your machine unless you run `pm mcp`.
 
 Commands:
     pm init              Create a starter config at ~/.pm-tools/config.yaml.
@@ -89,10 +89,11 @@ from core import model as model_core                           # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
 from core.paths import config_file                          # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
-from commands import (report, lint, ready, init,                # noqa: E402
+from commands import (report, lint, ready, init, setup, show,   # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
-                      schedule, update, coverage, release_notes, warm)
+                      schedule, update, coverage, release_notes, warm,
+                      mcp_server)
 
 
 def resolve_config_path(explicit):
@@ -160,6 +161,9 @@ def build_parser():
                              "even if they are stale")
     common.add_argument("--refresh", action="store_true",
                         help="Ignore cached Jira fetches and model replies")
+    common.add_argument("--plain", action="store_true",
+                        help="No colour, glyphs, or terminal links. "
+                             "One labelled fact per line. NO_COLOR does this too.")
     common.add_argument("--out", default=None, metavar="DIR",
                         help="Write this run's files under DIR instead of "
                              "output.directory")
@@ -228,6 +232,11 @@ def build_parser():
 
     p_today = sub.add_parser("today", parents=[common],
                              help="Bounded daily screen across the portfolio")
+    p_today.add_argument("--all", action="store_true",
+                         help="Include triage kinds (mentions, new bugs) "
+                              "in this same numbered list")
+    p_today.add_argument("--json", action="store_true",
+                         help="Print the numbered actions as JSON")
     p_today.set_defaults(func=today.run_today, needs_config=True)
 
     p_do = sub.add_parser("do", parents=[common, write_opts],
@@ -246,11 +255,50 @@ def build_parser():
                           help="With --discover-fields, write blank field IDs")
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
+    p_setup = sub.add_parser(
+        "setup", help="Fill in the config one step at a time")
+    p_setup.add_argument("--path", default=None, help="Config file to edit")
+    p_setup.add_argument("--section", default=None,
+                         choices=["jira", "model", "workstreams", "confluence"],
+                         help="Fix one section")
+    p_setup.add_argument("--site", default=None, help="Jira site, e.g. dpdd")
+    p_setup.add_argument("--email", default=None, help="Atlassian email")
+    p_setup.add_argument("--token-env", default=None,
+                         help="Write the token as ${ENV:NAME}")
+    p_setup.add_argument("--token", default=None,
+                         help="Paste a token (prefer --token-env)")
+    p_setup.add_argument("--project", default=None, help="Jira project key")
+    p_setup.add_argument("--model-endpoint", default=None)
+    p_setup.add_argument("--model-name", default=None)
+    p_setup.add_argument("--yes", action="store_true",
+                         help="Write the flags and do not prompt")
+    p_setup.set_defaults(func=setup.run, needs_config=False)
+
+    p_show = sub.add_parser("show", parents=[common],
+                            help="One issue: status, assignee, dates, link")
+    p_show.add_argument("key", help="Issue key, e.g. APS-30")
+    p_show.add_argument("--json", action="store_true")
+    p_show.set_defaults(func=show.run, needs_config=True)
+
+    p_mcp = sub.add_parser(
+        "mcp", parents=[common],
+        help="stdio MCP server for read-only commands (off by default)")
+    p_mcp.add_argument("--yes-i-understand", action="store_true",
+                       help="Start the server. Tool results leave the machine "
+                            "when the client is Copilot.")
+    p_mcp.set_defaults(func=mcp_server.run, needs_config=True)
+
     p_report = sub.add_parser("report", parents=[common, write_opts],
                               help="Weekly state-of-product report, with "
                                    "comments since the last report")
     p_report.add_argument("--publish", action="store_true",
                           help="Also send the report to Confluence and/or Teams")
+    p_report.add_argument("--since", metavar="YYYY-MM-DD",
+                          help="Start of the window. Does not move last-report memory.")
+    p_report.add_argument("--sprint", nargs="?", const="open", default=None,
+                          help="This Sprint (open), a number (138), or last")
+    p_report.add_argument("--json", action="store_true",
+                          help="Print a short JSON summary as well as the file")
     p_report.set_defaults(func=report.run, needs_config=True)
 
     p_lint = sub.add_parser("lint", parents=[common, write_opts],
@@ -333,9 +381,8 @@ def build_parser():
                     "--sprint reports the open sprint.")
     p_metrics.add_argument("--weeks", type=int, default=None,
                            help="How many weeks back (default: metrics.weeks or 8)")
-    p_metrics.add_argument("--sprint", action="store_true",
-                           help="Open sprint: forecast at start, points done, "
-                                "points added, items carried in")
+    p_metrics.add_argument("--sprint", nargs="?", const="open", default=None,
+                           help="Open sprint, a sprint number, or last")
     p_metrics.add_argument("--json", action="store_true",
                            help="Write the numbers as JSON")
     p_metrics.set_defaults(func=metrics.run, needs_config=True)
@@ -351,6 +398,10 @@ def build_parser():
                          help="With --debrief, create the action tickets")
     p_brief.add_argument("--publish", action="store_true",
                          help="Also send the brief to Confluence and/or Teams")
+    p_brief.add_argument("--since", metavar="YYYY-MM-DD",
+                         help="Start of the window. Does not move last-met memory.")
+    p_brief.add_argument("--sprint", nargs="?", const="open", default=None,
+                         help="This Sprint (open), a number (138), or last")
     p_brief.set_defaults(func=brief.run, needs_config=True)
 
     p_publish = sub.add_parser("publish", parents=[common, write_opts],

@@ -210,7 +210,7 @@ def build_markdown(cfg, results, deep, reminders=None, gaps=None):
                 gap_text = "; ".join(f"{f['criterion']}: {f['reason']}"
                                      for f in v["failed"]).replace("|", "\\|")
                 lines.append(f"| {v['key']}: {title} | {v['type']} | "
-                             f"{gap_text} | [open]({v['url']}) |")
+                             f"{gap_text} | [{v.get('key') or 'link'}]({v['url']}) |")
             lines.append("")
 
         if ready:

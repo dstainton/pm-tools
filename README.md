@@ -3,13 +3,17 @@
 A command-line tool that helps a PM stay on top of a backlog and keep
 stakeholders informed. One config, several commands, all running against your
 own Jira / Confluence / SharePoint and a **local** model — nothing leaves
-your laptop.
+your laptop, unless you start `pm mcp` (off by default; see `docs/AUTOMATION.md`).
+
+The short path is `docs/START.md`. Everyday use is `docs/EVERYDAY.md`.
 
 ```
+pm setup        Fill in the config one step at a time
 pm init         Create a starter config at ~/.pm-tools/config.yaml
 pm products     List, add, remove or check your products
 pm workstreams  List, add, remove or check your workstreams
-pm today        One bounded daily screen (the habit command)
+pm today        One bounded daily screen (the habit command). --all includes triage
+pm show KEY     One issue: status, assignee, dates, link
 pm do N         Preview, then write, the numbered action from `pm today`
 pm doctor       Verify config, Jira, statuses, fields, model, cache
 pm report       Weekly state-of-product report (uses the local model)

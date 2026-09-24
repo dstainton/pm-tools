@@ -174,7 +174,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
-config_version: 4
+config_version: 5
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -710,7 +710,7 @@ class TodayTests(CliTestCase):
         self.assertIn("MOVED SINCE YESTERDAY", out)
         self.assertIn("AGING", out)
         self.assertIn("REFINEMENT GAPS", out)
-        self.assertIn("SPRINT GOAL", out)
+        self.assertIn("ENDED SPRINT", out)
         self.assertIn("Ship certificate rotation", out)
         self.assertIn("Not started:", out)
         self.assertIn("Blocked:", out)

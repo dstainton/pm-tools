@@ -323,6 +323,6 @@ def summarise_stream(issues, weeks, sprints=None, today=None):
         "accuracy": forecast_accuracy(issues, sprint),
         "open": len(open_items),
         "landing": (landing_date(len(open_items), rate, today=today)
-                    or None),
+                    if sum(b["done"] for b in buckets) >= 3 else None),
         "sprint": (sprint or {}).get("name"),
     }

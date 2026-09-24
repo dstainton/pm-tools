@@ -30,18 +30,28 @@ from core import sources
 from core import workstreams as ws_core
 
 
+def _status_line(label, detail, status):
+    """Keep the status word in column 66. A long path wraps underneath."""
+    detail = " ".join(str(detail or "").split())
+    if len(detail) <= 48:
+        print(f"  {label:<16}{detail:<48} {status}")
+        return
+    print(f"  {label:<16}{'':<48} {status}")
+    print(f"  {'':<16}{detail}")
+
+
 def _ok(label, detail):
-    print(f"  {label:<16}{detail:<48} ok")
+    _status_line(label, detail, "ok")
     return 0
 
 
 def _warn(label, detail):
-    print(f"  {label:<16}{detail:<48} warn")
+    _status_line(label, detail, "warn")
     return 0
 
 
 def _fail(label, detail):
-    print(f"  {label:<16}{detail:<48} FAIL")
+    _status_line(label, detail, "FAIL")
     return 1
 
 

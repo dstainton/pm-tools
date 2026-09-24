@@ -202,6 +202,34 @@ def to_version_4(text):
 MIGRATIONS.append((3, to_version_4))
 
 
+_PAGE_LINES = (
+    ("enabled", "  enabled: true"),
+    ("max_pages", "  max_pages: 20"),
+    ("excerpt_chars", "  excerpt_chars: 2000"),
+    ("section_chars", "  section_chars: 8000"),
+)
+
+
+def to_version_5(text):
+    """Add the pages block. Leave a value that is already set.
+
+    Narrative commands read Confluence inside their own window. The block
+    holds the caps. SharePoint uses the same caps when it is enabled.
+    """
+    if not has_top_level(text, "pages"):
+        text = insert_missing_block(
+            text, "pages", [line for _key, line in _PAGE_LINES],
+            before_key="confluence")
+    else:
+        for key, line in reversed(_PAGE_LINES):
+            if not _block_has_key(text, "pages", key):
+                text = _insert_under(text, "pages", line)
+    return set_version(text, 5)
+
+
+MIGRATIONS.append((4, to_version_5))
+
+
 def apply_migrations(text, migrations, target):
     """Walk `migrations` until `text` is at `target`.
 

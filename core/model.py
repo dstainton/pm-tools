@@ -390,7 +390,10 @@ def build_material(items, max_items=40, detail_limit=180, comment_budget=6000):
     for it in shown:
         block = f"[{it['ref']}] ({it['source']}) {it['title']}"
         if it.get("detail"):
-            block += f"\n    {short_detail(it['detail'], detail_limit)}"
+            detail_cap = detail_limit
+            if it.get("source") in ("Confluence", "SharePoint"):
+                detail_cap = int(it.get("excerpt_chars") or 2000)
+            block += f"\n    {short_detail(it['detail'], detail_cap)}"
         wrote = False
         for line in it.get("comments") or []:
             if used + len(line) > limit:
