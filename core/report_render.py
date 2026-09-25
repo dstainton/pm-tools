@@ -160,6 +160,27 @@ def register_block(record, level="pm", opts=None):
     return "\n".join(lines)
 
 
+def append_registers(lines, records, level, since, match):
+    """Print the registers whose scope matches. No heading when none do."""
+    chosen = [record for record in (records or []) if match(record.get("scope") or {})]
+    if not chosen:
+        return
+    lines.append("### Decisions, risks and ADRs")
+    lines.append("")
+    for record in chosen:
+        if level == "partner" and not record.get("partner_visible"):
+            continue
+        lines.append(register_block(record, level, {"since": since}))
+        lines.append("")
+
+
+def _register_records(rows):
+    for _ws, row in rows:
+        if row.get("registers"):
+            return row["registers"]
+    return []
+
+
 def sources_appendix(groups, rows):
     by_ws = {ws["abbrev"]: row for ws, row in rows}
     lines = ["## Sources", ""]
@@ -217,11 +238,17 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
         lines.append(scope_note.strip())
         lines.append("")
     show_products = bool(product_core.listed_products(cfg)) or len(groups) > 1
+    since = ""
+    start = (window or {}).get("start")
+    if hasattr(start, "isoformat"):
+        since = start.isoformat()
+    records = _register_records(rows)
     if show_products and groups:
         lines.append("## At a glance")
         lines.append("")
         lines.append(at_a_glance(groups, rows))
         lines.append("")
+        append_registers(lines, records, who, since, lambda scope: not scope)
     body_by = {ws["abbrev"]: body for ws, body in sections}
     row_by = {ws["abbrev"]: row for ws, row in rows}
     for product, streams in groups or [({}, [ws for ws, _row in rows])]:
@@ -233,6 +260,10 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
                 lines.append(f"Product Goal: {goal}")
                 lines.append("")
             lines.extend(_increment_lines(cfg, product))
+            abbrev = product.get("abbrev")
+            append_registers(
+                lines, records, who, since,
+                lambda scope, abbrev=abbrev: scope.get("product") == abbrev)
         for ws in streams:
             heading = "###" if show_products and product else "##"
             lines.append(f"{heading} {ws['name']} ({ws['abbrev']})")
@@ -258,6 +289,10 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
             if block:
                 lines.append(block)
                 lines.append("")
+            abbrev = ws["abbrev"]
+            append_registers(
+                lines, records, who, since,
+                lambda scope, abbrev=abbrev: scope.get("workstream") == abbrev)
     lines.append(sources_appendix(groups, rows))
     lines.append("")
     lines.append(
@@ -299,11 +334,14 @@ def render_leadership(cfg, groups, rows, summaries, window):
                     f"{epic.get('signal') or ''} | {epic.get('due') or '—'} |"
                 )
         lines.append("")
-    lines.append("## Delivery")
-    lines.append("")
-    lines.append("| Workstream | Done / week | Cycle (median) | Open | Landing |")
-    lines.append("|------------|------------:|---------------:|-----:|---------|")
-    lines.append("")
+        abbrev = product.get("abbrev")
+        since = ""
+        start = (window or {}).get("start")
+        if hasattr(start, "isoformat"):
+            since = start.isoformat()
+        append_registers(
+            lines, _register_records(rows), "leadership", since,
+            lambda scope, abbrev=abbrev: scope.get("product") == abbrev)
     return "\n".join(lines)
 
 

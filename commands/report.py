@@ -290,6 +290,12 @@ def run(cfg, args):
     if who == "leadership":
         summaries = _audience_summaries(cfg, groups, prepared, sections, who)
         report = report_render.render_leadership(cfg, groups, prepared, summaries, window)
+        try:
+            from commands import metrics as metrics_cmd
+            report = report.rstrip() + "\n\n" + metrics_cmd.render_headline(
+                metrics_cmd.gather(cfg, 8), 8)
+        except Exception as exc:                              # noqa: BLE001
+            print(f"Delivery table skipped: {exc}")
     elif who == "partner":
         opts = audience.settings(cfg)["partner"]
         visible = []

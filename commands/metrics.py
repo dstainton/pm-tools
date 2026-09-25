@@ -123,6 +123,25 @@ def render(groups, weeks):
     return "\n".join(lines)
 
 
+def render_headline(groups, weeks):
+    """Leadership delivery table: rate, cycle, open, and landing."""
+    lines = ["## Delivery", ""]
+    for product, rows in groups:
+        lines.append(f"### {product.get('name')} ({product.get('abbrev')})")
+        lines.append("")
+        lines.append("| Workstream | Done / week | Cycle (median) | Open | Landing |")
+        lines.append("|------------|------------:|---------------:|-----:|---------|")
+        for row in rows:
+            cycle = row["cycle"]
+            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
+            landing = _fmt_date(row.get("landing"))
+            lines.append(
+                f"| {row['workstream']} | {row['weekly_rate']:.1f} | {cycle_txt} | "
+                f"{row['open']} | {landing} |")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def as_json(groups, weeks):
     payload = {"weeks": weeks, "products": []}
     for product, rows in groups:
@@ -245,11 +264,13 @@ def run(cfg, args):
         path = output.place(
             cfg, f"metrics_{dt.date.today().isoformat()}.json",
             getattr(args, "out", None))
+        payload = as_json(groups, opts["weeks"])
+        payload["audience"] = who
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(as_json(groups, opts["weeks"]), fh, indent=2, default=str)
+            json.dump(payload, fh, indent=2, default=str)
         print(f"\nDone. Metrics written to: {path}")
         return
-    text = render(groups, opts["weeks"])
+    text = render_headline(groups, opts["weeks"]) if who == "leadership" else render(groups, opts["weeks"])
     path = output.place(
         cfg, f"metrics_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))
