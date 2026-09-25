@@ -389,6 +389,9 @@ def build_parser():
                            help="How many weeks back (default: metrics.weeks or 8)")
     p_metrics.add_argument("--sprint", nargs="?", const="open", default=None,
                            help="Open sprint, a sprint number, or last")
+    p_metrics.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                           help="pm shows the full tables; leadership a headline; "
+                                "partner is refused")
     p_metrics.add_argument("--json", action="store_true",
                            help="Write the numbers as JSON")
     p_metrics.set_defaults(func=metrics.run, needs_config=True)

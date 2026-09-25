@@ -7,6 +7,7 @@ landing date at the current rate.
 
 import datetime as dt
 import json
+import sys
 
 from core import metrics as core
 from core import output
@@ -230,6 +231,10 @@ def run_sprint(cfg, args):
 
 
 def run(cfg, args):
+    from core import audience
+    who = audience.level(cfg, args)
+    if who == "partner":
+        sys.exit("pm metrics has no partner view.")
     if getattr(args, "sprint", False):
         run_sprint(cfg, args)
         return
