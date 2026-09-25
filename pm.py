@@ -40,8 +40,8 @@ Commands:
     pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement, comments from that window,
                          and work in progress (no model).
-    pm update            Upgrade pm-tools and migrate the config. Never
-                         replaces it.
+    pm update            Upgrade pm-tools, then migrate the config with
+                         the newly installed code. Never replaces it.
 
 Common options (every command except init and update):
   --config PATH        Path to the config file. If omitted, pm searches:
