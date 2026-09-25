@@ -258,16 +258,21 @@ def build_cql(ws, cfg=None, scope="labelled", types=None):
     `confluence_space` still searches that whole space. `confluence_page` or
     `confluence_page_id` narrows the search to descendants of that page, in
     the workstream space or the space inherited from the product or from
-    `confluence.space`. The team root is not applied on its own.
+    `confluence.space`. With none of these and a `confluence.team_page`, a
+    folder under the team page whose title names the workstream is used.
     """
     if ws.get("confluence_cql"):
         return ws["confluence_cql"]
 
-    if ws.get("confluence_page") or ws.get("confluence_page_id"):
-        from core import confluence_tree
+    from core import confluence_tree
+    named = ws.get("confluence_page") or ws.get("confluence_page_id")
+    located = None
+    if named or (confluence_tree.can_match(ws) and confluence_tree.has_team_page(cfg)):
         located = confluence_tree.locate_workstream(cfg, ws)
-        if located.get("missing") or not located.get("ancestor_id") or not located.get("space"):
-            return None
+    if named and (located.get("missing") or not located.get("ancestor_id")
+                  or not located.get("space")):
+        return None
+    if located and located.get("ancestor_id") and located.get("space"):
         clauses = [
             queries.render(cfg, "confluence.space", space=located["space"]),
             queries.render(cfg, "confluence.ancestor", page_id=located["ancestor_id"]),
