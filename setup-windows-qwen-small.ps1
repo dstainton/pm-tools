@@ -12,8 +12,10 @@ Designed for:
   32 GB RAM
   Windows x64
 
-The small model uses the same API model alias, "qwen-local", as the larger
-27B setup so the Python CLI does not need to change when models are swapped.
+The small model uses the API alias "qwen-local", same as the larger 27B
+setup. The CLI default is Ollama and qwen3:4b. Point model.endpoint at
+http://127.0.0.1:8080/v1/chat/completions and model.name at qwen-local
+when you use this script.
 
 This script is intentionally tether-friendly:
   - existing llama.cpp is reused

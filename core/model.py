@@ -252,9 +252,10 @@ def call_model(model_cfg, system_prompt, user_content, temperature=None,
         return BUDGET_MESSAGE
     payload = build_payload(model_cfg, system_prompt, user_content, temperature)
     model_cfg["_calls"] = int(model_cfg.get("_calls") or 0) + 1
+    headers = _auth_headers(model_cfg)
     try:
         resp = requests.post(model_cfg["endpoint"], json=payload,
-                             timeout=model_cfg["timeout"])
+                             headers=headers, timeout=model_cfg["timeout"])
         resp.raise_for_status()
         text = message_text(resp.json())
         text = text or "_The model returned an empty reply._"
@@ -377,6 +378,15 @@ def short_detail(text, limit):
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "..."
+
+
+def _auth_headers(model_cfg):
+    """Bearer header when `model.api_key` is set. Empty means no header."""
+    headers = {}
+    key = str(model_cfg.get("api_key") or "").strip()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    return headers
 
 
 def ping(model_cfg):

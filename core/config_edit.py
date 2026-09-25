@@ -115,6 +115,38 @@ def add_list_entry(text, key, entry, render, before_key=None, create=False):
     return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
 
 
+def set_scalar(text, block, key, value, replace=()):
+    """Set one scalar when it is missing, empty, or one of `replace`.
+
+    Returns (text, status) where status is `written`, `kept`, or `missing`.
+    Any other current value is left alone.
+    """
+    lines = text.splitlines()
+    start, end = find_block(lines, block)
+    if start is None:
+        return text, "missing"
+    pattern = re.compile(rf"^(\s*){re.escape(key)}:\s*(.*?)(\s+#.*)?$")
+    allowed = set(replace)
+    quoted = _yaml_double(value)
+    for index in range(start + 1, end):
+        match = pattern.match(lines[index])
+        if not match:
+            continue
+        raw = match.group(2).strip().strip("\"'")
+        if raw and raw not in allowed:
+            return text, "kept"
+        comment = match.group(3) or ""
+        lines[index] = f"{match.group(1)}{key}: {quoted}{comment}"
+        return "\n".join(lines) + "\n", "written"
+    lines.insert(end, f"  {key}: {quoted}")
+    return "\n".join(lines) + "\n", "written"
+
+
+def _yaml_double(value):
+    text = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{text}"'
+
+
 def set_jira_field_if_blank(text, key, value):
     """Set one `jira:` scalar when it is missing or empty.
 

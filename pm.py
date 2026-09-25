@@ -265,7 +265,11 @@ def build_parser():
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
     p_setup = sub.add_parser(
-        "setup", help="Fill in the config one step at a time")
+        "setup",
+        help="Fill in the config one step at a time",
+        description="Fill in the config one step at a time. "
+                    "--section model lists local servers and can install "
+                    "Ollama or Lemonade.")
     p_setup.add_argument("--path", default=None, help="Config file to edit")
     p_setup.add_argument("--section", default=None,
                          choices=["jira", "model", "workstreams", "confluence"],
@@ -277,10 +281,21 @@ def build_parser():
     p_setup.add_argument("--token", default=None,
                          help="Paste a token (prefer --token-env)")
     p_setup.add_argument("--project", default=None, help="Jira project key")
-    p_setup.add_argument("--model-endpoint", default=None)
-    p_setup.add_argument("--model-name", default=None)
+    p_setup.add_argument(
+        "--model-endpoint", default=None,
+        help="OpenAI-compatible base or chat URL, written when blank "
+             "or still the shipped default")
+    p_setup.add_argument(
+        "--model-name", default=None,
+        help="Model id, written when blank or still qwen3:4b")
+    p_setup.add_argument(
+        "--model-api-key", default=None,
+        help="Bearer token for the local server, written when blank")
+    p_setup.add_argument(
+        "--model-api-key-env", default=None,
+        help="Write the model API key as ${ENV:NAME}")
     p_setup.add_argument("--yes", action="store_true",
-                         help="Write the flags and do not prompt")
+                         help="Write the flags and do not prompt or install")
     p_setup.set_defaults(func=setup.run, needs_config=False)
 
     p_show = sub.add_parser("show", parents=[common],

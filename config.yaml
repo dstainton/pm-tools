@@ -13,23 +13,36 @@
 #  you have already filled in.
 # ============================================================================
 
-config_version: 6
+config_version: 7
 
 # ----------------------------------------------------------------------------
-#  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
+#  1. The local model — Ollama, Qwen3 4B
 # ----------------------------------------------------------------------------
-#  Prompts and these sampling values assume Qwen3.8 in instruct (non-thinking)
-#  mode. Thinking is off: a Q3_K_M run that is allowed to think will spend its
-#  token budget inside <think> and return empty or half-cut JSON.
+#  The shipped default is the easy path: Ollama, and `qwen3:4b` (about
+#  2.5 GB). That fits a low-end laptop, including `pm warm`. Install
+#  Ollama, then `ollama pull qwen3:4b`.
 #
-#  Official Qwen instruct profile, with a cooler temperature so a 3-bit quant
-#  stays on the schema. json_temperature is used by `pm refine`, `pm review`,
-#  and `pm ready --deep`.
-#  The small Qwen3-4B setup script uses the same alias, so swapping models does
-#  not require a config change.
+#  Prompts and these sampling values assume Qwen in instruct (non-thinking)
+#  mode. A 27B model follows them more closely. On a 32 GB machine,
+#  Qwen3.8-27B works well — Ollama tag `qwen3.8:27b`, Lemonade's
+#  Qwen3.8-27B-GSQ-RCO-GGUF-IQ3_S, or setup-windows-qwen-large.ps1 — and
+#  `pm warm` uses a lot of that memory.
+#
+#  Thinking is off: a run that is allowed to think will spend its token
+#  budget inside <think> and return empty or half-cut JSON.
+#
+#  Official Qwen instruct profile, with a cooler temperature so a small
+#  quant stays on the schema. json_temperature is used by `pm refine`,
+#  `pm review`, and `pm ready --deep`.
+#  The Windows llama.cpp scripts still publish the alias qwen-local on
+#  port 8080. Point endpoint and name at that server if you use them.
 model:
-  endpoint: "http://127.0.0.1:8080/v1/chat/completions"
-  name: "qwen-local"
+  endpoint: "http://127.0.0.1:11434/v1/chat/completions"
+  name: "qwen3:4b"
+  # Optional bearer token. Blank when the server does not check a key
+  # (llama.cpp and Ollama by default). ${ENV:NAME} keeps the key out of
+  # this file. Sent on chat and on GET /v1/models.
+  api_key: ""
   temperature: 0.4
   json_temperature: 0.2
   top_p: 0.8
@@ -41,6 +54,54 @@ model:
   # The per-call timeout above still applies to each request.
   total_timeout: 3600
   enable_thinking: false
+
+# ----------------------------------------------------------------------------
+#  1b. Local servers `pm setup` probes, and which model size fits this machine
+# ----------------------------------------------------------------------------
+local_models:
+  # Servers `pm setup` probes. `endpoint` is the OpenAI-compatible
+  # base, ending in /v1. Chat is that base plus /chat/completions.
+  # Add api_key on an entry when that server expects a bearer token.
+  # This catalog is updated in the GitHub template. `pm update`
+  # inserts the block only when it is missing. Delete `local_models:`
+  # and run `pm update` to take the catalog shipped with the new program.
+  endpoints:
+    - name: "Ollama"
+      endpoint: "http://127.0.0.1:11434/v1"
+    - name: "llama.cpp"
+      endpoint: "http://127.0.0.1:8080/v1"
+    - name: "LM Studio"
+      endpoint: "http://127.0.0.1:1234/v1"
+    - name: "vLLM"
+      endpoint: "http://127.0.0.1:8000/v1"
+    - name: "Jan"
+      endpoint: "http://127.0.0.1:1337/v1"
+    - name: "Lemonade"
+      endpoint: "http://127.0.0.1:13305/api/v1"
+    - name: "GPT4All"
+      endpoint: "http://127.0.0.1:4891/v1"
+  recommendations:
+    # First row whose min_gib is <= installed RAM wins.
+    # `models` are hints. A served id matches when the hint
+    # appears in it, ignoring case and - : _ / .
+    - min_gib: 48
+      models: ["qwen3-30b", "qwen3-32b", "qwen2.5-32b"]
+      note: "About 48 GB of RAM. A 30B-class model fits."
+    - min_gib: 32
+      models: ["qwen3.8-27b", "qwen3-27b", "qwen3-30b", "qwen3-32b"]
+      note: "About 32 GB of RAM. A 27B model fits, and pm warm will use a lot of that memory."
+    - min_gib: 24
+      models: ["qwen3-14b", "qwen2.5-14b"]
+      note: "About 24 GB of RAM. A 14B-class model fits."
+    - min_gib: 16
+      models: ["qwen3-8b", "qwen2.5-7b", "llama3.1-8b"]
+      note: "About 16 GB of RAM. An 8B-class model fits."
+    - min_gib: 8
+      models: ["qwen3-4b", "qwen2.5-3b", "llama3.2-3b"]
+      note: "About 8 GB of RAM. A 3B or 4B model fits."
+    - min_gib: 0
+      models: ["qwen3-1.7b", "qwen3-0.6b", "qwen2.5-1.5b"]
+      note: "Under 8 GB of RAM. Stay with a small model."
 
 # ----------------------------------------------------------------------------
 #  2. Jira (Cloud)

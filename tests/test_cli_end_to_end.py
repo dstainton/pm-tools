@@ -207,7 +207,7 @@ def pages():
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
-config_version: 6
+config_version: 7
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
