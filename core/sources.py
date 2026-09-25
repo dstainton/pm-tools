@@ -899,6 +899,105 @@ def fetch_jira_history(cfg, jql, max_results=None):
 #  Confluence
 # ---------------------------------------------------------------------------
 
+def _confluence_block(cfg):
+    if isinstance(cfg, dict) and cfg.get("confluence") and not cfg.get("email"):
+        return cfg["confluence"]
+    if isinstance(cfg, dict) and "confluence" in cfg and "workstreams" in cfg:
+        return cfg["confluence"]
+    return cfg or {}
+
+
+def fetch_confluence_results(cfg, cql, since=None, limit=None):
+    """Raw Confluence search results, newest first. Cached when a store is attached."""
+    block = _confluence_block(cfg)
+    if not cql or not block.get("base_url"):
+        return []
+    if since is None:
+        since = (dt.date.today() - dt.timedelta(days=block.get("lookback_days") or 7)).isoformat()
+    elif hasattr(since, "isoformat"):
+        since = since.isoformat()
+    full_cql = queries.render(None, "confluence.window", cql=cql, since=str(since)[:10])
+    full_cql = full_cql + " order by lastmodified desc"
+    cap = int(limit if limit is not None else block.get("max_results") or 25)
+
+    def fetch():
+        url = f"{block['base_url'].rstrip('/')}/rest/api/content/search"
+        found = []
+        start = 0
+        while len(found) < cap:
+            page_size = min(25, cap - len(found))
+            resp = send(
+                "GET", url,
+                params={
+                    "cql": full_cql,
+                    "limit": page_size,
+                    "start": start,
+                    "expand": "body.view,body.storage,version,space,history,metadata.labels,ancestors",
+                },
+                auth=(block["email"], block["api_token"]),
+                headers={"Accept": "application/json"},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            batch = payload.get("results") or []
+            found.extend(batch)
+            if not batch or not (payload.get("_links") or {}).get("next"):
+                break
+            start += len(batch)
+        return found[:cap]
+
+    from core import pages as page_core
+    return page_core.cache_fetch(cfg, "confluence", (full_cql, cap), fetch)
+
+
+def fetch_confluence_page(cfg, page_id):
+    """One page by id, with version and space."""
+    block = _confluence_block(cfg)
+    if not page_id or not block.get("base_url"):
+        return None
+
+    def fetch():
+        url = f"{block['base_url'].rstrip('/')}/rest/api/content/{page_id}"
+        resp = send(
+            "GET", url,
+            params={"expand": "version,space,history,body.storage,metadata.labels,ancestors"},
+            auth=(block["email"], block["api_token"]),
+            headers={"Accept": "application/json"},
+            timeout=60,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+    from core import pages as page_core
+    return page_core.cache_fetch(cfg, "confluence-page", (str(page_id),), fetch)
+
+
+def fetch_remote_links(cfg, key):
+    """Jira remote links for one issue."""
+    jira = cfg.get("jira") if isinstance(cfg, dict) and cfg.get("jira") else cfg
+    if not key or not (jira or {}).get("base_url"):
+        return []
+
+    def fetch():
+        resp = send(
+            "GET", _api(jira, f"issue/{key}/remotelink"),
+            auth=_auth(jira),
+            headers={"Accept": "application/json"},
+            timeout=60,
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        payload = resp.json()
+        return payload if isinstance(payload, list) else []
+
+    from core import pages as page_core
+    return page_core.cache_fetch(cfg, "remotelink", (key,), fetch)
+
+
 def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None):
     """Return (items, next_index) for a Confluence CQL query."""
     if not cql:

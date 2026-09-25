@@ -131,15 +131,12 @@ def prepare(cfg, ws, previous, window=None):
     else:
         cutoff = comments.report_cutoff(prev_snapshot, comments.settings(cfg))
         page_since = None
-    page_opts_full = page_core.page_settings(cfg)
-    scope = "labelled" if page_opts_full.get("scope") == "labelled" else "space"
-    types = page_opts_full["content_types"] + page_opts_full["title_only_types"]
-    from core import filters
-    cql = filters.build_cql(ws, cfg, scope=scope, types=types) or workstreams.confluence_cql(ws, cfg)
-    got, idx = sources.fetch_confluence(cfg["confluence"],
-                                        cql,
-                                        prefix, idx, since=page_since)
-    got = page_core.apply_excerpt(got, page_opts, cutoff=cutoff)
+    page_window = dict(window or {})
+    if page_since:
+        page_window["start"] = page_since
+    elif cutoff is not None:
+        page_window.setdefault("start", cutoff.date() if hasattr(cutoff, "date") else cutoff)
+    got = page_core.gather(cfg, ws, window=page_window)
     items += got
     idx = 1
     got, idx = sources.fetch_sharepoint(cfg["sharepoint"],

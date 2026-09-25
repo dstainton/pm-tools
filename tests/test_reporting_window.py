@@ -12,22 +12,24 @@ class WindowFetchTests(unittest.TestCase):
     def test_explicit_since_is_the_page_cutoff(self):
         seen = {}
 
-        def fake_fetch(cfg, cql, prefix, start, since=None):
+        def fake_fetch(cfg, cql, since=None, limit=None):
             seen["since"] = since
-            return [], start
+            seen["cql"] = cql
+            return []
 
         window = {"explicit": True, "start": dt.date(2026, 6, 1), "sprint_id": None}
         with patch("core.sources.fetch_jira", return_value=([], 1)), \
-             patch("core.sources.fetch_confluence", side_effect=fake_fetch), \
+             patch("core.sources.fetch_confluence_results", side_effect=fake_fetch), \
              patch("core.sources.fetch_sharepoint", return_value=([], 1)), \
              patch("core.workstreams.scope_jql", return_value="project = APS"):
             report.prepare(
-                {"pages": {}, "comments": {}, "confluence": {}, "sharepoint": {},
-                 "jira": {}},
-                {"abbrev": "SDX", "name": "SDX"},
+                {"pages": {"scope": "space"}, "comments": {},
+                 "confluence": {"content_types": ["page"]}, "sharepoint": {},
+                 "jira": {"project": "APS"}},
+                {"abbrev": "SDX", "name": "SDX", "confluence_space": "SDX"},
                 {"SDX": {"_ran_at": "2026-01-01T00:00:00+00:00"}},
                 window)
-        self.assertEqual(seen["since"], dt.date(2026, 6, 1))
+        self.assertEqual(str(seen["since"])[:10], "2026-06-01")
 
     def test_second_run_uses_the_workstream_ran_at(self):
         seen = {}
