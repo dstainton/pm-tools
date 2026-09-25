@@ -161,6 +161,14 @@ QUERIES = {
         "cql", "every Confluence read",
         "Only pages modified on or after a date.",
         "({cql}) AND lastmodified >= '{since}'", ("cql", "since")),
+    "epics.children": _entry(
+        "jql", "pm report epic progress",
+        "Direct children of these Epics.",
+        "parent IN ({keys})", ("keys",)),
+    "epics.resolved": _entry(
+        "jql", "pm report epics finished in the window",
+        "Epics in the workstream that were resolved inside the window.",
+        '({base}) AND {status_done} AND resolved >= "{since}"', ("base", "since")),
     "brief.risk_pages": _entry(
         "cql", "pm brief",
         "Pages the workstream labelled as risks.",

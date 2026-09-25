@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import checklist, citations, comments, output, sources, model, state, workstreams
+from core import checklist, citations, comments, epics, output, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -151,6 +151,7 @@ def prepare(cfg, ws, previous, window=None):
         comments.report_cutoff(prev_snapshot, comments.settings(cfg)))
     new, changed, dropped = state.compute_changes(prev_snapshot, items)
     change_block = state.build_change_block(new, changed, dropped, first_run)
+    epic_rows = epics.build(cfg, ws, items, window, (new, changed, dropped))
     return {
         "items": items,
         "change_block": change_block,
@@ -159,6 +160,7 @@ def prepare(cfg, ws, previous, window=None):
         "new": new,
         "changed": changed,
         "dropped": dropped,
+        "epics": epic_rows,
     }
 
 

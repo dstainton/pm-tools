@@ -545,13 +545,36 @@ DEFAULT_REPORT_FIELDS = ("summary,status,assignee,updated,duedate,priority,"
                          "issuetype,labels")
 
 
+def _report_fields(cfg):
+    """Report fields, always including parent even when config lists its own."""
+    raw = cfg.get("fields") or DEFAULT_REPORT_FIELDS
+    names = _field_list(raw)
+    for extra in ("parent",):
+        if extra not in names:
+            names.append(extra)
+    epic_link = (cfg.get("epic_link_field") or "parent").strip()
+    if epic_link and epic_link not in names:
+        names.append(epic_link)
+    return names
+
+
+def fetch_issues_by_key(cfg, keys, fields):
+    """Raw issues for these keys, in chunks of 100."""
+    found = []
+    wanted = [key for key in keys if key]
+    for start in range(0, len(wanted), 100):
+        chunk = wanted[start:start + 100]
+        jql = "key IN (" + ", ".join(chunk) + ")"
+        found.extend(search_issues(cfg, jql, fields=fields, max_items=0))
+    return found
+
+
 def fetch_jira(cfg, jql, tag_prefix, start_index):
     """Return (items, next_index) for a Jira JQL query."""
     if not jql:
         return [], start_index
 
-    issues = search_issues(cfg, jql,
-                           fields=cfg.get("fields") or DEFAULT_REPORT_FIELDS)
+    issues = search_issues(cfg, jql, fields=_report_fields(cfg))
 
     items, idx = [], start_index
     for iss in issues:
@@ -584,6 +607,13 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
         item["labels"] = list(f.get("labels") or [])
         item["due"] = f.get("duedate") or ""
         item["updated"] = f.get("updated")
+        parent = f.get("parent") or {}
+        if not parent and cfg.get("epic_link_field") and cfg.get("epic_link_field") != "parent":
+            parent = f.get(cfg["epic_link_field"]) or {}
+        if isinstance(parent, dict):
+            item["parent"] = parent.get("key")
+        else:
+            item["parent"] = str(parent) if parent else None
         items.append(item)
         idx += 1
     return items, idx

@@ -516,6 +516,26 @@ Used by: every Confluence read.
 ({cql}) AND lastmodified >= '{since}'
 ```
 
+### `epics.children`
+
+Direct children of these Epics.
+
+Used by: pm report epic progress.
+
+```
+parent IN ({keys})
+```
+
+### `epics.resolved`
+
+Epics in the workstream that were resolved inside the window.
+
+Used by: pm report epics finished in the window.
+
+```
+({base}) AND {status_done} AND resolved >= "{since}"
+```
+
 ### `brief.risk_pages`
 
 Pages the workstream labelled as risks.
