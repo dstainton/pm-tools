@@ -1652,6 +1652,11 @@ Not in this plan:
   {epic_labels: [acme]}}`.
 - A leadership view of `pm daily`, `pm lint` or `pm ready` (Part 6 says
   why).
+- A register kept as one page with a table (no child pages). Part 4b
+  assumes one child page per entry, as the team works today. A table
+  register could later be diffed row by row against a stored copy.
+- Confluence's Page Properties Report macro on the summary page is not
+  parsed; the entries are read directly, which gives the same fields.
 - The v2 Confluence REST API. The v1 search still works; the record shape
   isolates the switch.
 
