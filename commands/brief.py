@@ -69,15 +69,16 @@ def _risk_cql(ws, cfg=None):
     return workstreams.confluence_cql(ws, cfg)
 
 
-def _risks(cfg, ws):
+def _risks(cfg, ws, since=None):
     cql = _risk_cql(ws, cfg)
     if not cql:
         return []
-    items, _idx = sources.fetch_confluence(cfg["confluence"], cql, ws["abbrev"], 1)
+    items, _idx = sources.fetch_confluence(
+        cfg["confluence"], cql, ws["abbrev"], 1, since=since)
     return items[:3]
 
 
-def gather(cfg, audience):
+def gather(cfg, audience, window=None):
     streams = cfg.get("_workstreams") or []
     prev = state.load_state(_state_path(cfg, audience))
     last = prev.get("_last")
@@ -95,7 +96,8 @@ def gather(cfg, audience):
                 comments.audience_cutoff(last, comments.settings(cfg)))
             for issue in issues:
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
-            risks.extend(_risks(cfg, ws))
+            page_since = window["start"] if window and window.get("explicit") else None
+            risks.extend(_risks(cfg, ws, since=page_since))
         items = _as_items(product_issues)
         key = product.get("abbrev") or "UNASSIGNED"
         prev_snap = prev.get(key) or {}
@@ -186,7 +188,12 @@ def run_prep(cfg, args):
     if not audience:
         sys.exit("Which audience? e.g.  pm brief --for \"Monthly portfolio review\"")
     print(f"Preparing the brief for {audience} ...")
-    sections, snapshot, last = gather(cfg, audience)
+    from core import window as window_core
+    try:
+        window = window_core.resolve(cfg, args, default_start=None, projects=[])
+    except window_core.WindowError as exc:
+        sys.exit(str(exc))
+    sections, snapshot, last = gather(cfg, audience, window)
     text = render_prep(audience, sections, last)
     path = output.place(
         cfg, f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md",

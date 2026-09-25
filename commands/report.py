@@ -104,12 +104,15 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def prepare(cfg, ws, previous):
+def prepare(cfg, ws, previous, window=None):
     """Items and the change block `pm report` will send. Writes nothing."""
     prefix = ws["abbrev"]
     items = []
     idx = 1
-    sprint_jql = workstreams.scope_jql(cfg, ws, "report")
+    overrides = None
+    if window and window.get("sprint_id"):
+        overrides = {"sprint": window["sprint_id"]}
+    sprint_jql = workstreams.scope_jql(cfg, ws, "report", overrides=overrides)
     roadmap_jql = workstreams.scope_jql(cfg, ws, "roadmap")
     got, idx = sources.fetch_jira(cfg["jira"], sprint_jql, prefix, idx)
     items += got
@@ -118,19 +121,25 @@ def prepare(cfg, ws, previous):
     idx = 1
     from core import pages as page_core
     page_opts = page_core.settings(cfg)
-    cutoff = previous.get("_ran_at") if isinstance(previous, dict) else None
+    prev_snapshot = previous.get(prefix, {}) if isinstance(previous, dict) else {}
+    if not isinstance(prev_snapshot, dict):
+        prev_snapshot = {}
+    if window and window.get("explicit") and window.get("start"):
+        cutoff = dt.datetime.combine(
+            window["start"], dt.time.min, tzinfo=dt.timezone.utc)
+        page_since = window["start"]
+    else:
+        cutoff = comments.report_cutoff(prev_snapshot, comments.settings(cfg))
+        page_since = None
     got, idx = sources.fetch_confluence(cfg["confluence"],
                                         workstreams.confluence_cql(ws, cfg),
-                                        prefix, idx)
+                                        prefix, idx, since=page_since)
     got = page_core.apply_excerpt(got, page_opts, cutoff=cutoff)
     items += got
     idx = 1
     got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
                                         ws.get("sharepoint_query"), prefix, idx)
     items += got
-    prev_snapshot = previous.get(prefix, {})
-    if not isinstance(prev_snapshot, dict):
-        prev_snapshot = {}
     first_run = prefix not in previous
     jira_items = [it for it in items if it.get("source") == "Jira"]
     comments.attach(
@@ -159,10 +168,22 @@ def run(cfg, args):
     previous = state.load_state(state_path)
     new_state = dict(previous)   # keep untouched workstreams' memory intact
 
+    from core import window as window_core
+    projects = []
+    for ws in selected:
+        project = (ws.get("project") or (cfg.get("jira") or {}).get("project"))
+        if project and project not in projects:
+            projects.append(project)
+    try:
+        window = window_core.resolve(
+            cfg, args, default_start=None, projects=projects)
+    except window_core.WindowError as exc:
+        sys.exit(str(exc))
+
     prepared = []
     for ws in selected:
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        row = prepare(cfg, ws, previous)
+        row = prepare(cfg, ws, previous, window)
         if not row["first_run"]:
             print(f"  changes: {len(row['new'])} new, "
                   f"{len(row['changed'])} changed, "
@@ -187,17 +208,6 @@ def run(cfg, args):
         sections.append((ws, body))
         all_items += row["items"]
 
-    from core import window as window_core
-    projects = []
-    for ws in selected:
-        project = (ws.get("project") or (cfg.get("jira") or {}).get("project"))
-        if project and project not in projects:
-            projects.append(project)
-    try:
-        window = window_core.resolve(
-            cfg, args, default_start=None, projects=projects)
-    except window_core.WindowError as exc:
-        sys.exit(str(exc))
     if window.get("explicit"):
         print(f"Window: {window['label']} (this run does not move the "
               "last-report memory).")

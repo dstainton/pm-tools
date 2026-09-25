@@ -114,7 +114,8 @@ def resolve(cfg, args=None, *, default_start=None, default_days=None,
         chosen = resolve_sprint(found, "" if sprint_token is True else sprint_token)
         start = parse_date(chosen.get("start")) or today
         end = parse_date(chosen.get("end")) or today
-        jql = f"sprint = {int(chosen['id'])}" if chosen.get("id") is not None else None
+        sprint_id = chosen.get("id")
+        jql = f"sprint = {int(sprint_id)}" if sprint_id is not None else None
         label = chosen.get("name") or "Sprint"
     elif since:
         explicit = True
@@ -151,6 +152,7 @@ def resolve(cfg, args=None, *, default_start=None, default_days=None,
         "jql": jql,
         "label": label,
         "explicit": explicit,
+        "sprint_id": sprint_id if sprint_token is not None else None,
     }
 
 

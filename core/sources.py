@@ -859,14 +859,17 @@ def fetch_jira_history(cfg, jql, max_results=None):
 #  Confluence
 # ---------------------------------------------------------------------------
 
-def fetch_confluence(cfg, cql, tag_prefix, start_index):
+def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None):
     """Return (items, next_index) for a Confluence CQL query."""
     if not cql:
         return [], start_index
 
     # Add a date filter so we only get material since the last report.
-    since = (dt.date.today()
-             - dt.timedelta(days=cfg["lookback_days"])).isoformat()
+    if since is None:
+        since = (dt.date.today()
+                 - dt.timedelta(days=cfg["lookback_days"])).isoformat()
+    elif hasattr(since, "isoformat"):
+        since = since.isoformat()
     full_cql = queries.render(None, "confluence.window", cql=cql, since=since)
 
     url = f"{cfg['base_url'].rstrip('/')}/rest/api/content/search"

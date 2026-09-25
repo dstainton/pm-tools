@@ -30,7 +30,9 @@ def _warm_report(cfg):
     prepared = []
     for ws in cfg["_workstreams"]:
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        prepared.append((ws, report_cmd.prepare(cfg, ws, previous)))
+        from core import window as window_core
+        window = window_core.resolve(cfg, None, default_start=None, projects=[])
+        prepared.append((ws, report_cmd.prepare(cfg, ws, previous, window)))
     model.announce(cfg["model"], len(prepared), "pm warm report")
     for ws, row in prepared:
         model.tick(cfg["model"], ws["abbrev"])
