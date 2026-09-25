@@ -22,6 +22,7 @@ Jira's word (Epic, Story, Component, assignee); prose uses Scrum's word
 - Part 2 — The rules this plan keeps
 - Part 3 — The new report shape
 - Part 4 — Confluence as a source
+- Part 4b — Decision logs, risk registers, and ADRs
 - Part 5 — Audiences: pm, leadership, partner
 - Part 6 — Every report, per audience
 - Part 7 — What the model is asked, and what it costs
@@ -91,6 +92,11 @@ headings. Nobody can read "what is happening on Epic APS-1".
   `--cached` does nothing for it.
 - **No link from a page to an Epic.** Pages sit in the workstream's material
   next to issues with nothing saying which Epic they concern.
+- **Decision logs, risk registers and ADRs are not known to the tool.**
+  They are kept as child pages under one summary page per type. An entry is
+  read only if it happens to carry a `decision` or `risk` label; the summary
+  page is never linked; status changes are invisible; ADRs are not
+  recognised. Part 4b addresses this.
 
 ### 1.4 The window flags do not change what is fetched
 
@@ -408,7 +414,9 @@ Fetch expand: `body.view,version,space,history,metadata.labels,ancestors`.
    none. The answer must be one of the listed keys; anything else is
    treated as none. Printed as "matched by the model".
 5. Otherwise `epic` stays `""` and the page is listed under
-   **Documentation changed** for its workstream.
+   **Documentation changed** for its workstream. Register entries (Part 4b)
+   are the exception: an unmatched entry is shown in its register block,
+   never under "Documentation changed".
 
 ### 4.7 Page summaries, and why they belong in `pm warm`
 
@@ -440,6 +448,271 @@ Keep the current fetch, but route it through the same record shape
 (`type: "file"`, `title_only: True`, no body, no summary) so it lands in
 **Documentation changed** and **Sources** with a real title instead of
 `SDX-S1`. Summarising SharePoint files is out of scope (Part 11).
+
+---
+
+## Part 4b — Decision logs, risk registers, and ADRs
+
+### 4b.1 How the team keeps them
+
+Each log is a Confluence page that summarises the log (usually a table or a
+Page Properties Report), with one child page per entry:
+
+```
+Decision log                      <- summary page
+├── DEC-014 Rotate certificates every 90 days
+├── DEC-013 Rate limit defaults
+└── …
+Risk register                     <- summary page
+├── RISK-007 HSM capacity during rotation
+└── …
+Architecture decisions            <- summary page
+├── ADR-012 Use mTLS between exchange nodes
+└── …
+```
+
+Today the tool finds these only by accident: an entry is read when it
+carries the label `decision` or `risk` and sits in a workstream's space.
+The summary page is never linked, an entry without the label is missed, a
+status change (Proposed → Accepted) is invisible, and ADRs are not
+recognised at all.
+
+A log (called a **register** in config and code, so it does not collide with
+"log" in the write log) is therefore configured explicitly and read on its
+own path, next to the general page reader from Part 4.
+
+### 4b.2 What every report shows for each register
+
+1. **Always a link to the summary page**, even when nothing changed. A
+   reader who wants the whole log is one click away.
+2. **New entries**: child pages created inside the window.
+3. **Changed entries**: child pages edited inside the window that existed
+   before it. When a status field moved, say so (`Proposed → Accepted`).
+4. **Removed entries**: pages that were children last time and are not now
+   (deleted, archived or moved). Only known after the first run.
+5. **Summary page edited**: one line when the summary page itself changed
+   in the window, with who and when.
+6. A count: `42 entries · 2 new · 1 changed since 18 Sep`.
+
+### 4b.3 Config
+
+```yaml
+registers:
+  - type: decision              # decision | risk | adr
+    name: "Decision log"        # how it is headed in reports
+    space: "IP"                 # with title, or give page_id instead
+    title: "Decision log"
+    # page_id: "123456"         # wins over space + title; survives a rename
+    product: IP                 # optional: where it is shown (see 4b.6)
+    # workstream: SDX           # optional, instead of product
+    depth: descendants          # children: direct children only
+    status_field: "Status"      # Page Properties row read as the status
+    fields: [Owner, Date]       # other Page Properties rows to show
+  - type: risk
+    name: "Risk register"
+    space: "IP"
+    title: "Risk register"
+    product: IP
+    status_field: "Status"
+    fields: [Owner, Rating]
+    highlight: {field: Rating, values: [High, Critical]}
+  - type: adr
+    name: "Architecture decisions"
+    space: "IP"
+    title: "Architecture decisions"
+    status_field: "Status"
+```
+
+- `type` decides the entry's `kind` (`decision`, `risk`, `adr`). This wins
+  over labels and over the model's kind.
+- `highlight` marks matching entries **High** in every audience and puts
+  them first. Leadership sees only highlighted risks plus new ones (6.1).
+- `partner_visible: true` on a register lets partner reports list its new
+  and changed entries. Off by default, and a `risk` register cannot set it
+  (config load fails with a sentence saying why).
+- The block is optional. With no `registers:`, reports behave as Part 4
+  describes.
+
+### 4b.4 Reading a register
+
+New module `core/registers.py`.
+
+```python
+def settings(cfg):
+    """The `registers:` list, validated, with defaults filled in."""
+
+def resolve_root(cfg, reg):
+    """The summary page as a page dict (Part 4.5 shape).
+    page_id: GET /rest/api/content/{id}?expand=version,space,history.
+    space + title: GET /rest/api/content?spaceKey=…&title=…&expand=version,
+    the call publish.find_page already makes. Cached with pages.cache_fetch.
+    Missing page: returns None; the report prints
+    `_Decision log: summary page not found (space IP, title "Decision log")._`"""
+
+def list_entries(cfg, reg, root_id):
+    """Every entry id, title and version, no body. CQL
+    `ancestor = <root_id> AND type = page` (or `parent = <root_id>` when
+    depth is children), expand=version, paged with start/limit until
+    `_links.next` is absent. Used for the count and for removals."""
+
+def changed_entries(cfg, reg, root_id, since):
+    """Entries edited on or after `since`, full records: same CQL plus
+    `AND lastmodified >= "<since>"`, expand as Part 4.5 plus body.storage.
+    Capped at pages.max_pages per register, newest first."""
+
+def properties(storage_html, wanted):
+    """{field: value} from the first Page Properties (`details`) macro.
+    Rows are <tr><th>Field</th><td>Value</td></tr>. A cell holding a Status
+    macro yields its `title` parameter (ACCEPTED -> Accepted). Other cells
+    are strip_html'd. Field names match case-insensitively."""
+
+def status_of(entry, reg):
+    """properties()[status_field], else the first label in
+    {proposed, accepted, rejected, superseded, deprecated, open, closed,
+    mitigated}, else ""."""
+
+def gather(cfg, reg, window, previous):
+    """The register record in 4b.5."""
+```
+
+Entries are ordinary page dicts from `pages.normalise`, with `kind` set from
+`reg["type"]`, plus `status`, `fields`, `high`, `change` (`new`, `changed`,
+`removed`), and `status_was`. They flow through the same page summaries
+(Step 5) and Epic matching (Part 4.6) as any page, so an ADR that names
+`APS-1` shows up under that Epic too.
+
+The general page reader (Part 4) must skip pages that belong to a
+register. `registers.gather` runs first and returns the set of entry and
+root page ids; `pages.gather` drops those ids so an entry is not listed
+twice under "Documentation changed".
+
+### 4b.5 What a gathered register holds
+
+```python
+{
+    "type": "decision",
+    "name": "Decision log",
+    "root": {"page_id": "5000", "title": "Decision log", "url": "…",
+             "updated": "2026-09-24", "updated_by": "Dana",
+             "edited_in_window": True},
+    "total": 42,
+    "entries": [                     # new and changed, highlighted first, then newest
+        {…page dict…, "change": "new", "status": "Accepted",
+         "status_was": "", "fields": {"Owner": "Dana"}, "high": False},
+        {…, "change": "changed", "status": "Accepted", "status_was": "Proposed"},
+    ],
+    "removed": [{"page_id": "5009", "title": "DEC-009 …"}],
+    "first_run": False,
+    "scope": {"product": "IP"},      # or {"workstream": "SDX"} or {}
+}
+```
+
+### 4b.6 Memory: telling new, changed and removed apart
+
+The report state file (per audience, Part 5.3) gains a top-level key:
+
+```json
+"_registers": {
+  "decision:5000": {"5001": {"title": "DEC-014 …", "version": 3, "status": "Accepted"}, …}
+}
+```
+
+- `new`: created on or after the window start (`history.createdDate`).
+  This works on the first run too.
+- `changed`: edited in the window and not new. `status_was` comes from the
+  snapshot when the stored status differs; on a first run it is `""`.
+- `removed`: ids in the snapshot that are not in `list_entries` now.
+- The snapshot is rewritten from `list_entries` + `status_of` at the end of
+  a run that saves memory (not on an explicit `--since`/`--sprint` run).
+- Status for unchanged entries is not re-read (no body fetch): the stored
+  status is carried forward.
+
+`core/state.py` iterates workstream abbrevs only, so a key starting with `_`
+at the top level is safe. Say so in a comment where the key is written.
+
+### 4b.7 Where it appears in the report
+
+A register with `workstream:` renders under that workstream, after
+Epics. One with `product:` renders under the product, after the Increment.
+One with neither renders in a top-level section after "At a glance".
+
+```markdown
+### Decisions, risks and ADRs
+
+**[Decision log](…)** — 42 entries · 2 new · 1 changed since 18 Sep · summary page updated 24 Sep by Dana
+
+- New: [DEC-014 Rotate certificates every 90 days](…) — Accepted · Dana · APS-1. Certificates rotate every 90 days, automated from October.
+- Changed: [DEC-011 Tenant rate limits](…) — Proposed → Accepted · Sam. 1000 requests a minute per tenant.
+- Removed: DEC-009 Legacy key escrow.
+
+**[Risk register](…)** — 17 entries · 1 new since 18 Sep
+
+- New, High: [RISK-007 HSM capacity during rotation](…) — Open · Rating High · APS-1. Capacity headroom is thin during the switchover window.
+
+**[Architecture decisions](…)** — 12 entries · no new or changed entries since 18 Sep
+```
+
+- One bold line per register, which is the summary-page link, always.
+- Bullets only for new, changed and removed entries. A register with none
+  still prints its bold line.
+- The Epic block (Part 3.2) also lists a matched entry as its own line, e.g.
+  `- Decision (new): [DEC-014 …](…)`, so a reader following one Epic sees
+  it there too.
+- Sources appendix: one table per register with every new and changed
+  entry, plus the summary page as the first row.
+- The At a glance table gains columns `New decisions`, `New risks`,
+  `New ADRs` (only the columns for configured register types).
+
+### 4b.8 What the model sees
+
+Register entries join the material (Appendix B, Material format) as
+documents with their kind and change, under their Epic when matched and
+otherwise in a group of their own:
+
+```
+Register changes
+  [D3] (decision, new, Accepted) DEC-014 Rotate certificates every 90 days
+      Summary: Certificates rotate every 90 days, automated from October.
+  [D4] (risk, new, High, Open) RISK-007 HSM capacity during rotation
+      Summary: Capacity headroom is thin during the switchover window.
+  [D5] (decision, changed, Proposed -> Accepted) DEC-011 Tenant rate limits
+```
+
+That gives the existing headings "Decisions since last report" and
+"Risks" a real source. Add one rule to `REPORT_SYSTEM_PROMPT` (Appendix B).
+
+A register placed at product or portfolio level has no single workstream
+section to feed. Its entries go into the section of the workstream owning
+the matched Epic; unmatched entries go only into the leadership facts and
+the rendered register block, not into any workstream's material.
+
+### 4b.9 Per audience
+
+| | `pm` | `leadership` | `partner` |
+|---|---|---|---|
+| Summary page link | Always | Always | Only when `partner_visible` and `include_confluence_links` |
+| Decisions and ADRs | New, changed, removed | New, and changed where the status moved | New and changed, titles and summaries, when `partner_visible` |
+| Risks | New, changed, removed | Highlighted plus new, with rating | Never |
+| Status transitions | Yes | Yes | No |
+| Owner and other fields | Yes | Owner only | No |
+
+In the leadership report, register entries also feed the facts for
+"Decisions needed" (decisions with a status of Proposed or Open) and
+"Risks to watch" (highlighted or new risks).
+
+### 4b.10 Other commands
+
+- `pm brief`: each level shows the register block from 4b.9 for the window
+  since that meeting last met. The pm brief's "Risks" section reads the risk
+  register when one is configured, else labelled risk pages as in Part 6.3.
+- `pm release-notes` (pm and leadership): decisions and ADRs accepted inside
+  the `--since` window, listed under "Decisions made in this release" with
+  links. Not for `--version` only.
+- `pm warm --pages`: summarises changed register entries too.
+- `pm doctor`: for each register, whether the summary page resolves, how
+  many entries it has, and how many have the configured `status_field`.
+  Suggests `page_id:` when the title lookup fails.
+- `pm today`, `pm daily`: unchanged.
 
 ---
 
@@ -574,6 +847,9 @@ _Signal is a rule, not a judgement: …_
   otherwise (the call count says so).
 - Documents: only kind `decision`, `risk`, `dependency`, or `is_new`, at
   most `audiences.leadership.max_docs_per_product` (default 5), newest first.
+- Register blocks (Part 4b) sit under each product after the Epic table,
+  filtered per 4b.9. The summary-page links are always there. Register
+  entries do not count toward `max_docs_per_product`.
 - No ticket rows, no assignees, no comment quotes, no Sources appendix of
   items. A short Sources list of Epics and documents stays.
 - Portfolio-wide "Summary" is the product summaries concatenated when there
@@ -669,6 +945,12 @@ the page store.
 | Leadership summary | Per product | products | Model cache |
 | Partner summary | Per product with a visible Epic | products | Model cache |
 | Release notes prose | Per run (unchanged) | 1 | Model cache |
+
+Registers add no calls of their own: a changed entry is a page, so it costs
+one summary like any other page (counted in the first row). They do add
+Confluence reads: one to resolve each summary page, one paged id listing,
+and one search for changed entries, per register per run, all through the
+fetch cache.
 
 For the shipped config (1 product, 3 workstreams, say 12 changed pages a
 week): a cold pm report is 12 + ≤12 + 3 = up to 27 calls; after an
@@ -905,6 +1187,88 @@ page in SDX edited 30 days ago (must not appear on a first run).
 character cut is gone (a 3,000-character body keeps its last sentence in
 `body_text`); a second run inside the fetch TTL makes no new Confluence call.
 
+### Step 4b — Registers: decision log, risk register, ADRs
+
+Do this after Step 4 (it reuses `pages.normalise` and the fetch cache) and
+before Step 5 (summaries then cover entries for free). Rendering lands in
+Step 6 and the audience rules in Steps 8–10; each of those steps must
+include the register pieces named in Part 4b.
+
+**Files:** new `core/registers.py`, `core/config.py`, `core/pages.py`,
+`commands/report.py`, `core/state.py` (comment only), `tests/fake_jira.py`,
+new `tests/test_registers.py`.
+
+1. `core/registers.py` with the functions in 4b.4. `settings` fills
+   `depth: descendants`, `status_field: "Status"`, `fields: []`, and
+   `highlight: None`.
+2. `core/config.py::_validate_registers`: a list of mappings; `type` in
+   `decision|risk|adr`; `name` set; `page_id` or both `space` and `title`;
+   at most one of `product`/`workstream`, naming one that exists;
+   `partner_visible: true` rejected on `type: risk` with
+   `Register "Risk register": a risk register cannot be partner_visible.`;
+   `highlight` is `{field: str, values: [str]}`.
+3. `report.run` gathers registers once per run (not per workstream), before
+   the workstream loop, then:
+   - passes the set of register page ids to `pages.gather`, which drops them;
+   - runs `pages.map_to_epics` over the entries against all selected Epics;
+   - adds each matched entry to its Epic's `pages` list and to that
+     workstream's material, and each unmatched entry to the register block
+     only (4b.8).
+   - Registers scoped to a product or workstream outside the current
+     `--product`/`--workstream` selection are skipped.
+4. After the report is written, and only when memory is saved, write
+   `new_state["_registers"]` (4b.6).
+5. `commands/brief.py`: gather registers with the brief's window and the
+   brief state file (same `_registers` key).
+
+**Fake server changes:**
+- `_confluence()` honours `ancestor = <id>` (the page id is in the page's
+  `ancestors` list) and `parent = <id>` (the last ancestor), and pages
+  through `start`/`limit` with `_links.next` while more remain.
+- `expand=body.storage` returns the fixture's `storage` string when set,
+  else the body wrapped in `<p>`.
+- `GET /wiki/rest/api/content?spaceKey=…&title=…` already exists; add
+  `version.when` and `version.by` to its results.
+
+**Fixtures** (space `APS`, so they sit in a configured space and prove the
+de-duplication with the general reader):
+- `5000` "Decision log", summary page, edited 1 day ago.
+- `5001` "DEC-014 Rotate certificates every 90 days", child of 5000, created
+  1 day ago, body mentions `APS-1`, Page Properties Status = a Status macro
+  titled `ACCEPTED`.
+- `5002` "DEC-013 Rate limit defaults", child of 5000, created and edited 40
+  days ago, Status `Accepted`.
+- `5003` "DEC-011 Tenant rate limits", child of 5000, created 40 days ago,
+  edited 2 days ago, Status `Accepted`. The test seeds a previous state with
+  `Proposed` for it.
+- `6000` "Risk register" with `6001` "RISK-007 HSM capacity during rotation",
+  created 2 days ago, Rating `High`, Status `Open`.
+- `7000` "Architecture decisions" with `7001` "ADR-012 Use mTLS between
+  exchange nodes", edited 60 days ago (nothing new: proves the bold line
+  still prints).
+- Config: three `registers:` entries with `space: "APS"`, `product: IP`,
+  found by title, and one test config variant using `page_id: "5000"`.
+
+**Tests** (`tests/test_registers.py` and a `RegisterTests` class in
+`test_cli_end_to_end.py`):
+- The report links all three summary pages, including Architecture
+  decisions, which has no changes.
+- DEC-014 is New, DEC-011 is Changed with `Proposed → Accepted`, DEC-013 is
+  absent from the bullets.
+- RISK-007 is `New, High` and listed before other risks.
+- A seeded snapshot containing `5009` reports `Removed: …`.
+- DEC-014 appears under Epic APS-1 and is **not** under "Documentation
+  changed".
+- `properties()` reads a Status macro, a plain cell, and a missing field.
+- A missing summary page prints the not-found line and the report still
+  completes.
+- An explicit `--since` run does not write `_registers`.
+- Leadership shows RISK-007 and DEC-014 with no Owner other than for
+  decisions; partner shows no register unless `partner_visible`; config
+  load rejects `partner_visible` on the risk register.
+- The model material for SDX contains `(decision, new, Accepted)` for
+  DEC-014.
+
 ### Step 5 — Page summaries and `pm warm --pages`
 
 **Files:** new `core/page_summaries.py`, `core/model.py` (prompts),
@@ -959,7 +1323,12 @@ ignored.
    - `at_a_glance(groups, rows)` → table in 3.2.
    - `epic_block(epic, links=True)` → the bold line and bullets in 3.2.
    - `docs_block(pages)` → "Documentation changed".
-   - `sources_appendix(groups, rows, level)` → the grouped tables.
+   - `register_block(register, level, opts)` → the bold summary-page line and
+     the new/changed/removed bullets from 4b.7, filtered per 4b.9. Called
+     at portfolio, product or workstream level according to the register's
+     scope.
+   - `sources_appendix(groups, rows, level)` → the grouped tables, plus one
+     table per register.
    - `render_pm(cfg, groups, rows, sections, window, scope_note)` → the whole
      file. Move `_increment_lines` here unchanged.
 5. `commands/publish.py::markdown_to_storage`: add `####`/`#####` headings,
@@ -1078,7 +1447,11 @@ line removed and the terminal says `1 line removed`.
 2. `render_prep(audience, sections, last, level)` branches per 6.3.
 3. `_risks` becomes "pages of kind risk", read from the gathered pages, so
    the separate risk fetch goes away. Risk lines use `summary` when present,
-   else today's 200-character excerpt.
+   else today's 200-character excerpt. When a risk register is configured,
+   the Risks section is that register's block (4b.7, filtered per 4b.9)
+   instead.
+5. Every level renders the register blocks per 4b.9, under the product they
+   are scoped to.
 4. The state file stores `_audience_level`; `--audience` overrides it and
    is saved.
 
@@ -1098,6 +1471,9 @@ visible Epics; a second brief without `--audience` reuses the saved level.
 2. `bullet_lines` groups by Epic inside each workstream.
 3. Level branches per 6.4; "Further reading" uses `pages.gather` for the
    `--since` window (skip when only `--version` is given and say so).
+4. "Decisions made in this release" (4b.10): decision and ADR entries whose
+   status is Accepted and that are new or changed inside `--since`, for pm
+   and leadership, with the summary-page link.
 
 **Tests:** pm notes show an Epic line above its done items; leadership shows
 Epic lines only; partner shows only visible Epics and no keys.
@@ -1136,11 +1512,13 @@ in the fake).
 `CHANGELOG.md`, `pyproject.toml`, `tests/test_update.py`.
 
 1. Template: the blocks in Part 9, with comments in the file's existing
-   style. `config_version: 6`.
+   style. `config_version: 6`. The `registers:` example from 4b.3 goes in
+   commented out, under the Confluence section.
 2. `migrations.to_version_6` (Part 9.3). Append `(5, to_version_6)`.
 3. `pm doctor`: a Confluence line per workstream — the space exists, the
    content types are accepted, and how many pages changed in the last 7
-   days. Warn when a workstream has no `confluence_space`.
+   days. Warn when a workstream has no `confluence_space`. One line per
+   register (4b.10).
 4. README: rewrite the `pm report` section around the new layout and the
    three levels; add `--audience` to `pm brief`, `pm release-notes`,
    `pm metrics`, `pm warm`. `docs/AUTOMATION.md`: the warm order and
@@ -1197,6 +1575,12 @@ audiences:
 Per product, optional: `confluence_space: "IPX"`.
 Per workstream, optional: `partner_visible: true`.
 
+Optional top-level `registers:` list, exactly as in 4b.3. It is not
+inserted by the migration (there is no sensible default page to point at);
+the template carries a commented example, and `pm doctor` says when the
+list is empty and the spaces contain a page titled "Decision log",
+"Risk register" or "Architecture decisions".
+
 `output.audience` stays and keeps meaning the words in the pm prompt
 ("stakeholders"). The header uses `audiences.pm.name`.
 
@@ -1243,7 +1627,8 @@ Fixture additions, in one place so every step shares them:
   `remote_links` on APS-2 pointing at page 2002; a `duedate` on APS-1
   (30 days out) and APS-2 (5 days out); APS-20 labelled `blocked` so APS-2
   signals At risk.
-- Pages: the list in Step 4, plus one `partner-visible` page in SDX.
+- Pages: the list in Step 4, plus one `partner-visible` page in SDX, plus
+  the register pages in Step 4b.
 - Fake model: branches keyed on the first words of each new system prompt
   (Appendix B). The leadership branch returns the three headings and one
   bullet citing `[APS-10]` (to prove the removal). The partner branch
@@ -1311,6 +1696,15 @@ Choices made here that the user may want to change:
 14. Do not import `commands.*` from `core.*` (the existing layering). Rendering
     helpers go in `core/report_render.py`; the leadership and partner
     runners stay in `commands/report.py`.
+15. A register entry is also a page in a configured space. Drop register
+    page ids from the general page reader, or every entry shows twice
+    (Step 4b.3).
+16. `created` alone decides New; do not infer New from "not in the
+    snapshot", or the first run after adding a register calls every entry
+    new.
+17. Read status only from pages fetched with `body.storage`. Unchanged
+    entries keep their stored status; do not fetch every entry's body to
+    refresh it.
 
 ## Appendix B — Exact prompts
 
@@ -1325,6 +1719,8 @@ appear in the Material.
 6. Items are grouped under their Epic. Name the Epic when it helps the \
 reader. A "Summary:" line under a document is a summary of that page; \
 cite the document's tag.
+7. A document marked decision, new or decision, changed belongs under \
+Decisions since last report. A document marked risk belongs under Risks.
 
 Example of one filled section:
 ### Progress this sprint
@@ -1447,6 +1843,10 @@ Epics:
 
 Documents:
 - [D1] decision: Decision: certificate rotation cadence. Certificates rotate every 90 days, automated from October.
+
+Registers:
+- [D3] decision, new, Accepted: DEC-014 Rotate certificates every 90 days. Certificates rotate every 90 days, automated from October.
+- [D4] risk, new, High, Open: RISK-007 HSM capacity during rotation. Capacity headroom is thin during the switchover window.
 
 From the team reports:
 SDX, Decisions we are waiting on: <text of that section>
