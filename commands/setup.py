@@ -58,8 +58,8 @@ def _flags_help():
         "--token-env JIRA_TOKEN --project APS --yes\n"
         "  pm setup --section model --model-endpoint http://127.0.0.1:11434/v1 "
         "--model-name qwen3:8b\n"
-        "  pm setup --section confluence --confluence-space APS "
-        "--confluence-root \"API Program Services\"\n"
+        "  pm setup --section confluence --confluence-space \"POSM Chapter\" "
+        "--confluence-team-page \"API Program Services (APS) Team\"\n"
         "One section later:  pm setup --section jira|model|workstreams|confluence\n"
         "A non-interactive run never installs Ollama or Lemonade."
     )
@@ -67,11 +67,13 @@ def _flags_help():
 
 def _confluence_hint():
     return (
-        "Confluence is optional. One shared space:\n"
-        "  pm setup --section confluence --confluence-space APS "
-        "--confluence-root \"API Program Services\"\n"
-        "Then set confluence_page on a product or workstream, or pass\n"
-        "  --confluence-page to pm products add / pm workstreams add.\n"
+        "Confluence is optional. One space shared by several teams:\n"
+        "  pm setup --section confluence --confluence-space \"POSM Chapter\" "
+        "--confluence-team-page \"API Program Services (APS) Team\"\n"
+        "A folder under the team page whose title names a product or\n"
+        "workstream is found by itself. Set confluence_page on a product or\n"
+        "workstream when the title is different, or pass --confluence-page\n"
+        "to pm products add / pm workstreams add.\n"
         "A space on its own still reads that whole space. Registers are\n"
         "edited in the config; the template has a commented example."
     )
@@ -160,25 +162,27 @@ def apply_known(text, args):
 
 
 def _ask_confluence(text, args):
-    """Ask for one shared space and folder titles. Blank answers skip."""
+    """Ask for the shared space, the team page, and folder titles. Blank answers skip."""
     import yaml
     loaded = yaml.safe_load(text) or {}
     block = loaded.get("confluence") if isinstance(loaded.get("confluence"), dict) else {}
     print("Confluence")
-    print("  One shared space, or a space on each workstream.")
+    print("  One space shared by several teams, or a space on each workstream.")
     print("  Leave a prompt blank to skip it. A value already set is left alone.")
     if not _real(block.get("space")) and not getattr(args, "confluence_space", None):
-        space = _ask("Shared space key (blank to skip): ")
+        space = _ask("Shared space key or name, for example POSM Chapter (blank to skip): ")
         if space:
             args.confluence_space = space
+    has_team_page = _real(block.get("team_page")) or _real(block.get("root_title"))
     if (getattr(args, "confluence_space", None) or _real(block.get("space"))) \
-            and not _real(block.get("root_title")) \
-            and not getattr(args, "confluence_root", None):
-        root = _ask("Team page title (blank to skip): ")
+            and not has_team_page \
+            and not getattr(args, "confluence_team_page", None):
+        root = _ask("Your team page title (blank to skip): ")
         if root:
-            args.confluence_root = root
+            args.confluence_team_page = root
     if not (getattr(args, "confluence_space", None) or _real(block.get("space"))):
         return
+    matched = _matched_folders(text, args)
     pages = []
     for kind, rows in (("product", loaded.get("products") or []),
                        ("workstream", loaded.get("workstreams") or [])):
@@ -186,7 +190,11 @@ def _ask_confluence(text, args):
             if not isinstance(row, dict) or not row.get("abbrev"):
                 continue
             if _real(row.get("confluence_page")) or _real(row.get("confluence_page_id")) \
-                    or _real(row.get("confluence_space")):
+                    or _real(row.get("confluence_space")) or row.get("confluence_page") is False:
+                continue
+            found = matched.get((kind, row["abbrev"]))
+            if found:
+                print(f'  {kind} {row["abbrev"]}: found "{found}" under the team page.')
                 continue
             title = _ask(f"{kind} {row['abbrev']} folder title (blank to skip): ")
             if title:
@@ -195,14 +203,8 @@ def _ask_confluence(text, args):
         args.confluence_pages = pages
 
 
-def apply_confluence_settings(text, args):
-    """Write a shared space, the team page, and folder titles when blank."""
-    notes = []
-    space = getattr(args, "confluence_space", None)
-    root = getattr(args, "confluence_root", None)
-    pages = getattr(args, "confluence_pages", None) or []
-    if not (space or root or pages):
-        return text, notes
+def _confluence_login(text, args):
+    """`(wiki url, email, token)` from the flags, then the jira block."""
     import yaml
     loaded = yaml.safe_load(text) or {}
     jira = loaded.get("jira") if isinstance(loaded.get("jira"), dict) else {}
@@ -223,6 +225,65 @@ def apply_confluence_settings(text, args):
         token = args.token
     elif _real(jira.get("api_token")):
         token = jira.get("api_token")
+    return wiki, email, token
+
+
+def _matched_folders(text, args):
+    """`{(kind, abbrev): folder title}` found under the team page. Empty when offline."""
+    import yaml
+    from core import confluence_tree
+    loaded = yaml.safe_load(text) or {}
+    block = dict(loaded.get("confluence") or {}) if isinstance(loaded.get("confluence"), dict) else {}
+    wiki, email, token = _confluence_login(text, args)
+    for key, value in (("base_url", wiki), ("email", email), ("api_token", token)):
+        if not _real(block.get(key)) and value:
+            block[key] = value
+    token = str(block.get("api_token") or "")
+    if token.startswith("${ENV:") and token.endswith("}"):
+        block["api_token"] = os.environ.get(token[6:-1], "")
+    if getattr(args, "confluence_space", None) and not _real(block.get("space")):
+        block["space"] = args.confluence_space
+    if getattr(args, "confluence_team_page", None) and not (
+            _real(block.get("team_page")) or _real(block.get("root_title"))):
+        block["team_page"] = args.confluence_team_page
+    if not all(_real(block.get(key)) for key in ("base_url", "email", "api_token")):
+        return {}
+    cfg = {"confluence": block,
+           "products": [p for p in loaded.get("products") or [] if isinstance(p, dict)],
+           "workstreams": [w for w in loaded.get("workstreams") or [] if isinstance(w, dict)]}
+    if not confluence_tree.has_team_page(cfg):
+        return {}
+    out = {}
+    try:
+        if not confluence_tree.team_root_id(cfg):
+            return {}
+        print(f"  Space {confluence_tree.team_space(cfg)}; looking for folders under the team page.")
+        for kind, rows, locate in (("product", cfg["products"], confluence_tree.locate_product),
+                                   ("workstream", cfg["workstreams"], confluence_tree.locate_workstream)):
+            for row in rows:
+                if not row.get("abbrev") or not confluence_tree.can_match(row):
+                    continue
+                located = locate(cfg, row)
+                if located.get("how") == "matched":
+                    out[(kind, row["abbrev"])] = located.get("title") or ""
+    except Exception as exc:                                  # noqa: BLE001
+        print(f"  Could not read the team page yet: {exc}")
+        return {}
+    return out
+
+
+def apply_confluence_settings(text, args):
+    """Write a shared space, the team page, and folder titles when blank."""
+    notes = []
+    space = getattr(args, "confluence_space", None)
+    root = getattr(args, "confluence_team_page", None)
+    pages = getattr(args, "confluence_pages", None) or []
+    if not (space or root or pages):
+        return text, notes
+    import yaml
+    loaded = yaml.safe_load(text) or {}
+    block = loaded.get("confluence") if isinstance(loaded.get("confluence"), dict) else {}
+    wiki, email, token = _confluence_login(text, args)
     placeholders = {
         "base_url": ("https://<YOUR_ORG>.atlassian.net/wiki",),
         "email": ("<YOUR_LOGIN_EMAIL>",),
@@ -237,9 +298,11 @@ def apply_confluence_settings(text, args):
     if space:
         text, status = config_edit.set_scalar(text, "confluence", "space", space)
         notes.append(f"confluence.space {status}")
-    if root:
-        text, status = config_edit.set_scalar(text, "confluence", "root_title", root)
-        notes.append(f"confluence.root_title {status}")
+    if root and _real(block.get("root_title")):
+        notes.append("confluence.team_page kept (root_title is set)")
+    elif root:
+        text, status = config_edit.set_scalar(text, "confluence", "team_page", root)
+        notes.append(f"confluence.team_page {status}")
     for kind, abbrev, title in pages:
         list_key = "products" if kind == "product" else "workstreams"
         text, status = config_edit.set_entry_scalar(
@@ -390,7 +453,7 @@ def run(args):
             getattr(args, "model_api_key", None),
             getattr(args, "model_api_key_env", None),
             getattr(args, "confluence_space", None),
-            getattr(args, "confluence_root", None),
+            getattr(args, "confluence_team_page", None),
             section]):
         sys.exit(_flags_help())
 
@@ -464,6 +527,6 @@ def run(args):
         print(f"Section: {section}")
     if section == "confluence" and not interactive \
             and not getattr(args, "confluence_space", None) \
-            and not getattr(args, "confluence_root", None) \
+            and not getattr(args, "confluence_team_page", None) \
             and not getattr(args, "confluence_pages", None):
         print(_confluence_hint())
