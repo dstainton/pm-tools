@@ -14,23 +14,10 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, filters, model, output, paths, sources, state,
+    checklist, comments, filters, model, output, paths, prompts, sources, state,
     workstreams, writes,
 )
 from core import products as product_core
-
-
-DEBRIEF_PROMPT = """\
-Extract decisions and actions from these meeting notes.
-
-Return a JSON object with exactly two keys:
-- "decisions": array of {"text": string, "owner": string or ""}
-- "actions": array of {"title": string, "owner": string or "",
-  "issuetype": "Story" or "Task", "workstream": abbrev or ""}
-
-Use ONLY workstream abbrevs from the list. Do not invent dates.
-Extract decisions and actions. Do not write any text outside the JSON object.
-"""
 
 
 def _slug(name):
@@ -299,7 +286,7 @@ def run_debrief(cfg, args):
     with open(notes, encoding="utf-8") as fh:
         text = fh.read()
     raw = model.call_model(
-        cfg["model"], DEBRIEF_PROMPT,
+        cfg["model"], prompts.get(cfg, "brief.debrief"),
         f"{_catalogue(cfg)}\n\nNotes:\n{text}\n\nReturn the JSON object now.")
     extracted = _parse_debrief(raw)
     out = output.place(

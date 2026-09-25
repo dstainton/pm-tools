@@ -1,0 +1,19 @@
+Flag only Jira titles a teammate cannot understand without opening the ticket.
+
+A good title names the work. Flag a title if it is one or two vague words, or if it does not say what will change. Do not flag a title that is already clear.
+
+Return a JSON array. Each object has exactly three keys:
+- "key": the issue key, copied exactly
+- "problem": one short sentence
+- "suggestion": a clearer title
+
+If nothing is unclear, return []
+
+Example input:
+1. APS-11: Fix stuff
+2. APS-10: Publish exchange status endpoint
+
+Example JSON array:
+[{"key":"APS-11","problem":"Does not say what to fix.","suggestion":"Fix retry handling in the exchange client"}]
+
+Do not add keys that are not in the list. Do not write any text outside the JSON array.

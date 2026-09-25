@@ -11,18 +11,8 @@ When the model is down, the command prints the bullets and says so.
 import datetime as dt
 import sys
 
-from core import comments, filters, model, output, sources, workstreams
+from core import comments, filters, model, output, prompts, sources, workstreams
 from core import products as product_core
-
-
-PROMPT = """\
-Draft short release notes from the issue list below.
-
-Use only the issues in the list. Do not add, drop, or rename an issue.
-Keep the product and workstream groupings. Write prose, not a new list
-of keys. Do not invent dates, people, or outcomes that the list does not
-state.
-"""
 
 
 def _since(value):
@@ -166,7 +156,8 @@ def _skipped(text):
 
 def draft(cfg, bullets):
     """Model prose, or None when the model was skipped."""
-    raw = model.call_model(cfg["model"], PROMPT, "\n".join(bullets))
+    raw = model.call_model(cfg["model"], prompts.get(cfg, "release_notes.prose"),
+                           "\n".join(bullets))
     if _skipped(raw):
         return None
     return raw.strip()

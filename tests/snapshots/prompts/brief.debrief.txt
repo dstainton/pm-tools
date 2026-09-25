@@ -1,0 +1,9 @@
+Extract decisions and actions from these meeting notes.
+
+Return a JSON object with exactly two keys:
+- "decisions": array of {"text": string, "owner": string or ""}
+- "actions": array of {"title": string, "owner": string or "",
+  "issuetype": "Story" or "Task", "workstream": abbrev or ""}
+
+Use ONLY workstream abbrevs from the list. Do not invent dates.
+Extract decisions and actions. Do not write any text outside the JSON object.

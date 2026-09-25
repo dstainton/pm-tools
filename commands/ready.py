@@ -259,7 +259,8 @@ def _gather_deep(cfg, ws, issues):
     model.announce(model_cfg, total, f"pm ready --deep ({ws['abbrev']})")
     for aspect in ("titles", "criteria"):
         model_cfg["_progress_detail"] = f"{ws['abbrev']}, {aspect}"
-        findings, _errors = review.review_aspect(model_cfg, aspect, issues, batch)
+        findings, _errors = review.review_aspect(
+            model_cfg, aspect, issues, batch, cfg)
         for f in findings:
             deep.setdefault(f["key"], {})[aspect] = f["problem"]
     model_cfg.pop("_progress_detail", None)

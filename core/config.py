@@ -12,7 +12,7 @@ import sys
 
 import yaml
 
-from core import filters, products as product_core, workstreams as ws_core
+from core import filters, products as product_core, prompts, workstreams as ws_core
 from core.paths import HOME
 
 
@@ -139,6 +139,7 @@ def load_config(path):
     data = walk(data)
     if not isinstance(data, dict):
         sys.exit("Config must be a YAML mapping.")
+    data["_config_path"] = os.path.abspath(path)
     apply_defaults(data)
     validate(data)
     return data
@@ -159,6 +160,7 @@ def validate(cfg):
     _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
     filters.validate_config_scopes(cfg)
+    prompts.validate_config(cfg)
 
 
 def _validate_products(cfg):

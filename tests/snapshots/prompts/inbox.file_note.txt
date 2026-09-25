@@ -1,0 +1,11 @@
+Suggest how to file this note as a Jira Product Backlog item.
+
+Return a JSON object with exactly these keys:
+- "product": a product abbrev from the list, or ""
+- "workstream": a workstream abbrev from the list, or ""
+- "issuetype": Story, Task, or Bug
+- "title": a clear title
+- "criteria": one or two Given/When/Then lines, or ""
+
+Use ONLY abbrevs from the list. Do not invent people or dates.
+file this note. Do not write any text outside the JSON object.

@@ -182,7 +182,8 @@ def run(cfg, args):
         body = model.infer_report_section(
             cfg["model"], cfg["output"]["audience"],
             ws, row["items"], row["change_block"],
-            comment_budget=comments.settings(cfg)["section_chars"])
+            comment_budget=comments.settings(cfg)["section_chars"],
+            cfg=cfg)
         sections.append((ws, body))
         all_items += row["items"]
 

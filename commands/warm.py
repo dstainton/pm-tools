@@ -37,7 +37,8 @@ def _warm_report(cfg):
         model.infer_report_section(
             cfg["model"], cfg["output"]["audience"],
             ws, row["items"], row["change_block"],
-            comment_budget=comments.settings(cfg)["section_chars"])
+            comment_budget=comments.settings(cfg)["section_chars"],
+            cfg=cfg)
 
 
 def _warm_inbox(cfg):
