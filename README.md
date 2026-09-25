@@ -301,6 +301,11 @@ These commands use an AI model to write or judge text: `pm report`,
 filing suggestions in `pm inbox`, the written part of
 `pm release-notes`, and `pm warm`. Everything else works without one.
 
+A long command tells you what it is doing, such as reading Jira or writing
+a section. In a terminal that line counts the seconds, so you can see it is
+still working. A scheduled run writes the same steps to its log and, if a
+step is still going after 15 seconds, writes a reminder.
+
 The model runs on your own computer. The simplest option is
 [Ollama](https://ollama.com):
 
