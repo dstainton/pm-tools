@@ -532,7 +532,15 @@ its Epic, including a matched decision, risk, or ADR. The file opens with
 that changed, and a **Sources** appendix of real links. Decision, risk, and
 ADR registers render when they are configured. A product may set
 `confluence_space` for pages that belong to the product rather than one
-workstream.
+workstream. A team that keeps every page in one space can set
+`confluence.space` and `confluence.root_title` (or `root_page_id`). A product
+or workstream then names `confluence_page` or `confluence_page_id`, and reads
+stay under that folder. `confluence_space` on its own still means the whole
+space. A register can set `under` when the same title exists in more than one
+folder. `split: label` files each entry under the product or workstream whose
+abbreviation is a label on that page. A page that matches more than one
+register is listed once: on the workstream, then the product, then the
+portfolio.
 
 `--audience pm` is the default and writes `weekly_report_<date>.md` plus
 `report_state.json`. `--audience leadership` writes a shorter Epic-level

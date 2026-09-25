@@ -175,8 +175,13 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
 
 
 def _attach_product_pages(cfg, groups, prepared, window, skip_ids):
-    """Pages from a product Confluence space, attached to the owning workstream."""
-    from core import page_summaries
+    """Pages from a product space or folder, attached to the owning workstream.
+
+    A product folder is read once. Pages already gathered for a workstream
+    folder are left where they are. A product that only sets `confluence_space`
+    still contributes the whole space.
+    """
+    from core import confluence_tree, page_summaries
     from core import pages as page_core
     by_abbrev = {ws["abbrev"]: row for ws, row in prepared}
     seen = set()
@@ -185,15 +190,30 @@ def _attach_product_pages(cfg, groups, prepared, window, skip_ids):
             if item.get("page_id"):
                 seen.add(str(item["page_id"]))
     for product, streams in groups:
-        space = product.get("confluence_space")
-        if not space or not streams:
+        if not streams:
             continue
-        fake_ws = {
-            "abbrev": product.get("abbrev") or "",
-            "confluence_space": space,
-            "confluence_labels": [],
-            "product": product.get("abbrev") or "",
-        }
+        located = confluence_tree.locate_product(cfg, product)
+        has_page = product.get("confluence_page") or product.get("confluence_page_id")
+        if has_page:
+            if located.get("missing") or not located.get("ancestor_id") or not located.get("space"):
+                continue
+            fake_ws = {
+                "abbrev": product.get("abbrev") or "",
+                "confluence_space": located["space"],
+                "confluence_page_id": located["ancestor_id"],
+                "confluence_labels": [],
+                "product": product.get("abbrev") or "",
+            }
+        else:
+            space = product.get("confluence_space")
+            if not space:
+                continue
+            fake_ws = {
+                "abbrev": product.get("abbrev") or "",
+                "confluence_space": space,
+                "confluence_labels": [],
+                "product": product.get("abbrev") or "",
+            }
         epics = []
         owner = {}
         for ws in streams:
@@ -521,7 +541,7 @@ def run(cfg, args):
               "last-report memory).")
     else:
         # `_registers` is not a workstream abbrev; state walks abbrevs only.
-        new_state["_registers"] = registers.snapshot(found_registers)
+        new_state["_registers"] = registers.saved_memory(cfg, found_registers)
         state.save_state(state_path, new_state)
 
     scope_note = ""

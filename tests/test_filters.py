@@ -111,6 +111,36 @@ class ConfluenceCqlTests(unittest.TestCase):
     def test_nothing_configured(self):
         self.assertIsNone(filters.build_cql({}))
 
+    def test_page_id_narrows_to_an_ancestor(self):
+        cql = filters.build_cql({
+            "confluence_space": "APS",
+            "confluence_page_id": "42",
+            "confluence_labels": ["decision"],
+        })
+        self.assertEqual(
+            cql, 'space = "APS" AND ancestor = 42 AND label IN ("decision")')
+
+    def test_page_id_inherits_the_team_space(self):
+        cql = filters.build_cql(
+            {"abbrev": "SDX", "confluence_page_id": "42"},
+            {"confluence": {"space": "APS"}})
+        self.assertEqual(cql, 'space = "APS" AND ancestor = 42')
+
+    def test_team_space_is_not_applied_without_a_page(self):
+        self.assertIsNone(filters.build_cql(
+            {"abbrev": "SDX"}, {"confluence": {"space": "APS", "root_title": "API Program Services"}}))
+
+    def test_own_space_keeps_its_page(self):
+        cql = filters.build_cql(
+            {"confluence_space": "SDX", "confluence_page_id": "5"},
+            {"confluence": {"space": "APS", "root_page_id": "100"}})
+        self.assertEqual(cql, 'space = "SDX" AND ancestor = 5')
+
+    def test_hand_written_cql_wins_over_a_page(self):
+        self.assertEqual(
+            filters.build_cql({"confluence_page_id": "42", "confluence_cql": "space = OLD"}),
+            "space = OLD")
+
 
 if __name__ == "__main__":
     unittest.main()

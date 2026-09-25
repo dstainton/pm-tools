@@ -376,11 +376,12 @@ def _query_report(cfg, only=None):
 
 def _check_confluence(cfg):
     import datetime as dt
-    from core import filters, pages
+    from core import confluence_tree, filters, pages
     for ws in cfg.get("workstreams") or []:
         abbrev = ws.get("abbrev") or "?"
-        space = ws.get("confluence_space")
-        if not space:
+        located = confluence_tree.locate_workstream(cfg, ws)
+        space = located.get("space") or ""
+        if not space and not ws.get("confluence_cql"):
             print(f"  confluence      {abbrev} has no confluence_space          warn")
             continue
         try:

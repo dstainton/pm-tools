@@ -927,6 +927,43 @@ def _confluence_block(cfg):
     return cfg or {}
 
 
+def search_confluence_by_title(cfg, space, title, ancestor_id=None, parent_id=None):
+    """Pages and folders with this exact title.
+
+    The lookback window is not applied: a folder that nobody edited this week
+    is still the folder. A site that rejects the folder content type is
+    retried with pages only. `parent_id` is the direct parent; `ancestor_id`
+    is any page above it.
+    """
+    if not space or not title:
+        return []
+    block = _confluence_block(cfg)
+    if not block.get("base_url"):
+        return []
+
+    def run(types):
+        clauses = [
+            queries.render(cfg, "confluence.space", space=space),
+            queries.render(cfg, "confluence.title", title=title),
+            queries.render(cfg, "confluence.types", types=list(types)),
+        ]
+        if parent_id:
+            clauses.append(queries.render(
+                cfg, "confluence.parent", page_id=str(parent_id)))
+        elif ancestor_id:
+            clauses.append(queries.render(
+                cfg, "confluence.ancestor", page_id=str(ancestor_id)))
+        cql = " AND ".join(clauses)
+        return fetch_confluence_results(cfg, cql, since="1970-01-01", limit=5)
+
+    try:
+        return run(("page", "folder"))
+    except Exception as err:  # noqa: BLE001 — Cloud names the rejected type in a 400
+        if "400" not in str(err):
+            raise
+        return run(("page",))
+
+
 def fetch_confluence_results(cfg, cql, since=None, limit=None):
     """Raw Confluence search results, newest first. Cached when a store is attached."""
     block = _confluence_block(cfg)

@@ -23,6 +23,14 @@
   with `qwen3:4b` (about 2.5 GB). A 32 GB machine is pointed at a 27B
   model when one is being served. An endpoint or name you already set is
   left alone, including the previous llama.cpp default.
+- Confluence can live in one space. `confluence.space` and `root_title`
+  (or `root_page_id`) name the team page. A product or workstream may set
+  `confluence_page` or `confluence_page_id` so reads stay under that folder.
+  A register may set `under` when the same title exists in more than one
+  folder, and `split: label` to file each entry by the product or workstream
+  abbreviation on its labels. A page that matches more than one register is
+  listed once: on the workstream, then the product, then the portfolio. A
+  workstream `confluence_space` with no page still reads the whole space.
 - `pm setup` probes the local servers in `local_models.endpoints`, lists
   the models each one is serving, and recommends one that fits installed
   RAM (`config_version` 7). When none answer, it can install Ollama or

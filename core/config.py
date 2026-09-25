@@ -187,6 +187,25 @@ def _apply_convention_prompts(cfg):
         record["values"][value_name] = list(value)
 
 
+def _validate_page_id(label, value):
+    if value is None:
+        return
+    if isinstance(value, int):
+        return
+    if isinstance(value, str) and value.isdigit():
+        return
+    sys.exit(f"{label} must be a page id.")
+
+
+def _validate_confluence_ref(label, entry):
+    for key in ("confluence_page", "confluence_space"):
+        value = entry.get(key)
+        if value is not None and not isinstance(value, str):
+            sys.exit(f"{label}: `{key}` must be text.")
+    if "confluence_page_id" in entry:
+        _validate_page_id(f"{label}: `confluence_page_id`", entry.get("confluence_page_id"))
+
+
 def _validate_registers(cfg):
     raw = cfg.get("registers")
     if raw is None:
@@ -195,6 +214,8 @@ def _validate_registers(cfg):
         sys.exit("`registers:` must be a list.")
     products = {p.get("abbrev") for p in (cfg.get("products") or []) if isinstance(p, dict)}
     streams = {w.get("abbrev") for w in (cfg.get("workstreams") or []) if isinstance(w, dict)}
+    team_space = ((cfg.get("confluence") or {}).get("space")
+                  if isinstance(cfg.get("confluence"), dict) else "")
     for reg in raw:
         if not isinstance(reg, dict):
             sys.exit("`registers:` entries must be mappings.")
@@ -203,8 +224,10 @@ def _validate_registers(cfg):
             sys.exit(f'Register "{name}": type must be decision, risk, or adr.')
         if not reg.get("name"):
             sys.exit("Each register needs a name.")
-        if not reg.get("page_id") and not (reg.get("space") and reg.get("title")):
-            sys.exit(f'Register "{name}": set page_id, or both space and title.')
+        space = reg.get("space") or team_space
+        if not reg.get("page_id") and not (space and reg.get("title")):
+            sys.exit(f'Register "{name}": set page_id, or both space and title. '
+                     f"space may be omitted when confluence.space is set.")
         if reg.get("product") and reg.get("workstream"):
             sys.exit(f'Register "{name}": set product or workstream, not both.')
         if reg.get("product") and reg["product"] not in products:
@@ -213,6 +236,17 @@ def _validate_registers(cfg):
             sys.exit(f'Register "{name}": unknown workstream {reg["workstream"]}.')
         if reg.get("type") == "risk" and reg.get("partner_visible"):
             sys.exit(f'Register "{name}": a risk register cannot be partner_visible.')
+        if reg.get("depth") not in (None, "descendants", "children"):
+            sys.exit(f'Register "{name}": depth must be descendants or children.')
+        if reg.get("split") not in (None, "label"):
+            sys.exit(f'Register "{name}": split must be label.')
+        if reg.get("split") == "label" and reg.get("workstream"):
+            sys.exit(f'Register "{name}": split: label replaces a fixed workstream. '
+                     f"Set product, or leave both off.")
+        if reg.get("under") is not None and not isinstance(reg.get("under"), str):
+            sys.exit(f'Register "{name}": under must be a page title.')
+        if "under_id" in reg:
+            _validate_page_id(f'Register "{name}": under_id', reg.get("under_id"))
         highlight = reg.get("highlight")
         if highlight is not None:
             if not isinstance(highlight, dict) or not isinstance(highlight.get("field"), str):
@@ -239,6 +273,17 @@ def _validate_audiences(cfg):
         sys.exit("`audiences.warm` must be a list.")
 
 
+def _validate_confluence_tree(cfg):
+    block = cfg.get("confluence")
+    if not isinstance(block, dict):
+        return
+    for key in ("space", "root_title"):
+        if block.get(key) is not None and not isinstance(block.get(key), str):
+            sys.exit(f"`confluence.{key}` must be text.")
+    if "root_page_id" in block:
+        _validate_page_id("`confluence.root_page_id`", block.get("root_page_id"))
+
+
 def validate(cfg):
     """Check the whole config before a single Jira call is made.
 
@@ -254,6 +299,7 @@ def validate(cfg):
     _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
     _validate_audiences(cfg)
+    _validate_confluence_tree(cfg)
     _validate_registers(cfg)
     queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)
@@ -288,6 +334,7 @@ def _validate_products(cfg):
         seen[key] = True
         if not product.get("name"):
             sys.exit(f"Product {label} needs a `name`.")
+        _validate_confluence_ref(f"Product {label}", product)
         goal = product.get("product_goal")
         if goal is not None and not isinstance(goal, str):
             sys.exit(f"Product {label}: `product_goal:` must be text.")
@@ -356,6 +403,7 @@ def _validate_workstreams(cfg):
         if not has_anchor and not has_legacy_jql:
             sys.exit(f"Workstream {name} has no `{anchor_key}:` and no legacy "
                      f"JQL, so pm cannot tell which issues belong to it.")
+        _validate_confluence_ref(f"Workstream {name}", ws)
 
 
 def _validate_membership(cfg):

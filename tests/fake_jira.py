@@ -544,6 +544,11 @@ class _Handler(BaseHTTPRequestHandler):
         labels = re.findall(r'"([\w-]+)"', label_clause) if label_clause else []
         type_match = re.search(r"type\s+IN\s*\(([^)]*)\)", query, re.I)
         types = re.findall(r'"([^"]+)"', type_match.group(1)) if type_match else []
+        if not types:
+            eq_type = re.search(r"\btype\s*=\s*\"?([\w-]+)\"?", query, re.I)
+            if eq_type:
+                types = [eq_type.group(1)]
+        title = re.search(r'title\s*=\s*"([^"]*)"', query)
         since = re.search(r"lastmodified\s*>=\s*'(\d{4}-\d{2}-\d{2})'", query)
         ancestor = re.search(r"ancestor\s*=\s*(\d+)", query)
         parent = re.search(r"parent\s*=\s*(\d+)", query)
@@ -551,6 +556,8 @@ class _Handler(BaseHTTPRequestHandler):
         hits = []
         for page in self.pages:
             if space and page.get("space") != space.group(1):
+                continue
+            if title and page.get("title") != title.group(1):
                 continue
             if labels and not set(labels) & set(page.get("labels") or []):
                 continue
