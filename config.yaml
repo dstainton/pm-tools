@@ -13,7 +13,7 @@
 #  you have already filled in.
 # ============================================================================
 
-config_version: 5
+config_version: 6
 
 # ----------------------------------------------------------------------------
 #  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
@@ -100,9 +100,15 @@ comments:
 # or an explicit --since / --sprint. Caps only. enabled: false skips both.
 pages:
   enabled: true
+  scope: space              # space: every changed page; labelled: only confluence_labels
+  follow_jira_links: true
   max_pages: 20
   excerpt_chars: 2000
   section_chars: 8000
+  summaries: true
+  summary_chars: 6000
+  max_summaries: 20
+  match_epics_with_model: true
 
 # ----------------------------------------------------------------------------
 #  3. Confluence (Cloud)
@@ -113,6 +119,8 @@ confluence:
   api_token: "<YOUR_CONFLUENCE_API_TOKEN>"   # same token as Jira usually works
   lookback_days: 7
   max_results: 50
+  content_types: [page, blogpost]
+  title_only_types: [database, embed]
 
 # ----------------------------------------------------------------------------
 #  4. SharePoint (via Microsoft Graph) — set enabled: false to skip
@@ -365,6 +373,8 @@ products:
 #    components         exact Jira Component name(s) — must match Jira
 #    project            only if this stream lives outside the team project
 #    confluence_space   space key holding its decisions / risks
+#  A product may also set confluence_space. Those pages are matched to the
+#  product's Epics and filed under the workstream that owns the Epic.
 #    confluence_labels  which labels to gather from that space
 #    sharepoint_query   search term for its documents
 #    scopes             per-workstream overrides of the section above
@@ -405,6 +415,88 @@ workstreams:
     confluence_space: "ITK"
     confluence_labels: [decision, risk, dependency]
     sharepoint_query: "Integration Toolkit"
+
+# ----------------------------------------------------------------------------
+#  5m. Prompts, queries and conventions
+# ----------------------------------------------------------------------------
+#  The words sent to the model, and the JQL and CQL sent to Jira and
+#  Confluence, have named defaults in the code. Override one here when your
+#  Jira is set up differently. `pm doctor --prompts` and `pm doctor --queries`
+#  show the effective text. See docs/CUSTOMISING.md for every default.
+#
+#  prompts:
+#    report.section:
+#      append: |
+#        8. Name a Jira Component only if the Material names it.
+#    # values.headings renames a section. The seven roles stay put.
+#    # refine.titles:
+#    #   file: prompts/refine-titles.txt
+#    #   based_on: 1
+#  queries:
+#    # status.review: {text: 'status = "In Review"'}
+#    # membership.inherit.epic: {text: '"Epic Link" IN ({epic_keys})'}
+#  conventions:
+#    # bug_types: [Bug]
+#    # blocked_by_links: ["is blocked by", "blocked by"]
+#    # blocks_links: [blocks]
+#    # note_issuetypes: [Story, Task, Bug]
+#    # note_issuetype: Story
+#    # action_issuetypes: [Story, Task]
+#    # action_issuetype: Task
+#    # risk_label: risk
+#  Prompt ids:
+#    report.section — weekly workstream section
+#    report.section_tail — last line of that user message
+#    brief.debrief — decisions and actions from meeting notes
+#    inbox.file_note — where a captured note belongs
+#    refine.titles — clearer titles
+#    refine.criteria — acceptance criteria
+#    refine.tail — last line of a refine user message
+#    review.titles — why a title is unclear
+#    review.criteria — what acceptance criteria are missing
+#    review.titles_tail — last line of the titles user message
+#    review.criteria_tail — last line of the criteria user message
+#    release_notes.prose — done work turned into prose
+#    release_notes.partner_rules — extra rules for a partner release note
+#    pages.summary — one sentence for a changed page
+#    pages.epic_match — which Epic a page belongs to
+#    pages.tail — last line of a page prompt
+#    report.leadership — portfolio summary for leadership
+#    report.partner — external progress update
+#  Query ids:
+#    status.open status.done status.in-progress status.todo
+#    sprint.open sprint.future sprint.none sprint.by_id
+#    assignee.me assignee.unassigned assignee.assigned
+#    membership.anchor.component membership.anchor.label membership.anchor.field
+#    membership.epics membership.tagged
+#    membership.inherit.epic membership.inherit.parent
+#    membership.own_empty.component membership.own_empty.field
+#    coverage.open_in_project doctor.membership_open
+#    release_notes.done release_notes.since release_notes.version
+#    today.in_sprint_open
+#    confluence.space confluence.labels confluence.types confluence.window
+#    brief.risk_pages
+#    epics.children epics.resolved
+#    registers.descendants registers.children
+
+# Who a narrative report is for. pm keeps today's file names.
+audiences:
+  default: pm
+  warm: [pm]
+  pm:
+    name: "Product management"
+  leadership:
+    name: "Leadership"
+    at_risk_due_days: 14
+    max_docs_per_product: 5
+  partner:
+    name: "Partners"
+    epic_labels: [partner-visible]
+    page_labels: [partner-visible]
+    exclude_labels: [internal]
+    include_jira_links: false
+    include_confluence_links: false
+    show_target_dates: false
 
 # ----------------------------------------------------------------------------
 #  7. Output (used by `pm report`)

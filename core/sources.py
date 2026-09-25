@@ -20,6 +20,7 @@ from urllib.parse import quote
 
 import requests
 
+from core import queries
 from core.cache import cache_key
 from core.http import retry_after_seconds
 
@@ -58,13 +59,14 @@ def short(text, limit=280):
     return text if len(text) <= limit else text[:limit].rstrip() + "..."
 
 
-def strip_html(html):
+def strip_html(html, limit=400):
     """Confluence returns HTML; reduce it to readable plain text."""
     if not html:
         return ""
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"&[a-z]+;", " ", text)
-    return short(text, 400)
+    text = re.sub(r"\s+", " ", text).strip()
+    return short(text, limit)
 
 
 def adf_to_text(node):
@@ -544,13 +546,36 @@ DEFAULT_REPORT_FIELDS = ("summary,status,assignee,updated,duedate,priority,"
                          "issuetype,labels")
 
 
+def _report_fields(cfg):
+    """Report fields, always including parent even when config lists its own."""
+    raw = cfg.get("fields") or DEFAULT_REPORT_FIELDS
+    names = _field_list(raw)
+    for extra in ("parent",):
+        if extra not in names:
+            names.append(extra)
+    epic_link = (cfg.get("epic_link_field") or "parent").strip()
+    if epic_link and epic_link not in names:
+        names.append(epic_link)
+    return names
+
+
+def fetch_issues_by_key(cfg, keys, fields):
+    """Raw issues for these keys, in chunks of 100."""
+    found = []
+    wanted = [key for key in keys if key]
+    for start in range(0, len(wanted), 100):
+        chunk = wanted[start:start + 100]
+        jql = "key IN (" + ", ".join(chunk) + ")"
+        found.extend(search_issues(cfg, jql, fields=fields, max_items=0))
+    return found
+
+
 def fetch_jira(cfg, jql, tag_prefix, start_index):
     """Return (items, next_index) for a Jira JQL query."""
     if not jql:
         return [], start_index
 
-    issues = search_issues(cfg, jql,
-                           fields=cfg.get("fields") or DEFAULT_REPORT_FIELDS)
+    issues = search_issues(cfg, jql, fields=_report_fields(cfg))
 
     items, idx = [], start_index
     for iss in issues:
@@ -562,18 +587,34 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
         meta = f"Status: {status} | Assignee: {assignee} | Due: {due}"
         if priority:
             meta += f" | Priority: {priority}"
-        ref = f"{tag_prefix}-J{idx}"
+        summary = f.get("summary") or ""
+        category = ((f.get("status") or {}).get("statusCategory") or {}).get("key", "")
         item = make_item(
-            ref=ref,
+            ref=iss["key"],
             source="Jira",
-            title=f"{iss['key']}: {short(f.get('summary'), 140)}",
+            title=f"{iss['key']}: {short(summary, 140)}",
             detail=meta,
             url=f"{cfg['base_url'].rstrip('/')}/browse/{iss['key']}",
             meta=meta,
-            uid=iss["key"],       # e.g. SDX-101 — stable across weeks
-            watch=status,          # we flag a change when status moves
+            uid=iss["key"],
+            watch=status,
         )
+        item["key"] = iss["key"]
+        item["summary"] = summary
+        item["status"] = status
+        item["status_category"] = category
+        item["assignee"] = assignee
+        item["issuetype"] = (f.get("issuetype") or {}).get("name") or ""
+        item["labels"] = list(f.get("labels") or [])
+        item["due"] = f.get("duedate") or ""
         item["updated"] = f.get("updated")
+        parent = f.get("parent") or {}
+        if not parent and cfg.get("epic_link_field") and cfg.get("epic_link_field") != "parent":
+            parent = f.get(cfg["epic_link_field"]) or {}
+        if isinstance(parent, dict):
+            item["parent"] = parent.get("key")
+        else:
+            item["parent"] = str(parent) if parent else None
         items.append(item)
         idx += 1
     return items, idx
@@ -858,15 +899,117 @@ def fetch_jira_history(cfg, jql, max_results=None):
 #  Confluence
 # ---------------------------------------------------------------------------
 
-def fetch_confluence(cfg, cql, tag_prefix, start_index):
+def _confluence_block(cfg):
+    if isinstance(cfg, dict) and cfg.get("confluence") and not cfg.get("email"):
+        return cfg["confluence"]
+    if isinstance(cfg, dict) and "confluence" in cfg and "workstreams" in cfg:
+        return cfg["confluence"]
+    return cfg or {}
+
+
+def fetch_confluence_results(cfg, cql, since=None, limit=None):
+    """Raw Confluence search results, newest first. Cached when a store is attached."""
+    block = _confluence_block(cfg)
+    if not cql or not block.get("base_url"):
+        return []
+    if since is None:
+        since = (dt.date.today() - dt.timedelta(days=block.get("lookback_days") or 7)).isoformat()
+    elif hasattr(since, "isoformat"):
+        since = since.isoformat()
+    full_cql = queries.render(None, "confluence.window", cql=cql, since=str(since)[:10])
+    full_cql = full_cql + " order by lastmodified desc"
+    cap = int(limit if limit is not None else block.get("max_results") or 25)
+
+    def fetch():
+        url = f"{block['base_url'].rstrip('/')}/rest/api/content/search"
+        found = []
+        start = 0
+        while len(found) < cap:
+            page_size = min(25, cap - len(found))
+            resp = send(
+                "GET", url,
+                params={
+                    "cql": full_cql,
+                    "limit": page_size,
+                    "start": start,
+                    "expand": "body.view,body.storage,version,space,history,metadata.labels,ancestors",
+                },
+                auth=(block["email"], block["api_token"]),
+                headers={"Accept": "application/json"},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            batch = payload.get("results") or []
+            found.extend(batch)
+            if not batch or not (payload.get("_links") or {}).get("next"):
+                break
+            start += len(batch)
+        return found[:cap]
+
+    from core import pages as page_core
+    return page_core.cache_fetch(cfg, "confluence", (full_cql, cap), fetch)
+
+
+def fetch_confluence_page(cfg, page_id):
+    """One page by id, with version and space."""
+    block = _confluence_block(cfg)
+    if not page_id or not block.get("base_url"):
+        return None
+
+    def fetch():
+        url = f"{block['base_url'].rstrip('/')}/rest/api/content/{page_id}"
+        resp = send(
+            "GET", url,
+            params={"expand": "version,space,history,body.storage,metadata.labels,ancestors"},
+            auth=(block["email"], block["api_token"]),
+            headers={"Accept": "application/json"},
+            timeout=60,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+    from core import pages as page_core
+    return page_core.cache_fetch(cfg, "confluence-page", (str(page_id),), fetch)
+
+
+def fetch_remote_links(cfg, key):
+    """Jira remote links for one issue."""
+    jira = cfg.get("jira") if isinstance(cfg, dict) and cfg.get("jira") else cfg
+    if not key or not (jira or {}).get("base_url"):
+        return []
+
+    def fetch():
+        resp = send(
+            "GET", _api(jira, f"issue/{key}/remotelink"),
+            auth=_auth(jira),
+            headers={"Accept": "application/json"},
+            timeout=60,
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        payload = resp.json()
+        return payload if isinstance(payload, list) else []
+
+    from core import pages as page_core
+    return page_core.cache_fetch(cfg, "remotelink", (key,), fetch)
+
+
+def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None):
     """Return (items, next_index) for a Confluence CQL query."""
     if not cql:
         return [], start_index
 
     # Add a date filter so we only get material since the last report.
-    since = (dt.date.today()
-             - dt.timedelta(days=cfg["lookback_days"])).isoformat()
-    full_cql = f"({cql}) AND lastmodified >= '{since}'"
+    if since is None:
+        since = (dt.date.today()
+                 - dt.timedelta(days=cfg["lookback_days"])).isoformat()
+    elif hasattr(since, "isoformat"):
+        since = since.isoformat()
+    full_cql = queries.render(None, "confluence.window", cql=cql, since=since)
 
     url = f"{cfg['base_url'].rstrip('/')}/rest/api/content/search"
     resp = send("GET",
@@ -886,9 +1029,8 @@ def fetch_confluence(cfg, cql, tag_prefix, start_index):
         body = (page.get("body", {}).get("view", {}) or {}).get("value", "")
         when = (page.get("version", {}) or {}).get("when", "")[:10]
         link = cfg["base_url"].rstrip("/") + page.get("_links", {}).get("webui", "")
-        ref = f"{tag_prefix}-C{idx}"
         items.append(make_item(
-            ref=ref,
+            ref="",
             source="Confluence",
             title=short(page.get("title"), 140),
             detail=strip_html(body),
@@ -950,16 +1092,20 @@ def fetch_sharepoint(cfg, query, tag_prefix, start_index):
                 continue
         except ValueError:
             pass
-        ref = f"{tag_prefix}-S{idx}"
-        items.append(make_item(
-            ref=ref,
+        item = make_item(
+            ref="",
             source="SharePoint",
             title=short(f.get("name"), 140),
-            detail=f"Modified {modified[:10]}",
+            detail="",
             url=f.get("webUrl", ""),
             meta=f"Modified: {modified[:10]}",
             uid=f"sharepoint:{f.get('id', f.get('webUrl', ''))}",  # stable id
             watch=modified[:10],   # a newer modified date means it changed
-        ))
+        )
+        item["type"] = "file"
+        item["title_only"] = True
+        item["summary"] = ""
+        item["updated"] = modified[:10]
+        items.append(item)
         idx += 1
     return items, idx

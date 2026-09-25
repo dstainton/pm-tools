@@ -127,3 +127,17 @@ class MigrationTests(unittest.TestCase):
         self.assertIn("excerpt_chars: 2000", updated)
         again = migrations.apply_migrations(updated, migrations.MIGRATIONS, 5)
         self.assertEqual(again, updated)
+
+    def test_version_5_gains_audiences_and_not_prompts(self):
+        text = ("config_version: 5\npages:\n  enabled: true\n"
+                "confluence:\n  lookback_days: 7\nscopes:\n  report: {}\noutput:\n  file: x\n")
+        updated = migrations.apply_migrations(text, migrations.MIGRATIONS, 6)
+        self.assertEqual(migrations.read_version(updated), 6)
+        self.assertIn("audiences:", updated)
+        self.assertIn("scope: space", updated)
+        self.assertIn("content_types:", updated)
+        self.assertIn("refine_history:", updated)
+        self.assertNotIn("prompts:", updated)
+        self.assertNotIn("queries:", updated)
+        again = migrations.apply_migrations(updated, migrations.MIGRATIONS, 6)
+        self.assertEqual(again, updated)

@@ -14,7 +14,8 @@ Commands:
     pm do N              Preview, then write, the action `pm today` numbered N.
     pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
-                         Includes Jira comments since the last report.
+                         --audience pm, leadership, or partner. Comments since
+                         that audience's last report.
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
                          A mention quotes the comment.
@@ -25,13 +26,17 @@ Commands:
     pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
+                         --audience leadership is the headline table.
+                         Partner metrics are refused.
     pm release-notes     Done issues since a date or in a fixVersion,
-                         with comments from that window.
+                         grouped by Epic. --audience leadership or partner.
     pm brief             Meeting prep for one audience, or a debrief.
-                         Prep quotes comments since you last met them.
+                         --audience sets the level. Prep quotes comments
+                         since you last met them.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
     pm warm              Fill the model cache ahead of time (read-only).
+                         Order: review, page summaries, report, inbox.
     pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement, comments from that window,
                          and work in progress (no model).
@@ -253,6 +258,10 @@ def build_parser():
                                "points, start date, or acceptance criteria")
     p_doctor.add_argument("--yes", "-y", action="store_true",
                           help="With --discover-fields, write blank field IDs")
+    p_doctor.add_argument("--prompts", nargs="?", const="all", metavar="ID",
+                          help="Show where each prompt comes from, or one prompt's text")
+    p_doctor.add_argument("--queries", nargs="?", const="all", metavar="ID",
+                          help="Show each query and check it against Jira")
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
     p_setup = sub.add_parser(
@@ -297,8 +306,10 @@ def build_parser():
                           help="Start of the window. Does not move last-report memory.")
     p_report.add_argument("--sprint", nargs="?", const="open", default=None,
                           help="This Sprint (open), a number (138), or last")
+    p_report.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                          help="Who the report is for (default: pm)")
     p_report.add_argument("--json", action="store_true",
-                          help="Print a short JSON summary as well as the file")
+                          help="Also write the gathered report as JSON")
     p_report.set_defaults(func=report.run, needs_config=True)
 
     p_lint = sub.add_parser("lint", parents=[common, write_opts],
@@ -383,6 +394,9 @@ def build_parser():
                            help="How many weeks back (default: metrics.weeks or 8)")
     p_metrics.add_argument("--sprint", nargs="?", const="open", default=None,
                            help="Open sprint, a sprint number, or last")
+    p_metrics.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                           help="pm shows the full tables; leadership a headline; "
+                                "partner is refused")
     p_metrics.add_argument("--json", action="store_true",
                            help="Write the numbers as JSON")
     p_metrics.set_defaults(func=metrics.run, needs_config=True)
@@ -398,6 +412,9 @@ def build_parser():
                          help="With --debrief, create the action tickets")
     p_brief.add_argument("--publish", action="store_true",
                          help="Also send the brief to Confluence and/or Teams")
+    p_brief.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                         help="How deep the prep goes (default: the level saved "
+                              "for this meeting, else pm)")
     p_brief.add_argument("--since", metavar="YYYY-MM-DD",
                          help="Start of the window. Does not move last-met memory.")
     p_brief.add_argument("--sprint", nargs="?", const="open", default=None,
@@ -421,6 +438,8 @@ def build_parser():
                          help="Weekday time, e.g. 08:30")
     p_sched.add_argument("--weekly", metavar="DAY@HH:MM",
                          help="One day a week, e.g. fri@16:00")
+    p_sched.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                         help="With add report, the audience. Partner is refused.")
     p_sched.add_argument("--for", dest="for_audience",
                          help="With `add brief`, the audience name")
     p_sched.add_argument("--fail-on", choices=["error", "warn", "review"],
@@ -435,13 +454,18 @@ def build_parser():
         help="Fill the model cache ahead of time (read-only)",
         description="Fill the model cache so a later command only catches up. "
                     "Read-only: no Jira writes, no report. With no flag, warms "
-                    "review, report, and inbox. Review also covers ready --deep.")
+                    "review, page summaries, the report, then the inbox. "
+                    "Review also covers ready --deep.")
     p_warm.add_argument("--review", action="store_true",
                         help="Warm pm review (and pm ready --deep)")
     p_warm.add_argument("--report", action="store_true",
                         help="Warm pm report")
     p_warm.add_argument("--deep", action="store_true",
                         help="Same model work as --review")
+    p_warm.add_argument("--audience",
+                        help="Comma-separated levels to warm (default: audiences.warm)")
+    p_warm.add_argument("--pages", action="store_true",
+                        help="Summarise Confluence pages changed in the report window")
     p_warm.add_argument("--inbox", action="store_true",
                         help="Warm suggestions for notes already in the inbox")
     p_warm.set_defaults(func=warm.run, needs_config=True)
@@ -493,6 +517,9 @@ def build_parser():
                          help="Include issues resolved on or after this date")
     p_notes.add_argument("--version", metavar="NAME",
                          help="Include issues in this fixVersion")
+    p_notes.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                         help="pm lists items, leadership lists Epics, "
+                              "partner lists visible work")
     p_notes.set_defaults(func=release_notes.run, needs_config=True)
 
     p_update = sub.add_parser(

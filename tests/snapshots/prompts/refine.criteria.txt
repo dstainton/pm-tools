@@ -1,0 +1,7 @@
+Draft testable acceptance criteria for each story that is missing them.
+
+Return a JSON array. Each object has exactly two keys:
+- "key": the issue key, copied exactly
+- "criteria": 2 to 4 short Given/When/Then lines, separated by newlines
+
+Draft acceptance criteria. Do not write any text outside the JSON array.

@@ -23,6 +23,7 @@ from core import model_cache
 from core import statuses as status_core
 from core import config_edit
 from core import filters
+from core import queries
 from core import migrations
 from core import model as model_core
 from core import products as product_core
@@ -166,7 +167,7 @@ def _membership_jql(cfg, ws):
     base = ws_core.membership_jql(cfg, ws, "everything")
     if not base:
         return None
-    return f"({base}) AND (statusCategory != Done)"
+    return queries.render(cfg, "doctor.membership_open", base=base)
 
 
 def _check_membership(cfg):
@@ -193,8 +194,7 @@ def _check_membership(cfg):
 
     unclaimed = 0
     for project in _projects_in_play(cfg):
-        jql = (f"project = {filters.quote(project)} "
-               f"AND statusCategory != Done")
+        jql = queries.render(cfg, "coverage.open_in_project", project=project)
         try:
             keys = set(sources.fetch_jira_keys(cfg["jira"], jql))
         except Exception:
@@ -312,11 +312,150 @@ def _discover_fields(cfg, fields, write):
     print(f"\n  Wrote blank field IDs in {path}.")
 
 
+def _prompt_report(cfg, only=None):
+    """Print prompt sources. Returns 1 when an id is unknown."""
+    from core import prompts
+    if only and only != "all":
+        if only not in prompts.PROMPTS:
+            print(f"Unknown prompt {only}. Known: {', '.join(sorted(prompts.PROMPTS))}",
+                  file=sys.stderr)
+            return 1
+        entry = prompts.PROMPTS[only]
+        record = prompts.effective(cfg, only)
+        print(record["text"], end="" if record["text"].endswith("\n") else "\n")
+        print(f"source: {prompts.source(cfg, only)}", file=sys.stderr)
+        print(entry["explain"], file=sys.stderr)
+        names = prompts._known(entry)
+        print("placeholders: " + ", ".join(sorted(names)), file=sys.stderr)
+        if record["source"] != "built-in":
+            print("Built-in:", file=sys.stderr)
+            print(entry["text"], file=sys.stderr)
+        return 0
+    print("Prompts (built-in unless marked)")
+    for prompt_id, entry in prompts.PROMPTS.items():
+        record = prompts.effective(cfg, prompt_id)
+        mark = record["source"]
+        if record["parts"]:
+            mark = f"{record['source']} ({', '.join(record['parts'])})"
+        print(f"  {prompt_id:<22} {mark:<28} {entry['used_by']}")
+        based = record.get("based_on")
+        replaced = "text" in record["parts"] or "file" in record["parts"]
+        if replaced and (based is None or based < entry["version"]):
+            shown = "unset" if based is None else based
+            print(f"                        ! the built-in prompt changed "
+                  f"(version {entry['version']}) since this override "
+                  f"(based_on {shown}). Compare: pm doctor --prompts {prompt_id}")
+    return 0
+
+
+def _query_report(cfg, only=None):
+    from core import queries, workstreams
+    if only and only != "all":
+        if only not in queries.QUERIES and only not in (cfg.get("_queries") or {}):
+            print(f"Unknown query {only}.", file=sys.stderr)
+            return 1
+        print(queries.template(cfg, only))
+        return 0
+    print("Queries (built-in unless marked)")
+    texts = cfg.get("_queries") or {}
+    for qid in sorted(texts):
+        origin = queries.source(cfg, qid)
+        print(f"  {qid:<28} {origin:<10} {texts[qid]}")
+    for ws in cfg.get("_workstreams") or []:
+        print(ws.get("abbrev") or ws.get("name"))
+        from core import filters
+        for scope_name in sorted(filters.SCOPE_INCLUDES):
+            try:
+                jql = workstreams.scope_jql(cfg, ws, scope_name)
+                count = sources.approximate_count(cfg["jira"], jql) if jql else 0
+                print(f"  {scope_name} scope          ok   {count} issues")
+            except Exception as err:  # noqa: BLE001
+                print(f"  {scope_name} scope          FAIL  {err}")
+    return 0
+
+
+def _check_confluence(cfg):
+    import datetime as dt
+    from core import filters, pages
+    for ws in cfg.get("workstreams") or []:
+        abbrev = ws.get("abbrev") or "?"
+        space = ws.get("confluence_space")
+        if not space:
+            print(f"  confluence      {abbrev} has no confluence_space          warn")
+            continue
+        try:
+            opts = pages.page_settings(cfg)
+            types = list(opts["content_types"]) + list(opts["title_only_types"])
+            since = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+            accepted = []
+            for content_type in types:
+                one = filters.build_cql(ws, cfg, scope="space", types=[content_type])
+                try:
+                    sources.fetch_confluence_results(cfg, one, since=since, limit=1)
+                    accepted.append(content_type)
+                except Exception as err:  # noqa: BLE001
+                    if "400" in str(err):
+                        print(f"  confluence      {abbrev} type {content_type} was rejected — "
+                              f"edit confluence.content_types          warn")
+                    else:
+                        print(f"  confluence      {abbrev} type {content_type}: {err}          warn")
+            cql = filters.build_cql(ws, cfg, scope="space", types=accepted or types)
+            found = sources.fetch_confluence_results(cfg, cql, since=since, limit=5) if cql else []
+            print(f"  confluence      {abbrev} {space}: {len(found)} page(s) in 7 days  ok")
+        except Exception as err:  # noqa: BLE001
+            print(f"  confluence      {abbrev} {err}                              warn")
+
+
+def _check_registers(cfg):
+    from core import registers
+    raw = cfg.get("registers") or []
+    if not raw:
+        print("  registers       none configured                              warn")
+        return
+    for reg in registers.settings(cfg):
+        root = registers.resolve_root(cfg, reg)
+        name = reg.get("name") or reg.get("type")
+        if root is None:
+            print(f"  registers       {name}: summary page not found — set page_id  warn")
+            continue
+        try:
+            listed = registers.list_entries(cfg, reg, root["page_id"])
+        except Exception as err:  # noqa: BLE001
+            print(f"  registers       {name}: {root.get('title')} ({err})          warn")
+            continue
+        field = reg.get("status_field") or "Status"
+        with_status = 0
+        cql = registers._entry_cql(reg, root["page_id"])
+        for raw in sources.fetch_confluence_results(cfg, cql, since="1970-01-01", limit=200):
+            storage = ((raw.get("body") or {}).get("storage") or {}).get("value") or ""
+            if registers.properties(storage, [field]).get(field):
+                with_status += 1
+        print(f"  registers       {name}: {root.get('title')} — {len(listed)} entries, "
+              f"{with_status} with {field}          ok")
+
+
 def run(cfg, args):
+    prompt_id = getattr(args, "prompts", None)
+    if prompt_id is not None:
+        sys.exit(_prompt_report(cfg, prompt_id))
     print("pm doctor\n")
     problems = 0
     problems += _check_version(cfg)
     problems += _check_config(cfg)
+    from core import prompts as prompt_core
+    overridden = sum(1 for pid in prompt_core.PROMPTS
+                     if prompt_core.source(cfg, pid) != "built-in")
+    query_over = sum(1 for origin in (cfg.get("_query_sources") or {}).values()
+                     if origin != "built-in")
+    print(f"Prompts: {len(prompt_core.PROMPTS) - overridden} built-in, "
+          f"{overridden} overridden · Queries: {query_over} overridden")
+
+    if getattr(args, "queries", None) is not None:
+        status, _me = _check_jira(cfg)
+        if status:
+            print("\nStopped here — fix Jira credentials and run again.")
+            sys.exit(1)
+        sys.exit(_query_report(cfg, args.queries))
 
     status, _me = _check_jira(cfg)
     problems += status
@@ -338,6 +477,8 @@ def run(cfg, args):
     problems += _check_statuses(cfg)
     problems += _check_model(cfg)
     problems += _check_cache(cfg)
+    _check_confluence(cfg)
+    _check_registers(cfg)
 
     if getattr(args, "discover_fields", False):
         if fields:

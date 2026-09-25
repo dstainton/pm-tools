@@ -12,7 +12,10 @@ import sys
 
 import yaml
 
-from core import filters, products as product_core, workstreams as ws_core
+from core import (
+    conventions, filters, products as product_core, prompts, queries,
+    workstreams as ws_core,
+)
 from core.paths import HOME
 
 
@@ -43,6 +46,7 @@ SECTION_DEFAULTS = {
         "min_title_words": 3,
         "vague_title_alone": ["refactor", "test"],
         "story_types": ["story", "bug"],
+        "estimate_types": ["story"],
         "require_acceptance_criteria": True,
         "require_estimate": True,
     },
@@ -139,9 +143,99 @@ def load_config(path):
     data = walk(data)
     if not isinstance(data, dict):
         sys.exit("Config must be a YAML mapping.")
+    data["_config_path"] = os.path.abspath(path)
     apply_defaults(data)
     validate(data)
     return data
+
+
+def _validate_conventions(cfg):
+    block = cfg.get("conventions")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`conventions:` must be a mapping.")
+    for key, value in block.items():
+        if key not in conventions.DEFAULTS:
+            sys.exit(f"Unknown conventions key `{key}`. "
+                     f"Valid: {', '.join(sorted(conventions.DEFAULTS))}.")
+        default = conventions.DEFAULTS[key]
+        if isinstance(default, list):
+            items = [value] if isinstance(value, str) else value
+            if not isinstance(items, list) or not items or not all(
+                    isinstance(item, str) and item.strip() for item in items):
+                sys.exit(f"`conventions.{key}` must be a non-empty list of names.")
+        elif not isinstance(value, str) or not str(value).strip():
+            sys.exit(f"`conventions.{key}` must be a non-empty string.")
+
+
+def _apply_convention_prompts(cfg):
+    """Prompt lists follow conventions unless the prompt override set them."""
+    resolved = cfg.get("_prompts") or {}
+    mapping = {
+        "brief.debrief": ("action_types", "action_issuetypes"),
+        "inbox.file_note": ("note_types", "note_issuetypes"),
+    }
+    for prompt_id, (value_name, convention_key) in mapping.items():
+        record = resolved.get(prompt_id)
+        if not record or "values" in (record.get("parts") or []):
+            continue
+        value = conventions.get(cfg, convention_key)
+        if isinstance(value, str):
+            value = [value]
+        record["values"][value_name] = list(value)
+
+
+def _validate_registers(cfg):
+    raw = cfg.get("registers")
+    if raw is None:
+        return
+    if not isinstance(raw, list):
+        sys.exit("`registers:` must be a list.")
+    products = {p.get("abbrev") for p in (cfg.get("products") or []) if isinstance(p, dict)}
+    streams = {w.get("abbrev") for w in (cfg.get("workstreams") or []) if isinstance(w, dict)}
+    for reg in raw:
+        if not isinstance(reg, dict):
+            sys.exit("`registers:` entries must be mappings.")
+        name = reg.get("name") or "register"
+        if reg.get("type") not in ("decision", "risk", "adr"):
+            sys.exit(f'Register "{name}": type must be decision, risk, or adr.')
+        if not reg.get("name"):
+            sys.exit("Each register needs a name.")
+        if not reg.get("page_id") and not (reg.get("space") and reg.get("title")):
+            sys.exit(f'Register "{name}": set page_id, or both space and title.')
+        if reg.get("product") and reg.get("workstream"):
+            sys.exit(f'Register "{name}": set product or workstream, not both.')
+        if reg.get("product") and reg["product"] not in products:
+            sys.exit(f'Register "{name}": unknown product {reg["product"]}.')
+        if reg.get("workstream") and reg["workstream"] not in streams:
+            sys.exit(f'Register "{name}": unknown workstream {reg["workstream"]}.')
+        if reg.get("type") == "risk" and reg.get("partner_visible"):
+            sys.exit(f'Register "{name}": a risk register cannot be partner_visible.')
+        highlight = reg.get("highlight")
+        if highlight is not None:
+            if not isinstance(highlight, dict) or not isinstance(highlight.get("field"), str):
+                sys.exit(f'Register "{name}": highlight needs a field and a list of values.')
+            if not isinstance(highlight.get("values"), list):
+                sys.exit(f'Register "{name}": highlight values must be a list.')
+
+
+def _validate_audiences(cfg):
+    block = cfg.get("audiences")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`audiences:` must be a mapping.")
+    if "default" in block and block["default"] not in ("pm", "leadership", "partner"):
+        sys.exit("`audiences.default` must be pm, leadership, or partner.")
+    for key in ("pm", "leadership", "partner"):
+        section = block.get(key)
+        if section is None:
+            continue
+        if not isinstance(section, dict):
+            sys.exit(f"`audiences.{key}` must be a mapping.")
+    if "warm" in block and not isinstance(block["warm"], list):
+        sys.exit("`audiences.warm` must be a list.")
 
 
 def validate(cfg):
@@ -158,7 +252,13 @@ def validate(cfg):
     _validate_blocked(cfg)
     _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
+    _validate_audiences(cfg)
+    _validate_registers(cfg)
+    queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)
+    prompts.validate_config(cfg)
+    _validate_conventions(cfg)
+    _apply_convention_prompts(cfg)
 
 
 def _validate_products(cfg):
@@ -242,16 +342,18 @@ def _validate_workstreams(cfg):
                 sys.exit(f"Workstream {name} names unknown product {product}. "
                          f"Available: {available}.")
 
-        has_components = bool(ws_core.components_of(ws))
+        mode = (cfg.get("membership") or {}).get("by") or "component"
+        anchor_key = {"label": "labels", "field": "field_values"}.get(mode, "components")
+        has_anchor = bool(ws_core.anchor_values(cfg, ws))
         has_legacy_jql = any(ws.get(f) for fields in
                              ws_core.LEGACY_FIELDS.values() for f in fields)
 
-        if has_components and not ws_core.project_of(cfg, ws):
-            sys.exit(f"Workstream {name} lists components but no project. "
+        if has_anchor and not ws_core.project_of(cfg, ws):
+            sys.exit(f"Workstream {name} lists {anchor_key} but no project. "
                      f"Set `project:` on the workstream, or `jira.project` "
                      f"once for all of them.")
-        if not has_components and not has_legacy_jql:
-            sys.exit(f"Workstream {name} has no `components:` and no legacy "
+        if not has_anchor and not has_legacy_jql:
+            sys.exit(f"Workstream {name} has no `{anchor_key}:` and no legacy "
                      f"JQL, so pm cannot tell which issues belong to it.")
 
 
@@ -265,6 +367,15 @@ def _validate_membership(cfg):
     if unknown:
         sys.exit(f"Unknown membership setting(s): {', '.join(unknown)}. "
                  f"Valid: {', '.join(sorted(ws_core.DEFAULT_MEMBERSHIP))}.")
+    by = str(block.get("by") or "component").strip().lower()
+    if by not in ("component", "label", "field"):
+        sys.exit("`membership.by` must be component, label, or field.")
+    if by == "field" and not str(block.get("field") or "").strip():
+        sys.exit("`membership.field` is required when `membership.by` is field.")
+    if by == "label" and block.get("child_component_wins"):
+        sys.exit("`membership.child_component_wins` cannot be used with "
+                 "`membership.by: label`. A child always carries other labels, "
+                 "so \"has none of its own\" cannot be expressed.")
 
 
 def _validate_ready(cfg):

@@ -130,6 +130,11 @@ def _add(cfg, args):
         sys.exit(f"`pm {command}` is not safe unattended. "
                  f"Schedule one of: {', '.join(sorted(SAFE))}.")
     extra = []
+    if name == "report" and getattr(args, "audience", None) == "partner":
+        sys.exit("Read a partner report before it leaves. "
+                 "Publish it with: pm publish <file>")
+    if getattr(args, "audience", None) and name == "report":
+        extra += ["--audience", args.audience]
     if name == "brief":
         audience = getattr(args, "for_audience", None)
         if not audience:

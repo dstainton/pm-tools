@@ -14,30 +14,7 @@ import statistics
 import sys
 
 from commands import lint, ready, review
-from core import decisions, model, sources, workstreams, writes
-
-
-TITLE_DRAFT_PROMPT = """\
-Draft a clearer title for each Jira item. Keep the meaning. Do not invent scope.
-
-Return a JSON array. Each object has exactly two keys:
-- "key": the issue key, copied exactly
-- "title": the rewritten title
-
-If you would not change a title, omit that item.
-
-Draft a clearer title. Do not write any text outside the JSON array.
-"""
-
-CRITERIA_DRAFT_PROMPT = """\
-Draft testable acceptance criteria for each story that is missing them.
-
-Return a JSON array. Each object has exactly two keys:
-- "key": the issue key, copied exactly
-- "criteria": 2 to 4 short Given/When/Then lines, separated by newlines
-
-Draft acceptance criteria. Do not write any text outside the JSON array.
-"""
+from core import decisions, model, prompts, sources, workstreams, writes
 
 
 def _median_estimate(closed_points):
@@ -49,8 +26,7 @@ def _median_estimate(closed_points):
 
 def _closed_points(cfg, ws):
     """Story-point estimates on closed work in this workstream."""
-    options = {"status": "done", "types": ["Story"]}
-    jql = workstreams.scope_jql(cfg, ws, "lint", overrides=options)
+    jql = workstreams.scope_jql(cfg, ws, "refine_history")
     if not jql:
         return []
     issues = sources.fetch_jira_detailed(cfg["jira"], jql)
@@ -105,18 +81,18 @@ def _drafts(cfg, issues):
     for group in title_groups:
         model.tick(cfg["model"], "titles")
         data, _err = model.call_model_json(
-            cfg["model"], TITLE_DRAFT_PROMPT,
+            cfg["model"], prompts.get(cfg, "refine.titles"),
             "\n".join(f"{i['key']}: {i['summary']}" for i in group)
-            + "\n\nReturn the JSON array now.")
+            + "\n\n" + prompts.get(cfg, "refine.tail"))
         for obj in data or []:
             if obj.get("key") and obj.get("title"):
                 titles[obj["key"]] = obj["title"].strip()
     for group in ac_groups:
         model.tick(cfg["model"], "criteria")
         data, _err = model.call_model_json(
-            cfg["model"], CRITERIA_DRAFT_PROMPT,
+            cfg["model"], prompts.get(cfg, "refine.criteria"),
             "\n".join(f"{i['key']}: {i['summary']}" for i in group)
-            + "\n\nReturn the JSON array now.")
+            + "\n\n" + prompts.get(cfg, "refine.tail"))
         for obj in data or []:
             if obj.get("key") and obj.get("criteria"):
                 criteria[obj["key"]] = obj["criteria"].strip()

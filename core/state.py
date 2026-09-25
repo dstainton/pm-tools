@@ -7,6 +7,9 @@ matching survives re-ordering between runs.
 
 import json
 import os
+import re
+
+_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
 
 
 def load_state(path):
@@ -76,9 +79,8 @@ def build_change_block(new, changed, dropped, first_run):
                          f"(was: {old or 'n/a'}; now: {it['watch'] or 'n/a'})")
     if dropped:
         lines.append("Dropped out of scope this week (likely done or moved on):")
-        for _uid, snap in dropped:
-            ref = snap.get("ref")
-            tag = f"[{ref}] " if ref else ""
+        for uid, snap in dropped:
+            tag = f"[{uid}] " if _KEY.match(str(uid)) else ""
             lines.append(f"  - {tag}{snap.get('title', '(unknown item)')}")
 
     return "\n".join(lines) if lines else "No changes detected since last week."

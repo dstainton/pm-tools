@@ -53,12 +53,19 @@ def backlog():
         # --- Epics: these carry the Component that names the workstream -----
         {"key": "APS-1", "project": "APS", "issuetype": "Epic",
          "summary": "Secure exchange platform", "components": ["Secure Data Exchange"],
+         "labels": ["partner-visible"],
          "status_name": "In Progress", "status_category": "In Progress",
+         "duedate": date(30),
          "updated": stamp(2), "sprint": None},
         {"key": "APS-2", "project": "APS", "issuetype": "Epic",
          "summary": "Public API foundations", "components": ["API Platform"],
          "status_name": "In Progress", "status_category": "In Progress",
-         "updated": stamp(3), "sprint": None},
+         "duedate": date(5),
+         "updated": stamp(3), "sprint": None,
+         "remote_links": [{
+             "application": {"type": "com.atlassian.confluence"},
+             "object": {"url": "https://example/wiki/pages/2002"},
+         }]},
         {"key": "APS-3", "project": "APS", "issuetype": "Epic",
          "summary": "Housekeeping and compliance", "components": [],
          "status_name": "To Do", "status_category": "To Do",
@@ -88,10 +95,12 @@ def backlog():
         # A sub-task two levels below the Epic.
         {"key": "APS-12", "project": "APS", "issuetype": "Sub-task",
          "summary": "Wire retry handling into the client SDK", "components": [],
+         "labels": ["internal"],
          "parent": "APS-10", "status_name": "To Do", "status_category": "To Do",
          "sprint": "open", "updated": stamp(1)},
         {"key": "APS-20", "project": "APS", "issuetype": "Story",
          "summary": "Rate limiting for public endpoints", "components": [],
+         "labels": ["blocked"],
          "parent": "APS-2", "status_name": "To Do", "status_category": "To Do",
          "sprint": "open", "updated": stamp(40), "changelog": [
              {"created": stamp(40), "author": {"displayName": "C. Diaz"},
@@ -169,12 +178,36 @@ def pages():
         {"id": "2001", "space": "APS", "labels": ["decision"],
          "title": "Decision: rate limit defaults",
          "body": "1000 requests a minute per tenant.", "when": stamp(3)},
+        {"id": "1003", "space": "SDX", "labels": [],
+         "title": "SDX runbook index",
+         "body": "See APS-10 for the status endpoint. "
+                 + ("detail " * 500) + "Last sentence stays.",
+         "when": stamp(1), "by": "Sam", "created": stamp(2)},
+        {"id": "1004", "space": "SDX", "type": "blogpost", "labels": [],
+         "title": "SDX weekly update", "body": "Shipped the status page.",
+         "when": stamp(1)},
+        {"id": "1005", "space": "SDX", "type": "database", "labels": [],
+         "title": "Partner onboarding tracker", "body": "rows",
+         "when": stamp(2)},
+        {"id": "1006", "space": "SDX", "type": "whiteboard", "labels": [],
+         "title": "SDX whiteboard must stay out", "body": "drawing",
+         "when": stamp(1)},
+        {"id": "2002", "space": "OPS", "labels": [],
+         "title": "APS linked runbook", "body": "Linked from the epic.",
+         "when": stamp(1), "by": "Sam"},
+        {"id": "3001", "space": "APS", "labels": [],
+         "title": "Published weekly report", "body": "our own report",
+         "when": stamp(1),
+         "ancestors": [{"id": "9", "title": "Weekly Reports"}]},
+        {"id": "1007", "space": "SDX", "labels": ["decision"],
+         "title": "Ancient decision", "body": "too old",
+         "when": stamp(30)},
     ]
 
 CONFIG = """\
 # Test config for the end-to-end run. Comments here double as a check that
 # `pm workstreams add` and `remove` leave them alone.
-config_version: 5
+config_version: 6
 model:
   endpoint: "{url}/v1/chat/completions"
   name: "fake-local"
@@ -532,10 +565,12 @@ class ReportTests(CliTestCase):
 
         report = self.read_output(r"weekly_report_.*\.md")
         self.assertIn("Fake model reply for the end-to-end test", report)
-        self.assertIn("## References", report)
+        self.assertIn("## Sources", report)
+        self.assertNotIn("## References", report)
+        self.assertIn("**[APS-1](", report)
         self.assertIn(f"{self.jira.url}/browse/APS-10", report)
         # The roadmap half of the gather is the workstream's epic.
-        self.assertIn("APS-1:", report)
+        self.assertIn("APS-1 Secure exchange platform", report)
         self.assertTrue(os.path.exists(os.path.join(self.dir,
                                                     "report_state.json")))
 
@@ -546,6 +581,36 @@ class ReportTests(CliTestCase):
         self.assertIn("Risk: HSM capacity during rotation", report)
         # The other workstream's space stays out of it.
         self.assertNotIn("Decision: rate limit defaults", report)
+
+    def test_warm_then_leadership_makes_no_new_model_calls(self):
+        self.run_pm("warm", "--report", "--audience", "pm,leadership", "-w", "SDX")
+        before = [c for c in self.jira.calls
+                  if c[0] == "POST" and "/v1/chat/completions" in c[1]]
+        self.run_pm("report", "--audience", "leadership", "-w", "SDX")
+        after = [c for c in self.jira.calls
+                 if c[0] == "POST" and "/v1/chat/completions" in c[1]]
+        self.assertEqual(len(after), len(before))
+
+    def test_leadership_hides_child_keys_and_names(self):
+        self.run_pm("report", "--audience", "leadership", "--product", "IP")
+        report = self.read_output(r"weekly_report_leadership_.*\.md")
+        self.assertIn("## Summary", report)
+        self.assertIn("### Headline", report)
+        self.assertIn("Signal", report)
+        self.assertNotIn("A. Lee", report)
+        self.assertNotIn("APS-10", report)
+        self.assertNotIn("Aging in", report)
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "report_state.json")))
+        self.assertTrue(os.path.exists(os.path.join(
+            self.dir, "report_state_leadership.json")))
+
+    def test_partner_report_names_only_visible_epics(self):
+        self.run_pm("report", "--audience", "partner", "--product", "IP")
+        report = self.read_output(r"weekly_report_partner_.*\.md")
+        self.assertIn("Secure exchange platform", report)
+        self.assertNotIn("Public API foundations", report)
+        self.assertNotIn("A. Lee", report)
+        self.assertNotIn("http", report)
 
     def test_second_run_reports_what_changed(self):
         self.run_pm("report", "-w", "SDX")
@@ -659,7 +724,7 @@ class ProductTests(CliTestCase):
     def test_weekly_report_has_a_portfolio_section(self):
         self.run_pm("report", "--product", "IP")
         report = self.read_output(r"weekly_report_.*\.md")
-        self.assertIn("## Portfolio", report)
+        self.assertIn("## At a glance", report)
         self.assertIn("Integration Platform (IP)", report)
 
 
@@ -800,7 +865,7 @@ class TriageTests(CliTestCase):
         self.assertTrue(os.path.exists(os.path.join(self.dir, "triage.json")))
         before = len([c for c in self.jira.calls if c[0] == "PUT"])
         preview = self.run_pm("triage", "--apply", "1", "--dry-run")
-        self.assertIn("Would PUT", preview)
+        self.assertTrue("Would PUT" in preview or "Would POST" in preview)
         self.assertIn("nothing was sent", preview)
         puts = [c for c in self.jira.calls if c[0] == "PUT"]
         self.assertEqual(len(puts), before)

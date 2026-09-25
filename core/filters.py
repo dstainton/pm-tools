@@ -16,6 +16,8 @@ this vocabulary cannot express, but nothing in the shipped config needs it.
 
 import sys
 
+from core import queries
+
 
 # ---------------------------------------------------------------------------
 #  The vocabulary
@@ -56,6 +58,7 @@ SCOPE_INCLUDES = {
     "ready": "children",
     "daily_moved": "children",
     "daily_wip": "children",
+    "refine_history": "everything",
 }
 
 #  Sensible defaults, so a workstream only has to name its components. Any of
@@ -68,6 +71,7 @@ DEFAULT_SCOPES = {
     "ready": {"sprint": "open", "status": "open"},
     "daily_moved": {"updated_within_days": 1},
     "daily_wip": {"status": "in-progress"},
+    "refine_history": {"status": "done", "types": ["Story"]},
 }
 
 VALID_OPTIONS = (
@@ -81,10 +85,7 @@ VALID_OPTIONS = (
 #  Helpers
 # ---------------------------------------------------------------------------
 
-def quote(value):
-    """Quote a JQL string literal safely enough for config-provided names."""
-    text = str(value).replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{text}"'
+quote = queries.quote
 
 
 def _value_list(option, value):
@@ -126,7 +127,7 @@ def _fail(message):
 #  Compiling one scope
 # ---------------------------------------------------------------------------
 
-def compile_scope(options):
+def compile_scope(options, cfg=None):
     """Turn a scope mapping into a JQL fragment (or "" when it filters nothing)."""
     if not options:
         return ""
@@ -140,15 +141,15 @@ def compile_scope(options):
             continue
 
         if option == "status":
-            clause = _choice(option, value, STATUS_VALUES)
+            clause = _choice(option, value, queries.vocabulary(cfg, "status"))
         elif option == "sprint":
             if isinstance(value, int) or (
                     isinstance(value, str) and value.strip().isdigit()):
-                clause = f"sprint = {int(value)}"
+                clause = queries.render(cfg, "sprint.by_id", sprint_id=int(value))
             else:
-                clause = _choice(option, value, SPRINT_VALUES)
+                clause = _choice(option, value, queries.vocabulary(cfg, "sprint"))
         elif option == "assignee":
-            clause = _choice(option, value, ASSIGNEE_VALUES)
+            clause = _choice(option, value, queries.vocabulary(cfg, "assignee"))
         elif option == "types":
             names = _value_list(option, value)
             clause = (f"issuetype IN ({', '.join(quote(n) for n in names)})"
@@ -243,14 +244,14 @@ def validate_config_scopes(cfg):
                 continue
             if not isinstance(options, dict):
                 _fail(f"`{where} > {scope_name}` must be a mapping of options.")
-            compile_scope(options)
+            compile_scope(options, cfg)
 
 
 # ---------------------------------------------------------------------------
 #  Confluence — the same idea, one level simpler
 # ---------------------------------------------------------------------------
 
-def build_cql(ws):
+def build_cql(ws, cfg=None, scope="labelled", types=None):
     """Build Confluence CQL from `confluence_space` / `confluence_labels`.
 
     A hand-written `confluence_cql` still wins if one is present, so existing
@@ -263,8 +264,10 @@ def build_cql(ws):
     if not space:
         return None
 
-    clauses = [f"space = {quote(space)}"]
+    clauses = [queries.render(cfg, "confluence.space", space=space)]
     labels = _value_list("confluence_labels", ws.get("confluence_labels"))
-    if labels:
-        clauses.append(f"label IN ({', '.join(quote(l) for l in labels)})")
+    if scope == "labelled" and labels:
+        clauses.append(queries.render(cfg, "confluence.labels", labels=labels))
+    if types:
+        clauses.append(queries.render(cfg, "confluence.types", types=list(types)))
     return " AND ".join(clauses)

@@ -21,6 +21,7 @@ from commands import lint, ready
 from core.paths import HOME
 from core import blocked as blocked_core
 from core import filters
+from core import queries
 from core import products as product_core
 from core import sources, workstreams, writes
 
@@ -123,7 +124,7 @@ def sprint_risk_sentence(sprint, issues, today=None, cfg=None):
     for issue in issues or []:
         if _is_done(issue):
             continue
-        if (issue.get("issuetype") or "").lower() == "epic":
+        if workstreams.is_epic(cfg, issue):
             continue
         if _is_not_started(issue):
             not_started += 1
@@ -158,7 +159,7 @@ def classify_need(issue, untouched_days, today=None, cfg=None):
     if _is_done(issue):
         return None
     # Epics are containers, not a daily action. The child work is what needs you.
-    if (issue.get("issuetype") or "").lower() == "epic":
+    if workstreams.is_epic(cfg, issue):
         return None
     if _is_overdue(issue, today=today):
         return "overdue"
@@ -327,9 +328,7 @@ def gather(cfg):
     sprint_items = {}
     for project in projects:
         sprints.extend(sources.fetch_active_sprints(cfg["jira"], project))
-        jql = (f"project = {filters.quote(project)} "
-               f"AND sprint in openSprints() "
-               f"AND statusCategory != Done")
+        jql = queries.render(cfg, "today.in_sprint_open", project=project)
         sprint_items[project] = sources.fetch_jira_detailed(cfg["jira"], jql)
 
     return {

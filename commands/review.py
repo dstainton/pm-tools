@@ -20,7 +20,7 @@ call misfires, skip that batch rather than sink the run.
 
 import datetime as dt
 
-from core import output, sources, model, workstreams
+from core import output, sources, model, prompts, workstreams
 
 
 # ---------------------------------------------------------------------------
@@ -30,59 +30,10 @@ from core import output, sources, model, workstreams
 # reliably than a long "be a meticulous PM" brief. Both prompts keep the
 # phrase "JSON array" so tests and the fake model can recognise them.
 
-TITLES_PROMPT = """\
-Flag only Jira titles a teammate cannot understand without opening the ticket.
-
-A good title names the work. Flag a title if it is one or two vague words, \
-or if it does not say what will change. Do not flag a title that is already \
-clear.
-
-Return a JSON array. Each object has exactly three keys:
-- "key": the issue key, copied exactly
-- "problem": one short sentence
-- "suggestion": a clearer title
-
-If nothing is unclear, return []
-
-Example input:
-1. APS-11: Fix stuff
-2. APS-10: Publish exchange status endpoint
-
-Example JSON array:
-[{"key":"APS-11","problem":"Does not say what to fix.","suggestion":"Fix retry handling in the exchange client"}]
-
-Do not add keys that are not in the list. Do not write any text outside the \
-JSON array.
-"""
-
-CRITERIA_PROMPT = """\
-Flag only stories whose acceptance criteria are missing, vague, or not \
-testable. Good criteria state an observable outcome and cover the happy path \
-plus one obvious error case. Do not flag a story whose criteria are already \
-solid.
-
-Return a JSON array. Each object has exactly three keys:
-- "key": the issue key, copied exactly
-- "problem": one short sentence
-- "missing": the criteria you would add, as one short string
-
-If every story is solid, return []
-
-Example input:
-1. APS-20: Rate limiting for public endpoints
-   Acceptance criteria / description: (none provided)
-2. APS-10: Publish exchange status endpoint
-   Acceptance criteria / description: Acceptance criteria: returns current status.
-
-Example JSON array:
-[{"key":"APS-20","problem":"No acceptance criteria.","missing":"Given a tenant over the limit, requests are rejected with 429; under the limit, they succeed."}]
-
-Do not add keys that are not in the list. Do not write any text outside the \
-JSON array.
-"""
-
-TITLES_USER_TAIL = "Return the JSON array now."
-CRITERIA_USER_TAIL = "Return the JSON array now."
+TITLES_PROMPT = prompts.get(None, "review.titles")
+CRITERIA_PROMPT = prompts.get(None, "review.criteria")
+TITLES_USER_TAIL = prompts.get(None, "review.titles_tail")
+CRITERIA_USER_TAIL = prompts.get(None, "review.criteria_tail")
 
 
 # ---------------------------------------------------------------------------
@@ -95,10 +46,13 @@ def _batches(items, size):
         yield items[i:i + size]
 
 
-def candidates_for(aspect, issues):
+def candidates_for(aspect, issues, cfg=None):
     if aspect == "titles":
         return list(issues)
-    return [i for i in issues if (i.get("issuetype") or "").lower() in ("story", "bug")]
+    story_types = ["story", "bug"]
+    if cfg is not None:
+        story_types = [t.lower() for t in (cfg.get("lint") or {}).get("story_types", story_types)]
+    return [i for i in issues if (i.get("issuetype") or "").lower() in story_types]
 
 
 def call_count(aspects, issues, batch_size):
@@ -111,16 +65,16 @@ def call_count(aspects, issues, batch_size):
     return total
 
 
-def build_titles_input(issues):
+def build_titles_input(issues, cfg=None):
     lines = []
     for n, iss in enumerate(issues, 1):
         lines.append(f"{n}. {iss['key']}: {iss['summary']}")
     lines.append("")
-    lines.append(TITLES_USER_TAIL)
+    lines.append(prompts.get(cfg, "review.titles_tail"))
     return "\n".join(lines)
 
 
-def build_criteria_input(issues):
+def build_criteria_input(issues, cfg=None):
     lines = []
     for n, iss in enumerate(issues, 1):
         ac = iss["acceptance_criteria"].strip()
@@ -131,7 +85,7 @@ def build_criteria_input(issues):
         lines.append(f"{n}. {iss['key']}: {iss['summary']}\n"
                      f"   Acceptance criteria / description: {ac}")
     lines.append("")
-    lines.append(CRITERIA_USER_TAIL)
+    lines.append(prompts.get(cfg, "review.criteria_tail"))
     return "\n\n".join(lines)
 
 
@@ -139,15 +93,17 @@ def build_criteria_input(issues):
 #  Running one aspect (titles or criteria) over a workstream's issues
 # ---------------------------------------------------------------------------
 
-def review_aspect(model_cfg, aspect, issues, batch_size):
+def review_aspect(model_cfg, aspect, issues, batch_size, cfg=None):
     """Return (findings, errors) for one aspect over one workstream."""
     if aspect == "titles":
-        prompt, builder, keys = TITLES_PROMPT, build_titles_input, ("problem", "suggestion")
-        candidates = candidates_for(aspect, issues)
+        prompt = prompts.get(cfg, "review.titles")
+        builder, keys = build_titles_input, ("problem", "suggestion")
+        candidates = candidates_for(aspect, issues, cfg)
     else:  # criteria — only look at story-type issues
-        prompt, builder = CRITERIA_PROMPT, build_criteria_input
+        prompt = prompts.get(cfg, "review.criteria")
+        builder = build_criteria_input
         keys = ("problem", "missing")
-        candidates = candidates_for(aspect, issues)
+        candidates = candidates_for(aspect, issues, cfg)
 
     valid_keys = {i["key"] for i in candidates}
     findings, errors = [], []
@@ -156,7 +112,7 @@ def review_aspect(model_cfg, aspect, issues, batch_size):
         detail = model_cfg.get("_progress_detail")
         if detail:
             model.tick(model_cfg, detail)
-        user_content = builder(batch)
+        user_content = builder(batch, cfg)
         data, err = model.call_model_json(model_cfg, prompt, user_content)
         if err:
             errors.append(err)
@@ -263,7 +219,7 @@ def evaluate(cfg, aspects, batch_size=None):
             lookup = {i["key"]: i for i in issues}
             cfg["model"]["_progress_detail"] = f"{ws['abbrev']}, {asp}"
             findings, errors = review_aspect(cfg["model"], asp, issues,
-                                             batch_size)
+                                             batch_size, cfg)
             cfg["model"].pop("_progress_detail", None)
             if errors:
                 any_errors = True

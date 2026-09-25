@@ -98,7 +98,8 @@ def _has_criteria(issue):
 def check_issue(issue, lint_cfg, component_inherited=False):
     findings = []
     itype = (issue["issuetype"] or "").lower()
-    is_epic = itype == "epic"
+    epic_types = [t.lower() for t in (lint_cfg.get("epic_types") or ["epic"])]
+    is_epic = itype in epic_types
     done = issue["status_category"] == "done"
     in_progress = issue["status_category"] == "indeterminate"
 
@@ -151,7 +152,8 @@ def check_issue(issue, lint_cfg, component_inherited=False):
                 "Run `pm refine` for a judgement.")
 
     # --- Missing estimate (stories only, and only if in scope) ------------
-    if lint_cfg.get("require_estimate", True) and itype == "story" \
+    estimate_types = [t.lower() for t in lint_cfg.get("estimate_types", ["story"])]
+    if lint_cfg.get("require_estimate", True) and itype in estimate_types \
             and not done:
         sp = issue["story_points"]
         if sp in (None, "", 0, 0.0):
@@ -321,7 +323,8 @@ def run(cfg, args):
         # A decision was the point of this invocation; still show what's left.
         print("")
 
-    lint_cfg = cfg.get("lint", {})
+    lint_cfg = dict(cfg.get("lint") or {})
+    lint_cfg["epic_types"] = workstreams.membership_settings(cfg)["epic_types"]
     min_sev = SEVERITY_ORDER.get(getattr(args, "severity", None), 99)
     store = decisions.load(cfg)
     show_all = getattr(args, "all", False)

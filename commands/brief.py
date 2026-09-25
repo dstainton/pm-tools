@@ -14,23 +14,10 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, filters, model, output, paths, sources, state,
+    checklist, comments, conventions, filters, model, output, paths, prompts, queries, registers, sources, state,
     workstreams, writes,
 )
 from core import products as product_core
-
-
-DEBRIEF_PROMPT = """\
-Extract decisions and actions from these meeting notes.
-
-Return a JSON object with exactly two keys:
-- "decisions": array of {"text": string, "owner": string or ""}
-- "actions": array of {"title": string, "owner": string or "",
-  "issuetype": "Story" or "Task", "workstream": abbrev or ""}
-
-Use ONLY workstream abbrevs from the list. Do not invent dates.
-Extract decisions and actions. Do not write any text outside the JSON object.
-"""
 
 
 def _slug(name):
@@ -67,30 +54,31 @@ def _needs(issues, cfg):
     return rows[:3]
 
 
-def _risk_cql(ws):
+def _risk_cql(ws, cfg=None):
     """Pages the workstream labelled as risks.
 
     The label is the author's statement. A title that happens to contain
     the word is not, and a title that does not is still a risk page.
     """
     labels = [str(label).strip() for label in (ws.get("confluence_labels") or [])]
-    risk = next((label for label in labels if label.lower() == "risk"), None)
+    wanted = str(conventions.get(cfg, "risk_label") or "risk").lower()
+    risk = next((label for label in labels if label.lower() == wanted), None)
     space = ws.get("confluence_space")
     if risk and space:
-        return (f"space = {filters.quote(space)} "
-                f"AND label = {filters.quote(risk)}")
-    return workstreams.confluence_cql(ws)
+        return queries.render(cfg, "brief.risk_pages", space=space, label=risk)
+    return workstreams.confluence_cql(ws, cfg)
 
 
-def _risks(cfg, ws):
-    cql = _risk_cql(ws)
+def _risks(cfg, ws, since=None):
+    cql = _risk_cql(ws, cfg)
     if not cql:
         return []
-    items, _idx = sources.fetch_confluence(cfg["confluence"], cql, ws["abbrev"], 1)
+    items, _idx = sources.fetch_confluence(
+        cfg["confluence"], cql, ws["abbrev"], 1, since=since)
     return items[:3]
 
 
-def gather(cfg, audience):
+def gather(cfg, audience, window=None):
     streams = cfg.get("_workstreams") or []
     prev = state.load_state(_state_path(cfg, audience))
     last = prev.get("_last")
@@ -98,7 +86,7 @@ def gather(cfg, audience):
     sections = []
     for product, group in product_core.group_workstreams(cfg, streams):
         product_issues = []
-        risks = []
+        product_pages = []
         for ws in group:
             jql = workstreams.scope_jql(cfg, ws, "lint")
             issues = (sources.fetch_jira_detailed(cfg["jira"], jql)
@@ -107,9 +95,32 @@ def gather(cfg, audience):
                 cfg, cfg.get("jira") or {}, issues,
                 comments.audience_cutoff(last, comments.settings(cfg)))
             for issue in issues:
+                issue["workstream"] = ws["abbrev"]
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
-            risks.extend(_risks(cfg, ws))
+            page_since = window["start"] if window and window.get("start") else None
+            from core import pages as page_core
+            page_window = {"start": page_since} if page_since else (window or {})
+            product_pages.extend(page_core.gather(cfg, ws, window=page_window))
         items = _as_items(product_issues)
+        from core import epics as epic_core
+        epic_rows = []
+        for ws in group:
+            ws_issues = [issue for issue in product_issues if issue.get("workstream") == ws["abbrev"]]
+            report_items = []
+            for issue in ws_issues:
+                report_items.append({
+                    "source": "Jira", "key": issue["key"], "uid": issue["key"],
+                    "summary": issue.get("summary") or "",
+                    "issuetype": issue.get("issuetype") or "",
+                    "status": issue.get("status") or "",
+                    "status_category": issue.get("status_category") or "",
+                    "parent": issue.get("epic"),
+                    "labels": list(issue.get("labels") or []),
+                    "due": issue.get("due_date") or "",
+                    "updated": str(issue.get("updated") or "")[:10],
+                    "url": issue.get("url") or "",
+                })
+            epic_rows.extend(epic_core.build(cfg, ws, report_items, window, ([], [], [])))
         key = product.get("abbrev") or "UNASSIGNED"
         prev_snap = prev.get(key) or {}
         first = key not in prev
@@ -121,17 +132,118 @@ def gather(cfg, audience):
             "needs": _needs(product_issues, cfg),
             "change": state.build_change_block(new, changed, dropped, first),
             "first": first,
-            "risks": risks[:3],
+            "risks": [],
+            "pages": product_pages[:5],
+            "epics": epic_rows,
+            "registers": [],
             "new": len(new),
             "changed": len(changed),
             "dropped": len(dropped),
         })
+    found, _skip = registers.gather(cfg, window or {"start": None}, prev)
+    from core import page_summaries
+    for section in sections:
+        page_summaries.fill(cfg, section.get("pages") or [])
+        section["registers"] = found
+        if any(record.get("type") == "risk" for record in found):
+            section["risks"] = []
+        else:
+            section["risks"] = [page for page in section.get("pages") or []
+                                if (page.get("kind") or "").lower() == "risk"][:3]
+    snapshot["_registers"] = registers.snapshot(found)
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
     return sections, snapshot, last
 
 
-def render_prep(audience, sections, last):
+def _leadership_prep(section):
+    """Epic table, decisions the room must make, and counts owed per Epic."""
+    lines = [
+        "| Epic | Status | Progress | Signal | Target |",
+        "|------|--------|---------:|--------|--------|",
+    ]
+    for epic in section.get("epics") or []:
+        if not epic.get("key"):
+            continue
+        signal = epic.get("signal") or ""
+        reason = epic.get("signal_reason") or ""
+        if signal == "At risk" and reason:
+            signal = f"{signal} — {reason}"
+        lines.append(
+            f"| {epic['key']} {epic.get('summary') or ''} | {epic.get('status') or ''} | "
+            f"{epic.get('children_done') or 0} / {epic.get('children_total') or 0} | "
+            f"{signal} | {epic.get('due') or '—'} |"
+        )
+    lines.append("")
+    lines.append("### Decisions you need from the room")
+    lines.append("")
+    decisions = [page for page in section.get("pages") or []
+                 if (page.get("kind") or "").lower() == "decision"]
+    at_risk = [epic for epic in section.get("epics") or []
+               if epic.get("key") and epic.get("signal") == "At risk"]
+    if not decisions and not at_risk:
+        lines.append("_Nothing waiting on this room._")
+    for page in decisions:
+        lines.append(f"- {page.get('title') or 'page'}")
+    for epic in at_risk:
+        lines.append(f"- {epic['key']} {epic.get('summary') or ''} is at risk.")
+    lines.append("")
+    lines.append("### What you owe the room")
+    lines.append("")
+    owed = [(kind, issue) for kind, issue in section["needs"] if kind in ("overdue", "blocked")]
+    if not owed:
+        lines.append("_Nothing you owe this room._")
+    by_epic = {}
+    for kind, issue in owed:
+        by_epic.setdefault(issue.get("epic") or "Not under an Epic", []).append(kind)
+    for epic, kinds in by_epic.items():
+        overdue = kinds.count("overdue")
+        blocked = kinds.count("blocked")
+        lines.append(f"- {epic}: {overdue} overdue, {blocked} blocked.")
+    lines.append("")
+    from core.report_render import SIGNAL_FOOTER
+    lines.append(SIGNAL_FOOTER)
+    lines.append("")
+    return lines
+
+
+def _partner_prep(cfg, section):
+    """Visible Epics and the overdue or blocked items inside them."""
+    from core import audience as audience_core
+    opts = audience_core.settings(cfg)["partner"]
+    lines = []
+    visible_keys = set()
+    excluded = {str(label).lower() for label in opts.get("exclude_labels") or []}
+    for epic in section.get("epics") or []:
+        if not epic.get("key"):
+            continue
+        if not audience_core.partner_visible_epic(epic, {}, opts):
+            continue
+        lines.append(f"**{epic.get('summary') or epic['key']}**")
+        lines.append("")
+        visible_keys.add(epic["key"])
+        for item in epic.get("items") or []:
+            labels = {str(label).lower() for label in item.get("labels") or []}
+            if labels & excluded:
+                continue
+            lines.append(f"- {item.get('summary') or item.get('key')}")
+            if item.get("key"):
+                visible_keys.add(item["key"])
+        lines.append("")
+    lines.append("### What you owe the room")
+    lines.append("")
+    owed = [(kind, issue) for kind, issue in section.get("needs") or []
+            if kind in ("overdue", "blocked")
+            and (issue.get("key") in visible_keys or issue.get("epic") in visible_keys)]
+    if not owed:
+        lines.append("_Nothing you owe this room._")
+    for kind, issue in owed:
+        lines.append(f"- {issue.get('summary') or issue.get('key')} ({kind})")
+    lines.append("")
+    return lines
+
+
+def render_prep(audience, sections, last, level="pm", cfg=None):
     today = dt.date.today()
     since = f"since {last}" if last else "first time with this audience"
     lines = [
@@ -139,6 +251,9 @@ def render_prep(audience, sections, last):
         f"_{today.strftime(f'%A {today.day} %B')} · {since}_",
         "",
     ]
+    if level == "partner":
+        lines.append("_Prep for a partner meeting — internal, do not forward._")
+        lines.append("")
     for section in sections:
         product = section["product"]
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
@@ -147,6 +262,16 @@ def render_prep(audience, sections, last):
         if goal:
             lines.append(f"Product Goal: {goal}")
             lines.append("")
+        if level == "leadership":
+            lines.extend(_leadership_prep(section))
+            from core import report_render
+            if section.get("registers"):
+                report_render.append_registers(
+                    lines, section["registers"], level, "", lambda scope: True)
+            continue
+        if level == "partner":
+            lines.extend(_partner_prep(cfg, section))
+            continue
         lines.append("### What changed")
         lines.append("")
         lines.append(section["change"])
@@ -164,12 +289,20 @@ def render_prep(audience, sections, last):
                   if k not in ("overdue", "blocked")]
         lines.append("### What you owe the room")
         lines.append("")
-        if not owed:
+        if level == "leadership":
+            overdue = sum(1 for kind, _issue in section["needs"] if kind == "overdue")
+            blocked = sum(1 for kind, _issue in section["needs"] if kind == "blocked")
+            lines.append(f"- {overdue} overdue, {blocked} blocked.")
+        elif not owed:
             lines.append("_Nothing you owe this room._")
-        for kind, issue in owed:
-            lines.append(
-                f"- {issue['key']}: {issue.get('summary')} "
-                f"({kind} — {today_cmd.describe_action(kind, issue)})")
+        else:
+            for kind, issue in owed:
+                if level == "partner":
+                    lines.append(f"- {issue.get('summary')} ({kind})")
+                else:
+                    lines.append(
+                        f"- {issue['key']}: {issue.get('summary')} "
+                        f"({kind} — {today_cmd.describe_action(kind, issue)})")
         lines.append("")
         lines.append("### What you need from the room")
         lines.append("")
@@ -182,15 +315,40 @@ def render_prep(audience, sections, last):
         lines.append("")
         lines.append("### Risks")
         lines.append("")
-        if not section["risks"]:
+        from core import render as render_core
+        from core import report_render
+        risk_regs = [record for record in (section.get("registers") or [])
+                     if record.get("type") == "risk"]
+        if risk_regs:
+            for record in risk_regs:
+                lines.append(report_render.register_block(record, level, {}))
+                lines.append("")
+        elif not section["risks"]:
             lines.append("_No recent risk pages._")
         for risk in section["risks"]:
-            from core import render as render_core
             title = risk.get("title") or "page"
             link = render_core.markdown_link(title, risk.get("url"))
-            sentence = sources.short(risk.get("detail") or "", 200)
+            sentence = risk.get("summary") or sources.short(risk.get("detail") or "", 200)
             lines.append(f"- {link}" + (f" — {sentence}" if sentence else ""))
         lines.append("")
+        docs = section.get("pages") or []
+        if level == "pm" and docs:
+            lines.append("### Documents changed")
+            lines.append("")
+            for page in docs[:5]:
+                title = page.get("title") or "page"
+                link = render_core.markdown_link(title, page.get("url"))
+                summary = page.get("summary") or ""
+                lines.append(f"- {link}" + (f" — {summary}" if summary else ""))
+            lines.append("")
+        from core import report_render
+        records = [row for row in (section.get("registers") or [])
+                   if (row.get("scope") or {}).get("product") in (None, product.get("abbrev"))
+                   or not (row.get("scope") or {})]
+        if records:
+            report_render.append_registers(
+                lines, records, level, "",
+                lambda scope: True)
     return "\n".join(lines)
 
 
@@ -198,9 +356,18 @@ def run_prep(cfg, args):
     audience = getattr(args, "for_audience", None) or getattr(args, "for", None)
     if not audience:
         sys.exit("Which audience? e.g.  pm brief --for \"Monthly portfolio review\"")
-    print(f"Preparing the brief for {audience} ...")
-    sections, snapshot, last = gather(cfg, audience)
-    text = render_prep(audience, sections, last)
+    from core import audience as audience_core
+    previous = state.load_state(_state_path(cfg, audience))
+    level = getattr(args, "audience", None) or previous.get("_audience_level") or "pm"
+    print(f"Preparing the brief for {audience} ({level}) ...")
+    from core import window as window_core
+    try:
+        window = window_core.resolve(cfg, args, default_start=None, projects=[])
+    except window_core.WindowError as exc:
+        sys.exit(str(exc))
+    sections, snapshot, last = gather(cfg, audience, window)
+    text = render_prep(audience, sections, last, level, cfg=cfg)
+    snapshot["_audience_level"] = level
     path = output.place(
         cfg, f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))
@@ -211,7 +378,8 @@ def run_prep(cfg, args):
     print(f"\nDone. Brief written to: {path}")
     if getattr(args, "publish", False):
         from commands import publish as pub
-        pub.publish_file(cfg, args, path, title=f"{audience} — {dt.date.today().isoformat()}")
+        pub.publish_file(cfg, args, path, title=f"{audience} — {dt.date.today().isoformat()}",
+                         labels=["pm-report", "pm-brief"])
     return path
 
 
@@ -279,7 +447,7 @@ def _action_ticket(cfg, item):
     fields = {
         "project": {"key": project},
         "summary": item.get("title") or "Follow-up",
-        "issuetype": {"name": item.get("issuetype") or "Task"},
+        "issuetype": {"name": item.get("issuetype") or conventions.get(cfg, "action_issuetype")},
         "description": writes.adf_doc(
             f"From debrief. Owner: {item.get('owner') or 'unassigned'}."),
     }
@@ -299,7 +467,7 @@ def run_debrief(cfg, args):
     with open(notes, encoding="utf-8") as fh:
         text = fh.read()
     raw = model.call_model(
-        cfg["model"], DEBRIEF_PROMPT,
+        cfg["model"], prompts.get(cfg, "brief.debrief"),
         f"{_catalogue(cfg)}\n\nNotes:\n{text}\n\nReturn the JSON object now.")
     extracted = _parse_debrief(raw)
     out = output.place(

@@ -1,0 +1,19 @@
+Flag only stories whose acceptance criteria are missing, vague, or not testable. Good criteria state an observable outcome and cover the happy path plus one obvious error case. Do not flag a story whose criteria are already solid.
+
+Return a JSON array. Each object has exactly three keys:
+- "key": the issue key, copied exactly
+- "problem": one short sentence
+- "missing": the criteria you would add, as one short string
+
+If every story is solid, return []
+
+Example input:
+1. APS-20: Rate limiting for public endpoints
+   Acceptance criteria / description: (none provided)
+2. APS-10: Publish exchange status endpoint
+   Acceptance criteria / description: Acceptance criteria: returns current status.
+
+Example JSON array:
+[{"key":"APS-20","problem":"No acceptance criteria.","missing":"Given a tenant over the limit, requests are rejected with 429; under the limit, they succeed."}]
+
+Do not add keys that are not in the list. Do not write any text outside the JSON array.

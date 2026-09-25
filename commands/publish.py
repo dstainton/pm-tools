@@ -33,18 +33,25 @@ def settings(cfg):
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+
+
 def _inline(text):
-    """Escape text and keep Markdown links as anchors."""
+    """Escape text, then keep Markdown links and bold."""
     parts = []
     pos = 0
     for match in _LINK.finditer(text or ""):
-        parts.append(html.escape(text[pos:match.start()]))
+        parts.append(_bold(html.escape(text[pos:match.start()])))
         label = html.escape(match.group(1))
         url = html.escape(match.group(2), quote=True)
         parts.append(f'<a href="{url}">{label}</a>')
         pos = match.end()
-    parts.append(html.escape((text or "")[pos:]))
+    parts.append(_bold(html.escape((text or "")[pos:])))
     return "".join(parts)
+
+
+def _bold(text):
+    return _BOLD.sub(r"<strong>\1</strong>", text)
 
 
 def markdown_to_storage(text):
@@ -83,6 +90,16 @@ def markdown_to_storage(text):
                 chunks.append("</ul>")
                 in_list = False
             chunks.append(f"<h3>{_inline(raw[4:].strip())}</h3>")
+        elif raw.startswith("##### "):
+            if in_list:
+                chunks.append("</ul>")
+                in_list = False
+            chunks.append(f"<h5>{_inline(raw[6:].strip())}</h5>")
+        elif raw.startswith("#### "):
+            if in_list:
+                chunks.append("</ul>")
+                in_list = False
+            chunks.append(f"<h4>{_inline(raw[5:].strip())}</h4>")
         elif raw.startswith("|") and "|" in raw[1:]:
             if in_list:
                 chunks.append("</ul>")
@@ -140,7 +157,11 @@ def find_parent(cfg, space, parent_title):
     return find_page(cfg, space, parent_title)
 
 
-def confluence_action(cfg, opts, title, markdown):
+def _label_body(labels):
+    return [{"prefix": "global", "name": name} for name in (labels or []) if name]
+
+
+def confluence_action(cfg, opts, title, markdown, labels=None):
     base = _confluence_base(cfg).rstrip("/")
     if not base:
         sys.exit("publish.confluence needs confluence.base_url.")
@@ -154,10 +175,21 @@ def confluence_action(cfg, opts, title, markdown):
         "space": {"key": opts["space"]},
         "body": {"storage": {"value": storage, "representation": "storage"}},
     }
+    follow = None
     if existing:
         version = ((existing.get("version") or {}).get("number") or 1) + 1
         body["version"] = {"number": version}
         page_id = existing.get("id")
+        if labels:
+            follow = {
+                "method": "POST",
+                "url": f"{base}/rest/api/content/{page_id}/label",
+                "path": f"/wiki/rest/api/content/{page_id}/label",
+                "body": _label_body(labels),
+                "kind": "publish-confluence-label",
+                "summary": title,
+                "description": f"label Confluence page {page_id}",
+            }
         return {
             "method": "PUT",
             "url": f"{base}/rest/api/content/{page_id}",
@@ -166,7 +198,10 @@ def confluence_action(cfg, opts, title, markdown):
             "kind": "publish-confluence",
             "summary": title,
             "description": f"update Confluence page in {opts['space']}",
+            "follow": follow,
         }
+    if labels:
+        body["metadata"] = {"labels": _label_body(labels)}
     parent = find_parent(cfg, opts["space"], opts["parent_page"])
     if parent and parent.get("id"):
         body["ancestors"] = [{"id": parent["id"]}]
@@ -198,7 +233,7 @@ def teams_action(opts, title, markdown):
     }
 
 
-def publish_file(cfg, args, path, title=None):
+def publish_file(cfg, args, path, title=None, labels=None):
     if not path or not os.path.exists(path):
         sys.exit(f"No file at {path!r} to publish.")
     with open(path, encoding="utf-8") as fh:
@@ -212,7 +247,7 @@ def publish_file(cfg, args, path, title=None):
     opts = settings(cfg)
     actions = []
     if opts["confluence_enabled"]:
-        actions.append(confluence_action(cfg, opts, title, markdown))
+        actions.append(confluence_action(cfg, opts, title, markdown, labels=labels))
     if opts["teams_enabled"]:
         actions.append(teams_action(opts, title, markdown))
     if not actions:
@@ -231,6 +266,10 @@ def publish_file(cfg, args, path, title=None):
             writes.log_write(cfg, action, result=result)
             print(f"Sent ({action['kind']}).")
             results.append(result)
+            follow = action.get("follow")
+            if follow:
+                writes.execute(cfg, follow)
+                print(f"Sent ({follow['kind']}).")
         except requests.RequestException as err:
             writes.log_write(cfg, action, error=err)
             sys.exit(f"Write failed: {err}")

@@ -12,7 +12,7 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    comments as comment_core, paths, products as product_core, sources,
+    comments as comment_core, conventions, paths, products as product_core, sources,
     workstreams, writes,
 )
 
@@ -81,33 +81,34 @@ def _mentioned(issue, me, within_days, jira_cfg, cfg=None):
     return True
 
 
-def _is_blocked_by(link):
+def _is_blocked_by(link, cfg=None):
     """This issue is blocked by the other one.
 
     Jira's Blocks link says `blocks` outward and `is blocked by` inward.
     Matching the substring `block` treated both directions as the same problem.
     """
     relation = (link.get("relation") or "").strip().lower()
-    if relation in ("is blocked by", "blocked by"):
+    if relation in conventions.names(cfg, "blocked_by_links"):
         return True
-    return link.get("direction") == "inward" and relation == "blocks"
+    return (link.get("direction") == "inward"
+            and relation in conventions.names(cfg, "blocks_links"))
 
 
-def _blocked_by_link(issue, jira_cfg):
+def _blocked_by_link(issue, jira_cfg, cfg=None):
     try:
         links = sources.fetch_issue_links(jira_cfg, issue["key"])
     except Exception:                              # noqa: BLE001
         return None
     for link in links:
-        if _is_blocked_by(link):
+        if _is_blocked_by(link, cfg):
             return link
     return None
 
 
-def _is_new_bug(issue, within_days):
+def _is_new_bug(issue, within_days, cfg=None):
     if not within_days:
         return False
-    if (issue.get("issuetype") or "").lower() != "bug":
+    if (issue.get("issuetype") or "").lower() not in conventions.names(cfg, "bug_types"):
         return False
     created = today_cmd._parse_datetime(issue.get("created") or issue.get("updated"))
     if not created:
@@ -119,18 +120,18 @@ def classify(issue, opts, me, jira_cfg, cfg=None):
     """Highest-priority triage kind, or None."""
     if today_cmd._is_done(issue):
         return None
-    if (issue.get("issuetype") or "").lower() == "epic":
+    if workstreams.is_epic(cfg, issue):
         return None
     if opts["overdue"] and today_cmd._is_overdue(issue):
         return "overdue"
     if opts["blocked"] and (today_cmd._is_blocked(issue, cfg)
-                            or _blocked_by_link(issue, jira_cfg)):
+                            or _blocked_by_link(issue, jira_cfg, cfg)):
         return "blocked"
     if opts["unassigned_in_sprint"] and today_cmd._is_unassigned(issue):
         return "unassigned"
     if _mentioned(issue, me, opts["mentions_me_within_days"], jira_cfg, cfg):
         return "mention"
-    if _is_new_bug(issue, opts["new_bugs_within_days"]):
+    if _is_new_bug(issue, opts["new_bugs_within_days"], cfg):
         return "new-bug"
     if opts["in_sprint_untouched_days"] and today_cmd.classify_need(
             issue, opts["in_sprint_untouched_days"], cfg=cfg) == "untouched":

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.12.0 - 2026-09-25
+
+- The weekly report is organised by Epic. Citations are Jira keys and page
+  titles. Confluence pages changed in the same window are included, and a
+  decision log, risk register, or ADR list can be configured as a register.
+- Prompts, queries, and team conventions are configurable. Defaults stay in
+  the tool, so an unconfigured install behaves as before. See
+  `docs/CUSTOMISING.md`.
+- `pm report`, `pm brief`, `pm release-notes`, `pm metrics`, and `pm warm`
+  take `--audience pm|leadership|partner`. Each audience has its own file
+  and memory. `pages.scope: space` reads every changed page in a workstream
+  space; set `pages.scope: labelled` to keep the previous label filter
+  (`config_version` 6, applied by `pm update`).
+- A product may set `confluence_space`. SharePoint files are listed by title
+  in Documentation changed and Sources. `pm warm` runs review, page
+  summaries (including changed register entries), the report, then the inbox.
+
 ## 0.11.0 - 2026-09-24
 
 - `pm setup` fills a blank config one step at a time and will not replace a

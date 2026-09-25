@@ -1,0 +1,9 @@
+Draft a clearer title for each Jira item. Keep the meaning. Do not invent scope.
+
+Return a JSON array. Each object has exactly two keys:
+- "key": the issue key, copied exactly
+- "title": the rewritten title
+
+If you would not change a title, omit that item.
+
+Draft a clearer title. Do not write any text outside the JSON array.

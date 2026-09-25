@@ -230,6 +230,58 @@ def to_version_5(text):
 MIGRATIONS.append((4, to_version_5))
 
 
+_PAGE_V6 = (
+    ("scope", "  scope: space"),
+    ("follow_jira_links", "  follow_jira_links: true"),
+    ("summaries", "  summaries: true"),
+    ("summary_chars", "  summary_chars: 6000"),
+    ("max_summaries", "  max_summaries: 20"),
+    ("match_epics_with_model", "  match_epics_with_model: true"),
+)
+
+_AUDIENCE_BODY = [
+    "  default: pm",
+    "  warm: [pm]",
+    "  pm:",
+    '    name: "Product management"',
+    "  leadership:",
+    '    name: "Leadership"',
+    "    at_risk_due_days: 14",
+    "    max_docs_per_product: 5",
+    "  partner:",
+    '    name: "Partners"',
+    "    epic_labels: [partner-visible]",
+    "    page_labels: [partner-visible]",
+    "    exclude_labels: [internal]",
+    "    include_jira_links: false",
+    "    include_confluence_links: false",
+    "    show_target_dates: false",
+]
+
+
+def to_version_6(text):
+    """Add audiences and the wider page reader. Do not insert prompt overrides."""
+    if not has_top_level(text, "audiences"):
+        text = insert_missing_block(text, "audiences", _AUDIENCE_BODY, before_key="output")
+    if has_top_level(text, "pages"):
+        for key, line in reversed(_PAGE_V6):
+            if not _block_has_key(text, "pages", key):
+                text = _insert_under(text, "pages", line)
+    if has_top_level(text, "confluence"):
+        for key, line in (
+            ("content_types", "  content_types: [page, blogpost]"),
+            ("title_only_types", "  title_only_types: [database, embed]"),
+        ):
+            if not _block_has_key(text, "confluence", key):
+                text = _insert_under(text, "confluence", line)
+    if has_top_level(text, "scopes") and not _block_has_key(text, "scopes", "refine_history"):
+        text = _insert_under(text, "scopes", "  refine_history: {status: done, types: [Story]}")
+    return set_version(text, 6)
+
+
+MIGRATIONS.append((5, to_version_6))
+
+
 def apply_migrations(text, migrations, target):
     """Walk `migrations` until `text` is at `target`.
 

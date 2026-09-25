@@ -7,6 +7,7 @@ landing date at the current rate.
 
 import datetime as dt
 import json
+import sys
 
 from core import metrics as core
 from core import output
@@ -46,7 +47,8 @@ def gather(cfg, weeks, today=None):
             issues = _history(cfg, project, jql)
             bundle = core.summarise_stream(
                 issues, weeks, sprints=seen_projects.get(project) or [],
-                today=today)
+                today=today,
+                epic_types=workstreams.membership_settings(cfg)["epic_types"])
             bundle["workstream"] = ws.get("abbrev")
             bundle["workstream_name"] = ws.get("name")
             product_rows.append(bundle)
@@ -118,6 +120,25 @@ def render(groups, weeks):
                     cells.append(str(row["throughput"][i]["done"]))
                 lines.append("| " + " | ".join(cells) + " |")
             lines.append("")
+    return "\n".join(lines)
+
+
+def render_headline(groups, weeks):
+    """Leadership delivery table: rate, cycle, open, and landing."""
+    lines = ["## Delivery", ""]
+    for product, rows in groups:
+        lines.append(f"### {product.get('name')} ({product.get('abbrev')})")
+        lines.append("")
+        lines.append("| Workstream | Done / week | Cycle (median) | Open | Landing |")
+        lines.append("|------------|------------:|---------------:|-----:|---------|")
+        for row in rows:
+            cycle = row["cycle"]
+            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
+            landing = _fmt_date(row.get("landing"))
+            lines.append(
+                f"| {row['workstream']} | {row['weekly_rate']:.1f} | {cycle_txt} | "
+                f"{row['open']} | {landing} |")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -229,6 +250,10 @@ def run_sprint(cfg, args):
 
 
 def run(cfg, args):
+    from core import audience
+    who = audience.level(cfg, args)
+    if who == "partner":
+        sys.exit("pm metrics has no partner view.")
     if getattr(args, "sprint", False):
         run_sprint(cfg, args)
         return
@@ -239,11 +264,13 @@ def run(cfg, args):
         path = output.place(
             cfg, f"metrics_{dt.date.today().isoformat()}.json",
             getattr(args, "out", None))
+        payload = as_json(groups, opts["weeks"])
+        payload["audience"] = who
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(as_json(groups, opts["weeks"]), fh, indent=2, default=str)
+            json.dump(payload, fh, indent=2, default=str)
         print(f"\nDone. Metrics written to: {path}")
         return
-    text = render(groups, opts["weeks"])
+    text = render_headline(groups, opts["weeks"]) if who == "leadership" else render(groups, opts["weeks"])
     path = output.place(
         cfg, f"metrics_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

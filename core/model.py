@@ -24,62 +24,20 @@ import time
 
 import requests
 
-from core import model_cache
+from core import model_cache, prompts
 
 
 # ---------------------------------------------------------------------------
 #  Prompts — short, numbered, format last. Written for Qwen3.8 Q3_K_M.
 # ---------------------------------------------------------------------------
+# The text lives in core.prompts. These names stay so existing callers and
+# tests keep working. REPORT_SYSTEM_PROMPT still contains {audience}.
 
-# Seven headings, in this order. The model fills them in; we never ask it to
-# invent a structure.
-REPORT_HEADINGS = (
-    "What changed since last week",
-    "Progress this sprint",
-    "Roadmap status",
-    "Decisions since last report",
-    "Open dependencies",
-    "Decisions we are waiting on",
-    "Risks",
-)
-
-EMPTY_SECTION = "No update this week."
-FIRST_RUN_LINE = "First report — no prior week to compare against."
-
-REPORT_SYSTEM_PROMPT = """\
-Write a weekly status note for {audience}.
-
-Use ONLY the CHANGE SUMMARY and the Material. Do not invent people, dates, \
-status, or work.
-
-Output exactly these seven headings, in this order, and nothing else:
-### What changed since last week
-### Progress this sprint
-### Roadmap status
-### Decisions since last report
-### Open dependencies
-### Decisions we are waiting on
-### Risks
-
-Rules:
-1. Each section is 2 to 4 short bullets, or this exact sentence: \
-No update this week.
-2. If CHANGE SUMMARY says this is the first run, the first section is \
-exactly: First report — no prior week to compare against.
-3. After a fact, cite its tag like [SDX-J3]. Use only tags that appear in \
-the Material.
-4. Do not add a title, a workstream heading, or a reference list.
-5. A dated line under an item is a comment from this window. Use it for \
-what changed, decisions, blockers, and risks, and cite that item's tag. \
-A comment is not a status change.
-
-Example of one filled section:
-### Progress this sprint
-- Status endpoint is in review. [SDX-J1]
-- Certificate rotation is past its due date. [SDX-J4]
-"""
-
-REPORT_USER_TAIL = "Write the seven sections now."
+REPORT_HEADINGS = prompts.headings(None)
+EMPTY_SECTION = prompts.values_of(None, "report.section")["empty_section"]
+FIRST_RUN_LINE = prompts.values_of(None, "report.section")["first_run_line"]
+REPORT_SYSTEM_PROMPT = prompts.get(None, "report.section", audience="{audience}")
+REPORT_USER_TAIL = prompts.get(None, "report.section_tail")
 
 
 # ---------------------------------------------------------------------------
@@ -437,16 +395,207 @@ def ping(model_cfg):
     return True, f"answered in {elapsed:.1f}s, {thinking}"
 
 
+def infer_leadership(model_cfg, product, facts, cfg=None):
+    return call_model(model_cfg, prompts.get(cfg, "report.leadership"),
+                      f"Product: {product.get('name')} ({product.get('abbrev')})\n\n{facts}\n")
+
+
+def infer_partner(model_cfg, product, facts, cfg=None):
+    return call_model(model_cfg, prompts.get(cfg, "report.partner"),
+                      f"Product: {product.get('name')}\n\n{facts}\n")
+
+
+def _item_line(item):
+    """One Jira child, in the grouped-material shape."""
+    kind = item.get("issuetype") or "Item"
+    title = item.get("summary") or item.get("title") or item.get("key") or "item"
+    bits = [f"  [{item.get('ref') or item.get('key')}] ({kind}) {title}"]
+    status = item.get("status") or ""
+    assignee = item.get("assignee") or ""
+    extra = []
+    if status:
+        extra.append(f"Status: {status}")
+    if assignee:
+        extra.append(f"Assignee: {assignee}")
+    if extra:
+        bits[0] += " | " + " | ".join(extra)
+    return bits
+
+
+def _page_line(page, budget):
+    """A document line, plus its summary. Excerpt only while `budget` remains.
+
+    Returns (lines, budget_left). A page that does not fit is title and summary.
+    """
+    tag = page.get("ref") or "D?"
+    kind = page.get("kind") or page.get("type") or "page"
+    updated = str(page.get("updated") or "")[:10]
+    when = f", updated {updated}" if updated else ""
+    title = page.get("title") or "page"
+    change = page.get("change") or ""
+    status = page.get("status") or ""
+    if change:
+        bits = [p for p in (kind, change, status) if p]
+        if page.get("high"):
+            bits.insert(2, "High")
+        head = f"  [{tag}] ({', '.join(bits)}) {title}"
+    else:
+        head = f"  [{tag}] (Confluence {kind}{when}) {title}"
+    lines = [head]
+    if page.get("summary"):
+        lines.append(f"      Summary: {page['summary']}")
+    excerpt = page.get("body_text") or page.get("detail") or ""
+    excerpt = re.sub(r"\s+", " ", str(excerpt)).strip()
+    if excerpt and not page.get("title_only") and budget > 0:
+        if len(excerpt) <= budget:
+            lines.append(f"      {excerpt}")
+            budget -= len(excerpt)
+        # A page that does not fit keeps the title and summary only.
+    return lines, budget
+
+
+def _pick_children(epic, max_per_epic):
+    """Moved, new, commented, blocked, in progress, then the rest."""
+    from core import blocked
+    items = [it for it in epic.get("items") or [] if it.get("source", "Jira") == "Jira"]
+    moved = {it.get("key") for it in epic.get("moved") or []}
+    new = {it.get("key") for it in epic.get("new") or []}
+    ranked = []
+
+    def take(pred):
+        for item in items:
+            key = item.get("key")
+            if key in {it.get("key") for it in ranked}:
+                continue
+            if pred(item, key):
+                ranked.append(item)
+
+    take(lambda _item, key: key in moved)
+    take(lambda _item, key: key in new)
+    take(lambda item, _key: bool(item.get("comments")))
+    take(lambda item, _key: blocked.is_blocked(item))
+    take(lambda item, _key: (item.get("status_category") or "") == "indeterminate")
+    take(lambda _item, _key: True)
+    shown = ranked[:max_per_epic]
+    return shown, len(ranked) - len(shown)
+
+
+def build_grouped_material(epics, loose_pages, comment_budget=6000,
+                           page_budget=8000, max_items=40, max_per_epic=8,
+                           register_entries=None):
+    """Epic-grouped material. Comments and page excerpts share their budgets."""
+    lines = []
+    shown = 0
+    used_comments = 0
+    comment_limit = 0 if comment_budget is None else int(comment_budget)
+    pages_left = int(page_budget or 0)
+    omitted_comments = 0
+
+    def comments_of(item):
+        nonlocal used_comments, omitted_comments
+        extra = []
+        wrote = False
+        for line in item.get("comments") or []:
+            if used_comments + len(line) > comment_limit:
+                break
+            extra.append(f"      {line}")
+            used_comments += len(line)
+            wrote = True
+        if (item.get("comments") or []) and not wrote:
+            omitted_comments += 1
+        return extra
+
+    def room():
+        return shown < int(max_items)
+
+    for epic in epics or []:
+        if not room():
+            break
+        if epic.get("key"):
+            due = f" | due {epic['due']}" if epic.get("due") else ""
+            done = epic.get("children_done") or 0
+            total = epic.get("children_total") or 0
+            signal = epic.get("signal") or ""
+            lines.append(
+                f"Epic {epic['key']}: {epic.get('summary') or ''} | "
+                f"{epic.get('status') or '—'} | {done} of {total} done{due}"
+                f"{(' | ' + signal) if signal else ''}"
+            )
+        else:
+            lines.append("Not under an Epic")
+        children, more = _pick_children(epic, max_per_epic)
+        for item in children:
+            if not room():
+                break
+            lines.extend(_item_line(item))
+            lines.extend(comments_of(item))
+            shown += 1
+        if more and room():
+            lines.append(f"  (+{more} more under this Epic)")
+        pages = list(epic.get("pages") or [])
+        if epic.get("key"):
+            pages.extend(entry for entry in (register_entries or [])
+                         if entry.get("epic") == epic["key"])
+        seen_pages = set()
+        for page in pages:
+            marker = page.get("page_id") or page.get("ref") or id(page)
+            if marker in seen_pages or not room():
+                continue
+            seen_pages.add(marker)
+            block, pages_left = _page_line(page, pages_left)
+            lines.extend(block)
+            shown += 1
+
+    documents = [page for page in (loose_pages or []) if page.get("source") != "Jira"]
+    if documents and room():
+        lines.append("Documents not tied to an Epic")
+        for page in documents:
+            if not room():
+                break
+            block, pages_left = _page_line(page, pages_left)
+            lines.extend(block)
+            shown += 1
+    unmatched = [entry for entry in (register_entries or []) if not entry.get("epic")]
+    if unmatched and room():
+        lines.append("Register changes")
+        for entry in unmatched:
+            if not room():
+                break
+            block, pages_left = _page_line(entry, pages_left)
+            lines.extend(block)
+            shown += 1
+    if omitted_comments:
+        lines.append(
+            f"(+{omitted_comments} commented issues omitted "
+            f"to keep the prompt short.)")
+    if not lines:
+        return "(No items were found for this workstream.)"
+    return "\n".join(lines)
+
+
 def infer_report_section(model_cfg, audience, workstream, items, change_block,
-                         comment_budget=6000):
-    """Ask the local model to write the report section for one workstream."""
-    material = build_material(items, comment_budget=comment_budget)
+                         comment_budget=6000, cfg=None, material=None,
+                         epics=None, loose_pages=None, page_budget=8000,
+                         register_entries=None):
+    """Ask the local model to write the report section for one workstream.
+
+    A list in `items` keeps the flat material the older callers send. Pass
+    `material` (or `epics`) for the grouped block. Warm and the report must
+    pass the same `material` string.
+    """
+    if material is None:
+        if epics is not None:
+            material = build_grouped_material(
+                epics, loose_pages or [], comment_budget=comment_budget,
+                page_budget=page_budget, register_entries=register_entries)
+        else:
+            material = build_material(items, comment_budget=comment_budget)
     user_content = (
         f"Workstream: {workstream['name']} ({workstream['abbrev']})\n\n"
         f"CHANGE SUMMARY:\n{change_block}\n\n"
         f"Material:\n{material}\n\n"
-        f"{REPORT_USER_TAIL}"
+        f"{prompts.get(cfg, 'report.section_tail')}"
     )
     return call_model(model_cfg,
-                      REPORT_SYSTEM_PROMPT.format(audience=audience),
+                      prompts.get(cfg, "report.section", audience=audience),
                       user_content)

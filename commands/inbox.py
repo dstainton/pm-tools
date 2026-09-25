@@ -9,22 +9,7 @@ import json
 import os
 import sys
 
-from core import model, paths, products as product_core, writes
-
-
-INBOX_PROMPT = """\
-Suggest how to file this note as a Jira Product Backlog item.
-
-Return a JSON object with exactly these keys:
-- "product": a product abbrev from the list, or ""
-- "workstream": a workstream abbrev from the list, or ""
-- "issuetype": Story, Task, or Bug
-- "title": a clear title
-- "criteria": one or two Given/When/Then lines, or ""
-
-Use ONLY abbrevs from the list. Do not invent people or dates.
-file this note. Do not write any text outside the JSON object.
-"""
+from core import conventions, model, paths, products as product_core, prompts, writes
 
 
 def _load(cfg):
@@ -79,7 +64,7 @@ def _suggest(cfg, note):
         f"Tagged product: {note.get('product') or '(none)'}\n\n"
         f"Return the JSON object now."
     )
-    raw = model.call_model(cfg["model"], INBOX_PROMPT, user)
+    raw = model.call_model(cfg["model"], prompts.get(cfg, "inbox.file_note"), user)
     try:
         # Prefer a JSON object even if the model wrapped it.
         start, end = raw.find("{"), raw.rfind("}")
@@ -148,7 +133,8 @@ def _create(cfg, args):
     # is the one that gets filed. The model does not overwrite them.
     title = (getattr(args, "title", None) or note.get("title")
              or suggestion.get("title") or note["text"])
-    itype = getattr(args, "issuetype", None) or suggestion.get("issuetype") or "Story"
+    itype = (getattr(args, "issuetype", None) or suggestion.get("issuetype")
+             or conventions.get(cfg, "note_issuetype"))
     product = note.get("product") or suggestion.get("product")
     stream_ab = (getattr(args, "workstream", None) or note.get("workstream")
                  or suggestion.get("workstream"))

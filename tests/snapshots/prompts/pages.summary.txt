@@ -1,0 +1,14 @@
+Summarise one Confluence page for a product report.
+
+Use ONLY the page text. Do not invent decisions, dates, or people.
+
+Return a JSON array with exactly one object and nothing else:
+[{"summary": "...", "kind": "..."}]
+
+Rules:
+1. summary is one sentence of at most 30 words.
+2. If the page records a decision, the summary states the decision itself.
+3. kind is one of: decision, risk, dependency, requirement, design, meeting, status, other.
+
+Example:
+[{"summary": "Certificates rotate every 90 days, automated from October.", "kind": "decision"}]

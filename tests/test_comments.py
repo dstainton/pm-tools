@@ -145,6 +145,14 @@ class WindowTests(unittest.TestCase):
 
 
 class MaterialTests(unittest.TestCase):
+    def test_an_old_ref_is_not_cited_when_an_item_drops_out(self):
+        block = state.build_change_block(
+            [], [], [("page-1", {"title": "Old page", "ref": "SDX-J1"})], False)
+        self.assertNotIn("SDX-J1", block)
+        keyed = state.build_change_block(
+            [], [], [("APS-10", {"title": "Publish", "ref": "SDX-J1"})], False)
+        self.assertIn("[APS-10]", keyed)
+        self.assertNotIn("SDX-J1", keyed)
     def test_a_comment_is_not_cut_by_the_status_line_cap(self):
         comment = "2026-09-22 Dana: " + ("y" * 200)
         block = model.build_material([{
@@ -171,6 +179,8 @@ class MaterialTests(unittest.TestCase):
     def test_the_prompt_may_use_a_comment_and_not_as_a_status_change(self):
         self.assertIn("A comment is not a status change.",
                       model.REPORT_SYSTEM_PROMPT)
+        self.assertIn("[APS-10]", model.REPORT_SYSTEM_PROMPT)
+        self.assertNotIn("SDX-J", model.REPORT_SYSTEM_PROMPT)
 
     def test_release_notes_put_the_excerpt_on_the_bullet(self):
         rows = [{

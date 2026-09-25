@@ -143,11 +143,16 @@ def cycle_summary(issues):
     }
 
 
-def aging_wip(issues, today=None, limit=8):
+def _is_epic_type(issue, epic_types=("Epic",)):
+    names = [str(t).lower() for t in epic_types]
+    return (issue.get("issuetype") or "").lower() in names
+
+
+def aging_wip(issues, today=None, limit=8, epic_types=("Epic",)):
     today = today or dt.date.today()
     rows = []
     for issue in issues:
-        if (issue.get("issuetype") or "").lower() == "epic":
+        if _is_epic_type(issue, epic_types):
             continue
         if (issue.get("status_category") or "").lower() == "done":
             continue
@@ -221,7 +226,7 @@ def sprint_scope_change(issues, sprint):
     return {"added": len(keys), "keys": keys}
 
 
-def sprint_snapshot(issues, sprint):
+def sprint_snapshot(issues, sprint, epic_types=("Epic",)):
     """Open-sprint numbers from the changelog the metrics fetch already has.
 
     Forecast is points on issues that were in the sprint at the start.
@@ -239,7 +244,7 @@ def sprint_snapshot(issues, sprint):
     added_points = 0.0
     carried = 0
     for issue in issues or []:
-        if (issue.get("issuetype") or "").lower() == "epic":
+        if _is_epic_type(issue, epic_types):
             continue
         points = issue.get("story_points")
         if isinstance(points, bool) or not isinstance(points, (int, float)) or points <= 0:
@@ -301,17 +306,17 @@ def landing_date(open_count, weekly_rate, today=None):
     return today + dt.timedelta(days=int(round(weeks * 7)))
 
 
-def summarise_stream(issues, weeks, sprints=None, today=None):
+def summarise_stream(issues, weeks, sprints=None, today=None, epic_types=("Epic",)):
     """One workstream's metrics bundle."""
     today = today or dt.date.today()
     sprints = sprints or []
     buckets = throughput_by_week(issues, weeks, today=today)
     rate = (sum(b["done"] for b in buckets) / weeks) if weeks else 0
     open_items = [i for i in issues
-                  if (i.get("issuetype") or "").lower() != "epic"
+                  if not _is_epic_type(i, epic_types)
                   and (i.get("status_category") or "").lower() != "done"
                   and not is_done_name(i.get("status"))]
-    aging, aging_total = aging_wip(issues, today=today)
+    aging, aging_total = aging_wip(issues, today=today, epic_types=epic_types)
     sprint = sprints[0] if sprints else None
     return {
         "throughput": buckets,

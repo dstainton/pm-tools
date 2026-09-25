@@ -34,6 +34,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 TOKEN = re.compile(r"""\s*(?:
       (?P<str>"(?:[^"\\]|\\.)*")
     | (?P<num>-?\d+[dhwm]?)
+    | (?P<cf>cf\[\d+\])
     | (?P<ident>[A-Za-z_][\w.\-]*)
     | (?P<punct>!=|>=|<=|[(),=<>])
 )""", re.VERBOSE)
@@ -54,6 +55,8 @@ def tokenize(jql):
             tokens.append(("str", json.loads(match.group("str"))))
         elif match.group("num") is not None:
             tokens.append(("num", match.group("num")))
+        elif match.group("cf") is not None:
+            tokens.append(("ident", match.group("cf")))
         elif match.group("ident") is not None:
             tokens.append(("ident", match.group("ident")))
         else:
@@ -129,9 +132,13 @@ class Parser:
 
     def parse_predicate(self):
         kind, field = self.next()
-        if kind != "ident":
+        if kind == "str":
+            field = str(field)
+        elif kind != "ident":
             raise ValueError(f"expected a field name in JQL, got {field!r}")
         field = field.lower()
+        if field == "epic link":
+            field = "parentepic"
 
         negate = False
         if self.accept_word("not"):
@@ -162,6 +169,8 @@ def _issue_value(issue, field):
         return issue.get("components") or []
     if field == "parentepic":
         return issue.get("parent_epic")
+    if field.startswith("cf["):
+        return (issue.get("fields_extra") or {}).get(field) or []
     if field == "statuscategory":
         return issue.get("status_category")
     if field == "issuetype":
@@ -472,6 +481,18 @@ class _Handler(BaseHTTPRequestHandler):
         if path.startswith("/wiki/rest/api/content/search"):
             return self._confluence()
 
+        remote = re.match(r"/rest/api/3/issue/([^/]+)/remotelink/?$", path)
+        if remote:
+            issue = next((i for i in self.backlog if i["key"] == remote.group(1)), None)
+            return self._send((issue or {}).get("remote_links") or [])
+
+        page_match = re.match(r"/wiki/rest/api/content/(\d+)/?$", path)
+        if page_match:
+            page = next((p for p in self.pages if str(p.get("id")) == page_match.group(1)), None)
+            if page is None:
+                return self._send({"message": "not found"}, 404)
+            return self._send(self._page_payload(page))
+
         if path.rstrip("/") == "/wiki/rest/api/content":
             query = parse_qs(parsed.query)
             space = (query.get("spaceKey") or [None])[0]
@@ -483,21 +504,49 @@ class _Handler(BaseHTTPRequestHandler):
                 if title and page.get("title") != title:
                     continue
                 if title or space:
-                    hits.append({
-                        "id": page["id"],
-                        "title": page["title"],
-                        "space": {"key": page.get("space")},
-                        "version": {"number": page.get("version", 1)},
-                    })
+                    hits.append(self._page_payload(page))
             return self._send({"results": hits})
 
         return self._send({"errorMessages": [f"no route for {self.path}"]}, 404)
 
+    def _page_payload(self, page):
+        body = page.get("body") or ""
+        storage = page.get("storage") or f"<p>{body}</p>"
+        ancestors = page.get("ancestors") or []
+        return {
+            "id": str(page["id"]),
+            "type": page.get("type") or "page",
+            "title": page.get("title") or "",
+            "space": {"key": page.get("space")},
+            "body": {
+                "view": {"value": f"<p>{body}</p>"},
+                "storage": {"value": storage},
+            },
+            "version": {
+                "number": page.get("version", 1),
+                "when": page.get("when", "2026-09-01T00:00:00.000Z"),
+                "message": page.get("message") or "",
+                "by": {"displayName": page.get("by") or ""},
+            },
+            "history": {"createdDate": page.get("created") or page.get("when") or ""},
+            "metadata": {"labels": {"results": [
+                {"name": label} for label in (page.get("labels") or [])]}},
+            "ancestors": ancestors,
+            "_links": {"webui": page.get("webui", f"/pages/{page['id']}")},
+        }
+
     def _confluence(self):
-        query = unquote(parse_qs(urlparse(self.path).query).get("cql", [""])[0])
+        parsed = urlparse(self.path)
+        query_args = parse_qs(parsed.query)
+        query = unquote((query_args.get("cql") or [""])[0])
         space = re.search(r'space\s*=\s*"?([\w-]+)"?', query)
-        labels = re.findall(r'"([\w-]+)"', query.split("label", 1)[-1]) \
-            if "label" in query else []
+        label_clause = query.split("label", 1)[-1] if re.search(r"\blabel\b", query) else ""
+        labels = re.findall(r'"([\w-]+)"', label_clause) if label_clause else []
+        type_match = re.search(r"type\s+IN\s*\(([^)]*)\)", query, re.I)
+        types = re.findall(r'"([^"]+)"', type_match.group(1)) if type_match else []
+        since = re.search(r"lastmodified\s*>=\s*'(\d{4}-\d{2}-\d{2})'", query)
+        ancestor = re.search(r"ancestor\s*=\s*(\d+)", query)
+        parent = re.search(r"parent\s*=\s*(\d+)", query)
 
         hits = []
         for page in self.pages:
@@ -505,14 +554,26 @@ class _Handler(BaseHTTPRequestHandler):
                 continue
             if labels and not set(labels) & set(page.get("labels") or []):
                 continue
-            hits.append({
-                "id": page["id"],
-                "title": page["title"],
-                "body": {"view": {"value": f"<p>{page.get('body', '')}</p>"}},
-                "version": {"when": page.get("when", "2026-09-01T00:00:00.000Z")},
-                "_links": {"webui": page.get("webui", f"/pages/{page['id']}")},
-            })
-        return self._send({"results": hits})
+            content_type = page.get("type") or "page"
+            if types and content_type not in types:
+                continue
+            if since and str(page.get("when") or "")[:10] < since.group(1):
+                continue
+            ancestors = page.get("ancestors") or []
+            ancestor_ids = [str(a.get("id")) for a in ancestors if isinstance(a, dict)]
+            if ancestor and ancestor.group(1) not in ancestor_ids:
+                continue
+            if parent and (not ancestor_ids or ancestor_ids[-1] != parent.group(1)):
+                continue
+            hits.append(self._page_payload(page))
+        hits.sort(key=lambda row: (row.get("version") or {}).get("when") or "", reverse=True)
+        start = int((query_args.get("start") or ["0"])[0] or 0)
+        limit = int((query_args.get("limit") or [str(len(hits) or 0)])[0] or 0)
+        page = hits[start:start + limit] if limit else hits[start:]
+        payload = {"results": page, "size": len(page), "start": start}
+        if start + len(page) < len(hits):
+            payload["_links"] = {"next": f"/wiki/rest/api/content/search?start={start + len(page)}"}
+        return self._send(payload)
 
     # -- POSTs -------------------------------------------------------------
     def do_POST(self):                               # noqa: N802 — http.server API
@@ -533,16 +594,34 @@ class _Handler(BaseHTTPRequestHandler):
 
         if self.path.rstrip("/") == "/wiki/rest/api/content":
             fields = body if isinstance(body, dict) else {}
+            labels = []
+            for label in ((fields.get("metadata") or {}).get("labels") or []):
+                name = label.get("name") if isinstance(label, dict) else str(label)
+                if name:
+                    labels.append(name)
             page = {
                 "id": str(3000 + len(self.pages)),
                 "title": fields.get("title") or "Untitled",
                 "space": (fields.get("space") or {}).get("key") or "APS",
                 "body": ((fields.get("body") or {}).get("storage") or {}).get("value") or "",
                 "version": 1,
-                "labels": [],
+                "labels": labels,
             }
             self.pages.append(page)
             return self._send({"id": page["id"], "title": page["title"]}, status=200)
+
+        label_match = re.match(r"/wiki/rest/api/content/([^/]+)/label/?$", self.path)
+        if label_match:
+            page_id = label_match.group(1)
+            page = next((row for row in self.pages if str(row.get("id")) == page_id), None)
+            names = []
+            rows = body if isinstance(body, list) else [body]
+            for row in rows:
+                if isinstance(row, dict) and row.get("name"):
+                    names.append(row["name"])
+            if page is not None:
+                page.setdefault("labels", []).extend(names)
+            return self._send({"results": names}, status=200)
 
         match = re.match(r"/rest/api/3/issue/([^/]+)/comment", self.path)
         if match:
@@ -679,6 +758,20 @@ class _Handler(BaseHTTPRequestHandler):
             reply = '[{"key":"APS-11","title":"Fix retry handling in the exchange client"}]'
         elif "Draft acceptance criteria" in system:
             reply = '[{"key":"APS-20","criteria":"Given a tenant over the limit, requests are rejected with 429."}]'
+        elif "Summarise one Confluence page" in system:
+            text = user.split("Text:", 1)[-1].strip().split("\n", 1)[0]
+            sentence = text.split(".")[0].strip() or "A page."
+            reply = json.dumps([{"summary": sentence, "kind": "decision"}])
+        elif "Match one Confluence page" in system:
+            keys = re.findall(r"\b[A-Z][A-Z0-9]+-\d+\b", user)
+            reply = json.dumps([{"epic": keys[0] if keys else ""}])
+        elif "Write a portfolio summary for leadership" in system:
+            reply = ("### Headline\n- Secure exchange is on track. [APS-1]\n"
+                     "### Decisions needed\n- Nothing this period.\n"
+                     "### Risks to watch\n- A ticket is blocked. [APS-10]\n")
+        elif "Write a short progress update for partners" in system:
+            reply = ("### What's new\n- Secure exchange platform is in progress.\n"
+                     "### Coming next\n- A. Lee will share more.\n")
         elif "JSON array" in system:
             reply = "[]"
         else:

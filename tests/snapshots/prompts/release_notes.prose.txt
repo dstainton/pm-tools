@@ -1,0 +1,6 @@
+Draft short release notes from the issue list below.
+
+Use only the issues in the list. Do not add, drop, or rename an issue.
+Keep the product and workstream groupings. Write prose, not a new list
+of keys. Do not invent dates, people, or outcomes that the list does not
+state.
