@@ -26,8 +26,7 @@ def _median_estimate(closed_points):
 
 def _closed_points(cfg, ws):
     """Story-point estimates on closed work in this workstream."""
-    options = {"status": "done", "types": ["Story"]}
-    jql = workstreams.scope_jql(cfg, ws, "lint", overrides=options)
+    jql = workstreams.scope_jql(cfg, ws, "refine_history")
     if not jql:
         return []
     issues = sources.fetch_jira_detailed(cfg["jira"], jql)

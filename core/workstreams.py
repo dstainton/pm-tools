@@ -28,7 +28,7 @@ filter inside the resolved membership (or, for a workstream with no Components,
 used verbatim as before).
 """
 
-from core import filters, sources
+from core import filters, queries, sources
 
 
 #  scope name -> the workstream `*_jql` field(s) an older config may have used,
@@ -48,6 +48,8 @@ DEFAULT_MEMBERSHIP = {
     "inherit_from_parent": True,
     "child_component_wins": False,
     "max_parent_keys": 500,
+    "by": "component",
+    "field": "",
 }
 
 
@@ -89,9 +91,25 @@ def components_of(ws):
     return [str(v) for v in value if str(v).strip()]
 
 
+def anchor_values(cfg, ws):
+    """The values that name this workstream, for the active membership mode."""
+    mode = membership_settings(cfg)["by"]
+    if mode == "label":
+        value = ws.get("labels")
+    elif mode == "field":
+        value = ws.get("field_values")
+    else:
+        return components_of(ws)
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [v.strip() for v in value.split(",") if v.strip()]
+    return [str(v) for v in value if str(v).strip()]
+
+
 def uses_component_scope(cfg, ws):
-    """True when membership comes from Components rather than hand-written JQL."""
-    return bool(project_of(cfg, ws) and components_of(ws))
+    """True when membership comes from an anchor rather than hand-written JQL."""
+    return bool(project_of(cfg, ws) and anchor_values(cfg, ws))
 
 
 def membership_settings(cfg):
@@ -102,6 +120,10 @@ def membership_settings(cfg):
     if isinstance(types, str):
         types = [t.strip() for t in types.split(",") if t.strip()]
     settings["epic_types"] = types
+    by = str(settings.get("by") or "component").strip().lower()
+    if by not in ("component", "label", "field"):
+        raise ValueError(by)
+    settings["by"] = by
     return settings
 
 
@@ -109,39 +131,44 @@ def membership_settings(cfg):
 #  Discovery: which epics (and which directly tagged issues) are in scope
 # ---------------------------------------------------------------------------
 
-def _component_clause(components):
-    values = ", ".join(filters.quote(c) for c in components)
-    return f"component IN ({values})"
+def _anchor_clause(cfg, ws):
+    settings = membership_settings(cfg)
+    mode = settings["by"]
+    values = anchor_values(cfg, ws)
+    if mode == "label":
+        return queries.render(cfg, "membership.anchor.label", values=values)
+    if mode == "field":
+        return queries.render(cfg, "membership.anchor.field",
+                              field=settings["field"], values=values)
+    return queries.render(cfg, "membership.anchor.component", values=values)
 
 
 def epic_selector_jql(cfg, ws):
-    """JQL that finds the workstream's Epics — the ones carrying the Component."""
+    """JQL that finds the workstream's Epics — the ones carrying the anchor."""
     project = project_of(cfg, ws)
-    components = components_of(ws)
-    if not project or not components:
+    if not project or not anchor_values(cfg, ws):
         return None
-    epic_types = membership_settings(cfg)["epic_types"]
-    types = ", ".join(filters.quote(t) for t in epic_types)
-    return (f"project = {filters.quote(project)} "
-            f"AND issuetype IN ({types}) "
-            f"AND {_component_clause(components)}")
+    settings = membership_settings(cfg)
+    return queries.render(
+        cfg, "membership.epics",
+        project=project, epic_types=settings["epic_types"],
+        anchor=_anchor_clause(cfg, ws))
 
 
 def tagged_issue_selector_jql(cfg, ws):
-    """JQL that finds non-Epic issues carrying the Component themselves.
+    """JQL that finds non-Epic issues carrying the anchor themselves.
 
     Their Sub-tasks inherit membership from them, the same way a Story inherits
     from its Epic.
     """
     project = project_of(cfg, ws)
-    components = components_of(ws)
-    if not project or not components:
+    if not project or not anchor_values(cfg, ws):
         return None
-    epic_types = membership_settings(cfg)["epic_types"]
-    types = ", ".join(filters.quote(t) for t in epic_types)
-    return (f"project = {filters.quote(project)} "
-            f"AND issuetype NOT IN ({types}) "
-            f"AND {_component_clause(components)}")
+    settings = membership_settings(cfg)
+    return queries.render(
+        cfg, "membership.tagged",
+        project=project, epic_types=settings["epic_types"],
+        anchor=_anchor_clause(cfg, ws))
 
 
 def _cached_keys(cfg, ws, cache_key, jql):
@@ -181,8 +208,7 @@ def membership_jql(cfg, ws, include):
     nothing to look at.
     """
     project = project_of(cfg, ws)
-    components = components_of(ws)
-    if not project or not components:
+    if not project or not anchor_values(cfg, ws):
         return None
 
     settings = membership_settings(cfg)
@@ -195,14 +221,14 @@ def membership_jql(cfg, ws, include):
             return None
         return f"{project_clause} AND key IN ({', '.join(epic_keys)})"
 
-    # Its own Component always counts.
-    parts = [_component_clause(components)]
+    # Its own anchor always counts.
+    parts = [_anchor_clause(cfg, ws)]
 
     if settings["inherit_from_parent"]:
-        # `parentEpic` reaches Stories, Tasks, Bugs and their nested Sub-tasks.
         inherited = []
         if epic_keys:
-            inherited.append(f"parentEpic IN ({', '.join(epic_keys)})")
+            inherited.append(queries.render(
+                cfg, "membership.inherit.epic", epic_keys=epic_keys))
         tagged = get_tagged_issue_keys(cfg, ws)
         cap = settings["max_parent_keys"]
         if tagged and cap and len(tagged) > cap:
@@ -210,12 +236,16 @@ def membership_jql(cfg, ws, include):
                   f"{ws.get('abbrev', '?')} — not expanding their sub-tasks; "
                   f"raise membership.max_parent_keys to include them)")
         elif tagged:
-            inherited.append(f"parent IN ({', '.join(tagged)})")
+            inherited.append(queries.render(
+                cfg, "membership.inherit.parent", tagged_keys=tagged))
         if inherited:
             clause = " OR ".join(inherited)
             if settings["child_component_wins"]:
-                # A child that names its own Component is judged on that alone.
-                clause = f"({clause}) AND component IS EMPTY"
+                empty_id = ("membership.own_empty.field"
+                            if settings["by"] == "field"
+                            else "membership.own_empty.component")
+                extra = {"field": settings["field"]} if settings["by"] == "field" else {}
+                clause = f"({clause}) AND {queries.render(cfg, empty_id, **extra)}"
             parts.append(f"({clause})")
 
     membership = " OR ".join(parts)
@@ -270,12 +300,12 @@ def scope_jql(cfg, ws, scope_name, overrides=None, days=None):
         return None
 
     options = filters.scope_options(cfg, ws, scope_name, overrides)
-    narrowing = [c for c in (filters.compile_scope(options), legacy) if c]
+    narrowing = [c for c in (filters.compile_scope(options, cfg), legacy) if c]
     if not narrowing:
         return base
     return f"({base}) AND " + " AND ".join(f"({c})" for c in narrowing)
 
 
-def confluence_cql(ws):
+def confluence_cql(ws, cfg=None):
     """The Confluence query for this workstream, built from space + labels."""
-    return filters.build_cql(ws)
+    return filters.build_cql(ws, cfg)

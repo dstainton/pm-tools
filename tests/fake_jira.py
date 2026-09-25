@@ -34,6 +34,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 TOKEN = re.compile(r"""\s*(?:
       (?P<str>"(?:[^"\\]|\\.)*")
     | (?P<num>-?\d+[dhwm]?)
+    | (?P<cf>cf\[\d+\])
     | (?P<ident>[A-Za-z_][\w.\-]*)
     | (?P<punct>!=|>=|<=|[(),=<>])
 )""", re.VERBOSE)
@@ -54,6 +55,8 @@ def tokenize(jql):
             tokens.append(("str", json.loads(match.group("str"))))
         elif match.group("num") is not None:
             tokens.append(("num", match.group("num")))
+        elif match.group("cf") is not None:
+            tokens.append(("ident", match.group("cf")))
         elif match.group("ident") is not None:
             tokens.append(("ident", match.group("ident")))
         else:
@@ -129,9 +132,13 @@ class Parser:
 
     def parse_predicate(self):
         kind, field = self.next()
-        if kind != "ident":
+        if kind == "str":
+            field = str(field)
+        elif kind != "ident":
             raise ValueError(f"expected a field name in JQL, got {field!r}")
         field = field.lower()
+        if field == "epic link":
+            field = "parentepic"
 
         negate = False
         if self.accept_word("not"):
@@ -162,6 +169,8 @@ def _issue_value(issue, field):
         return issue.get("components") or []
     if field == "parentepic":
         return issue.get("parent_epic")
+    if field.startswith("cf["):
+        return (issue.get("fields_extra") or {}).get(field) or []
     if field == "statuscategory":
         return issue.get("status_category")
     if field == "issuetype":

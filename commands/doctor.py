@@ -23,6 +23,7 @@ from core import model_cache
 from core import statuses as status_core
 from core import config_edit
 from core import filters
+from core import queries
 from core import migrations
 from core import model as model_core
 from core import products as product_core
@@ -166,7 +167,7 @@ def _membership_jql(cfg, ws):
     base = ws_core.membership_jql(cfg, ws, "everything")
     if not base:
         return None
-    return f"({base}) AND (statusCategory != Done)"
+    return queries.render(cfg, "doctor.membership_open", base=base)
 
 
 def _check_membership(cfg):
@@ -193,8 +194,7 @@ def _check_membership(cfg):
 
     unclaimed = 0
     for project in _projects_in_play(cfg):
-        jql = (f"project = {filters.quote(project)} "
-               f"AND statusCategory != Done")
+        jql = queries.render(cfg, "coverage.open_in_project", project=project)
         try:
             keys = set(sources.fetch_jira_keys(cfg["jira"], jql))
         except Exception:

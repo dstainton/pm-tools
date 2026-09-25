@@ -20,6 +20,7 @@ from urllib.parse import quote
 
 import requests
 
+from core import queries
 from core.cache import cache_key
 from core.http import retry_after_seconds
 
@@ -866,7 +867,7 @@ def fetch_confluence(cfg, cql, tag_prefix, start_index):
     # Add a date filter so we only get material since the last report.
     since = (dt.date.today()
              - dt.timedelta(days=cfg["lookback_days"])).isoformat()
-    full_cql = f"({cql}) AND lastmodified >= '{since}'"
+    full_cql = queries.render(None, "confluence.window", cql=cql, since=since)
 
     url = f"{cfg['base_url'].rstrip('/')}/rest/api/content/search"
     resp = send("GET",

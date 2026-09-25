@@ -14,7 +14,7 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, filters, model, output, paths, prompts, sources, state,
+    checklist, comments, filters, model, output, paths, prompts, queries, sources, state,
     workstreams, writes,
 )
 from core import products as product_core
@@ -54,7 +54,7 @@ def _needs(issues, cfg):
     return rows[:3]
 
 
-def _risk_cql(ws):
+def _risk_cql(ws, cfg=None):
     """Pages the workstream labelled as risks.
 
     The label is the author's statement. A title that happens to contain
@@ -64,13 +64,12 @@ def _risk_cql(ws):
     risk = next((label for label in labels if label.lower() == "risk"), None)
     space = ws.get("confluence_space")
     if risk and space:
-        return (f"space = {filters.quote(space)} "
-                f"AND label = {filters.quote(risk)}")
-    return workstreams.confluence_cql(ws)
+        return queries.render(cfg, "brief.risk_pages", space=space, label=risk)
+    return workstreams.confluence_cql(ws, cfg)
 
 
 def _risks(cfg, ws):
-    cql = _risk_cql(ws)
+    cql = _risk_cql(ws, cfg)
     if not cql:
         return []
     items, _idx = sources.fetch_confluence(cfg["confluence"], cql, ws["abbrev"], 1)

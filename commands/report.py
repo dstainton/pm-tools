@@ -120,7 +120,7 @@ def prepare(cfg, ws, previous):
     page_opts = page_core.settings(cfg)
     cutoff = previous.get("_ran_at") if isinstance(previous, dict) else None
     got, idx = sources.fetch_confluence(cfg["confluence"],
-                                        workstreams.confluence_cql(ws),
+                                        workstreams.confluence_cql(ws, cfg),
                                         prefix, idx)
     got = page_core.apply_excerpt(got, page_opts, cutoff=cutoff)
     items += got

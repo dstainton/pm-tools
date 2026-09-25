@@ -21,6 +21,7 @@ from commands import lint, ready
 from core.paths import HOME
 from core import blocked as blocked_core
 from core import filters
+from core import queries
 from core import products as product_core
 from core import sources, workstreams, writes
 
@@ -327,9 +328,7 @@ def gather(cfg):
     sprint_items = {}
     for project in projects:
         sprints.extend(sources.fetch_active_sprints(cfg["jira"], project))
-        jql = (f"project = {filters.quote(project)} "
-               f"AND sprint in openSprints() "
-               f"AND statusCategory != Done")
+        jql = queries.render(cfg, "today.in_sprint_open", project=project)
         sprint_items[project] = sources.fetch_jira_detailed(cfg["jira"], jql)
 
     return {

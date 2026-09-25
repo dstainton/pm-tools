@@ -11,7 +11,7 @@ to inspect. Exit 1 when unclaimed open work exists.
 
 import sys
 
-from core import filters, sources, workstreams
+from core import filters, queries, sources, workstreams
 
 
 def classify(issues, claims, component_names, named_components):
@@ -64,8 +64,7 @@ def _claims(cfg, project, streams):
 
 
 def _open_issues(cfg, project):
-    jql = (f"project = {filters.quote(project)} "
-           f"AND statusCategory != Done")
+    jql = queries.render(cfg, "coverage.open_in_project", project=project)
     return sources.fetch_jira_detailed(cfg["jira"], jql)
 
 

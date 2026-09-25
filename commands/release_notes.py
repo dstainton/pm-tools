@@ -11,7 +11,7 @@ When the model is down, the command prints the bullets and says so.
 import datetime as dt
 import sys
 
-from core import comments, filters, model, output, prompts, sources, workstreams
+from core import comments, filters, model, output, prompts, queries, sources, workstreams
 from core import products as product_core
 
 
@@ -28,9 +28,9 @@ def _since(value):
 def _window(since, version):
     parts = []
     if since:
-        parts.append(f'resolved >= "{since}"')
+        parts.append(queries.render(None, "release_notes.since", since=since))
     if version:
-        parts.append(f"fixVersion = {filters.quote(version)}")
+        parts.append(queries.render(None, "release_notes.version", version=version))
     return " AND ".join(parts)
 
 
@@ -73,8 +73,7 @@ def collect(cfg, since, version):
         if project and project not in projects:
             projects.append(project)
     for project in projects:
-        jql = (f"project = {filters.quote(project)} "
-               f"AND statusCategory = Done AND ({window})")
+        jql = queries.render(cfg, "release_notes.done", project=project, window=window)
         for issue in sources.fetch_jira_detailed(cfg["jira"], jql):
             if issue.get("key") in claimed:
                 continue
