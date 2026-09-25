@@ -377,6 +377,7 @@ def _query_report(cfg, only=None):
 def _check_confluence(cfg):
     import datetime as dt
     from core import confluence_tree, filters, pages
+    team = _check_team_page(cfg)
     for ws in cfg.get("workstreams") or []:
         abbrev = ws.get("abbrev") or "?"
         located = confluence_tree.locate_workstream(cfg, ws)
@@ -386,8 +387,21 @@ def _check_confluence(cfg):
             print(f"  confluence      {abbrev} page {named} was not found          warn")
             continue
         if not space and not ws.get("confluence_cql"):
-            print(f"  confluence      {abbrev} has no confluence_space or confluence_page  warn")
+            product = confluence_tree.product_of(cfg, ws)
+            if team and product and confluence_tree.locate_product(cfg, product).get("ancestor_id"):
+                print(f"  confluence      {abbrev}: no folder under the team page is named "
+                      f"for it, so its pages are listed under product "
+                      f"{product.get('abbrev')}  ok")
+            elif team:
+                print(f"  confluence      {abbrev}: no folder under the team page is named "
+                      f"for it. Set confluence_page  warn")
+            else:
+                print(f"  confluence      {abbrev} has no confluence_space or confluence_page  warn")
             continue
+        if (team and not located.get("ancestor_id") and not ws.get("confluence_cql")
+                and space == confluence_tree.team_space(cfg)):
+            print(f"  confluence      {abbrev} reads all of {space}, including other "
+                  f"teams. Remove confluence_space to use its folder  warn")
         try:
             opts = pages.page_settings(cfg)
             types = list(opts["content_types"]) + list(opts["title_only_types"])
@@ -406,24 +420,61 @@ def _check_confluence(cfg):
                         print(f"  confluence      {abbrev} type {content_type}: {err}          warn")
             cql = filters.build_cql(ws, cfg, scope="space", types=accepted or types)
             found = sources.fetch_confluence_results(cfg, cql, since=since, limit=5) if cql else []
-            where = f"{abbrev} {space}"
-            if located.get("ancestor_id"):
-                where += f" under {located['ancestor_id']}"
-            print(f"  confluence      {where}: {len(found)} page(s) in 7 days  ok")
+            print(f"  confluence      {abbrev} {_where(located, space)}: "
+                  f"{len(found)} page(s) in 7 days  ok")
         except Exception as err:  # noqa: BLE001
             print(f"  confluence      {abbrev} {err}                              warn")
     for product in cfg.get("products") or []:
         if not isinstance(product, dict):
             continue
-        if not (product.get("confluence_page") or product.get("confluence_page_id")):
-            continue
         label = product.get("abbrev") or "?"
+        named = product.get("confluence_page") or product.get("confluence_page_id")
+        if not named and not team:
+            continue
         located = confluence_tree.locate_product(cfg, product)
-        if located.get("missing") or not located.get("ancestor_id"):
-            named = product.get("confluence_page") or product.get("confluence_page_id")
+        if named and (located.get("missing") or not located.get("ancestor_id")):
             print(f"  confluence      product {label} page {named} was not found   warn")
             continue
-        print(f"  confluence      product {label} folder {located['ancestor_id']}  ok")
+        if not located.get("ancestor_id"):
+            if confluence_tree.can_match(product):
+                print(f"  confluence      product {label}: no folder under the team page "
+                      f"is named for it. Set confluence_page  warn")
+            continue
+        print(f"  confluence      product {label} "
+              f"{_where(located, located.get('space') or '')}  ok")
+
+
+def _where(located, space):
+    """`in SPACE`, or the folder and how it was found."""
+    if not located.get("ancestor_id"):
+        return f"space {space}"
+    title = located.get("title") or located["ancestor_id"]
+    how = {"matched": "matched by name", "title": "named in config",
+           "page id": "page id"}.get(located.get("how"), "")
+    return f'folder "{title}" ({how})' if how else f'folder "{title}"'
+
+
+def _check_team_page(cfg):
+    """Print the space and team page. True when a team page was found."""
+    from core import confluence_tree
+    if not confluence_tree.has_team_page(cfg):
+        return False
+    raw = str((cfg.get("confluence") or {}).get("space") or "")
+    space = confluence_tree.team_space(cfg)
+    if not space:
+        print(f'  confluence      space "{raw}" was not found. Use the space key  warn')
+        return False
+    if raw != space:
+        print(f'  confluence      space "{raw}" is {space}  ok')
+    root = confluence_tree.team_root_id(cfg)
+    label = confluence_tree.team_page_title(cfg) or confluence_tree.team_page_setting_id(cfg)
+    if not root:
+        print(f'  confluence      team page "{label}" was not found in {space}  warn')
+        return False
+    below = confluence_tree.children(cfg, space, root)
+    print(f'  confluence      team page "{label}": {len(below)} page(s) and folder(s) '
+          f"directly under it  ok")
+    return True
 
 
 def _check_registers(cfg):
@@ -437,7 +488,7 @@ def _check_registers(cfg):
         name = reg.get("name") or reg.get("type")
         if root is None:
             print(f"  registers       {name}: summary page not found — set page_id, "
-                  f"or space and title  warn")
+                  f"or title with under  warn")
             continue
         try:
             listed = registers.list_entries(cfg, reg, root["page_id"])

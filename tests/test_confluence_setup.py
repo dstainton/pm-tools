@@ -45,14 +45,14 @@ class ApplyTests(unittest.TestCase):
         args = Namespace(
             site=None, email=None, token=None, token_env=None,
             confluence_space="TEAM",
-            confluence_root="API Program Services",
+            confluence_team_page="API Program Services",
             confluence_pages=[
                 ("product", "IP", "Integration Platform"),
                 ("workstream", "SDX", "Secure Data Exchange"),
             ])
         text, notes = setup.apply_confluence_settings(TEXT, args)
         self.assertIn('space: "TEAM"', text)
-        self.assertIn('root_title: "API Program Services"', text)
+        self.assertIn('team_page: "API Program Services"', text)
         self.assertIn('base_url: "https://example.atlassian.net/wiki"', text)
         self.assertIn('confluence_page: "Integration Platform"', text)
         self.assertIn('confluence_page: "Secure Data Exchange"', text)
@@ -67,19 +67,21 @@ class ApplyTests(unittest.TestCase):
     def test_questions_skip_a_workstream_that_already_has_a_space(self):
         answers = iter(["TEAM", "API Program Services", "Integration Platform",
                         "Secure Data Exchange"])
-        args = Namespace(confluence_space=None, confluence_root=None)
-        with patch("commands.setup._ask", lambda _prompt: next(answers)):
+        args = Namespace(confluence_space=None, confluence_team_page=None)
+        with patch("commands.setup._ask", lambda _prompt: next(answers)), \
+                patch("commands.setup._matched_folders", return_value={}):
             setup._ask_confluence(TEXT, args)
         self.assertEqual(args.confluence_space, "TEAM")
-        self.assertEqual(args.confluence_root, "API Program Services")
+        self.assertEqual(args.confluence_team_page, "API Program Services")
         self.assertEqual(args.confluence_pages, [
             ("product", "IP", "Integration Platform"),
             ("workstream", "SDX", "Secure Data Exchange"),
         ])
 
     def test_a_blank_space_skips_the_folders(self):
-        args = Namespace(confluence_space=None, confluence_root=None)
-        with patch("commands.setup._ask", return_value=""):
+        args = Namespace(confluence_space=None, confluence_team_page=None)
+        with patch("commands.setup._ask", return_value=""), \
+                patch("commands.setup._matched_folders", return_value={}):
             setup._ask_confluence(TEXT, args)
         self.assertIsNone(args.confluence_space)
         self.assertFalse(hasattr(args, "confluence_pages"))
@@ -134,7 +136,7 @@ class HelpTests(unittest.TestCase):
                     site=None, email=None, token=None, token_env=None,
                     project=None, model_endpoint=None, model_name=None,
                     model_api_key=None, model_api_key_env=None,
-                    confluence_space=None, confluence_root=None,
+                    confluence_space=None, confluence_team_page=None,
                     open_browser=False))
             with open(path, encoding="utf-8") as fh:
                 self.assertEqual(fh.read(), TEXT)

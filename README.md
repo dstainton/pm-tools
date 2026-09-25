@@ -201,32 +201,54 @@ workstreams:
     confluence_space: "SDX"
 ```
 
-**Everyone shares one space, with a page or folder for each product and
-workstream.** Say which space and which top page the team uses, then give
-each product and workstream the title of its folder:
+**Several teams share one space, and each team has its own team page.**
+Under your team page are pages or folders for your products, and inside
+those, pages or folders for workstreams. Say which space you use and the
+title of your team page:
 
 ```yaml
 confluence:
-  space: "APS"
-  root_title: "API Program Services"
-
-products:
-  - name: "Integration Platform"
-    abbrev: "IP"
-    confluence_page: "Integration Platform"
-
-workstreams:
-  - name: "Secure Data Exchange"
-    abbrev: "SDX"
-    product: "IP"
-    components: ["Secure Data Exchange"]
-    confluence_page: "Secure Data Exchange"
+  space: "POSM Chapter"                          # the space name or its key
+  team_page: "API Program Services (APS) Team"
 ```
 
-Each workstream then sees only the pages inside its own folder. Pages in the
-product folder that are not inside a workstream folder appear once, under
-the product. If two pages have the same title, use `confluence_page_id`
-with the page's number instead. The number is in the page's web address.
+That is often all you need. pm-tools looks under your team page for a page
+or folder whose title matches each product and workstream, by its name or
+its short name. For example, a folder called "Secure Data Exchange (SDX)" is
+used for a product named "Secure Data Exchange" or with the short name
+`SDX`. Other teams' pages in the same space are left out.
+
+When a folder's title does not match, name it on the product or workstream:
+
+```yaml
+products:
+  - name: "Secure Data Exchange"
+    abbrev: "SDX"
+    confluence_page: "SDX Home"
+```
+
+In the report:
+
+- Each workstream shows the pages inside its own folder.
+- Pages in a product folder that are not inside a workstream folder appear
+  once, under the product.
+- Pages under the team page that are not in any product or workstream
+  folder appear once near the top, as team pages.
+
+To leave out folders or pages that don't belong in a report, such as
+personal notes or work in progress, list their titles. Everything inside
+them is left out too:
+
+```yaml
+confluence:
+  skip: ["Life Events", "SM WIP"]
+```
+
+If two pages have the same title, use `confluence_page_id` with the page's
+number instead. The number is in the page's web address. To stop pm-tools
+looking for a folder for one product or workstream, set
+`confluence_page: false`. Run `pm doctor` to see which folder was found for
+each one.
 
 ### Decisions, risks, and ADRs
 
@@ -237,14 +259,16 @@ your report, with their status.
 ```yaml
 registers:
   - type: risk              # risk, decision, or adr
-    name: "IP risks"
+    name: "SDX risks"
     title: "Risks"          # the title of the register page or folder
-    under: "Integration Platform"
-    product: IP
+    product: SDX
 ```
 
-- `under` says which folder to look in. Use it when several folders each
-  have a page called "Risks".
+- `under` names the folder to look in, when you need to. Without it, pm-tools looks in the
+  register's own workstream or product folder first, then directly under
+  your team page, so another team's "Risks" page is never used. `under` can
+  also name a page elsewhere in the space, for a register shared by several
+  teams.
 - `product` or `workstream` says where the register appears in the report.
   Leave both off to show it at the top, for the whole portfolio.
 - `page_id` can be used instead of `title` and `under`.
@@ -258,7 +282,6 @@ registers:
   - type: decision
     name: "All decisions"
     title: "Decisions"
-    under: "API Program Services"
     split: label
 ```
 

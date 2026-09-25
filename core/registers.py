@@ -62,12 +62,51 @@ def _resolve_under(cfg, reg, space):
     if not title:
         return ""
     from core import confluence_tree
+    label = reg.get("name") or "register"
     ancestor = confluence_tree._search_under(cfg, space, title)
     found = confluence_tree.find_titled(
-        cfg, space, title, under_id=ancestor or None, label=reg.get("name") or "register")
+        cfg, space, title, under_id=ancestor or None, label=label, quiet=bool(ancestor))
+    if not found and ancestor:
+        found = confluence_tree.find_titled(cfg, space, title, label=label)
     if not found:
         return None
     return str(found.get("id") or "")
+
+
+def _entry(cfg, kind, abbrev):
+    for item in cfg.get(kind) or []:
+        if isinstance(item, dict) and item.get("abbrev") == abbrev:
+            return item
+    return None
+
+
+def _find_in_team(cfg, reg, space, title):
+    """`title` in the workstream folder, then the product folder, then the team page."""
+    from core import confluence_tree
+    parents = []
+    ws = _entry(cfg, "workstreams", reg.get("workstream")) if reg.get("workstream") else None
+    if ws:
+        parents.append(confluence_tree.locate_workstream(cfg, ws))
+    product_abbrev = reg.get("product") or (ws or {}).get("product")
+    product = _entry(cfg, "products", product_abbrev) if product_abbrev else None
+    if product:
+        parents.append(confluence_tree.locate_product(cfg, product))
+    ids = [row["ancestor_id"] for row in parents
+           if row.get("ancestor_id") and row.get("space") == space]
+    root = confluence_tree.team_root_id(cfg)
+    if root:
+        ids.append(root)
+    label = reg.get("name") or "register"
+    for parent in dict.fromkeys(ids):
+        found = confluence_tree.find_titled(cfg, space, title, under_id=parent,
+                                            label=label, quiet=True)
+        if found:
+            return found
+    if root:
+        confluence_tree._note(
+            cfg, f'_{label}: no page titled "{title}" under the team page. '
+                 f'Set under, or page_id._')
+    return None
 
 
 def resolve_root(cfg, reg):
@@ -76,8 +115,10 @@ def resolve_root(cfg, reg):
     `page_id` wins. `under` or `under_id` finds `title` as a direct child of
     that page or folder when one exists, and otherwise as the only page of
     that title anywhere under it. That is how a team-level "Risks" page stays
-    distinct from a "Risks" page inside a product folder. With no `under`, a
-    title lookup stays on the content API so a page found that way still
+    distinct from a "Risks" page inside a product folder. With no `under` and
+    a `confluence.team_page`, `title` is looked for in the register's
+    workstream folder, then its product folder, then the team page. With
+    neither, a title lookup stays on the content API so a page found that way still
     resolves, and a folder title is tried when that lookup misses.
     """
     if reg.get("page_id"):
@@ -98,6 +139,10 @@ def resolve_root(cfg, reg):
         if not raw:
             return None
         return _normalise_root(cfg, raw)
+    from core import confluence_tree
+    if confluence_tree.has_team_page(cfg) and space == confluence_tree.team_space(cfg):
+        raw = _find_in_team(cfg, reg, space, title)
+        return _normalise_root(cfg, raw) if raw else None
 
     def fetch():
         block = sources._confluence_block(cfg)

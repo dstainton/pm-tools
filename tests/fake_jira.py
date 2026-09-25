@@ -12,6 +12,7 @@ It speaks just enough of the real thing to run `pm` for real:
   GET  /rest/agile/1.0/board
   GET  /rest/agile/1.0/board/<ID>/sprint
   GET  /wiki/rest/api/content/search        Confluence pages, filtered by space
+  GET  /wiki/rest/api/space                 Confluence spaces, paged
   POST /v1/chat/completions                 an OpenAI-compatible model reply
 
 The searches are answered by evaluating the JQL `pm` generates against an
@@ -355,6 +356,7 @@ class _Handler(BaseHTTPRequestHandler):
     backlog = []
     components = {}
     pages = []
+    spaces = []
     fields = DEFAULT_FIELDS
     sprints = {}
     users = DEFAULT_USERS
@@ -480,6 +482,16 @@ class _Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/wiki/rest/api/content/search"):
             return self._confluence()
+
+        if path.rstrip("/") == "/wiki/rest/api/space":
+            query = parse_qs(parsed.query)
+            start = int((query.get("start") or ["0"])[0] or 0)
+            limit = int((query.get("limit") or ["25"])[0] or 25)
+            rows = self.spaces[start:start + limit]
+            payload = {"results": rows, "size": len(rows), "start": start}
+            if start + len(rows) < len(self.spaces):
+                payload["_links"] = {"next": f"/wiki/rest/api/space?start={start + len(rows)}"}
+            return self._send(payload)
 
         remote = re.match(r"/rest/api/3/issue/([^/]+)/remotelink/?$", path)
         if remote:
@@ -797,10 +809,11 @@ class FakeJira:
     """Run the stand-in on a spare port for the length of a test."""
 
     def __init__(self, backlog, components=None, pages=None,
-                 fields=None, sprints=None, users=None):
+                 fields=None, sprints=None, users=None, spaces=None):
         _Handler.backlog = link_parents(backlog)
         _Handler.components = components or {}
         _Handler.pages = pages or []
+        _Handler.spaces = spaces or []
         _Handler.fields = fields if fields is not None else DEFAULT_FIELDS
         _Handler.users = users if users is not None else list(DEFAULT_USERS)
         _Handler.sprints = sprints or {

@@ -198,10 +198,12 @@ def _validate_page_id(label, value):
 
 
 def _validate_confluence_ref(label, entry):
-    for key in ("confluence_page", "confluence_space"):
-        value = entry.get(key)
-        if value is not None and not isinstance(value, str):
-            sys.exit(f"{label}: `{key}` must be text.")
+    page = entry.get("confluence_page")
+    if page is not None and page is not False and not isinstance(page, str):
+        sys.exit(f"{label}: `confluence_page` must be a page title, or false.")
+    space = entry.get("confluence_space")
+    if space is not None and not isinstance(space, str):
+        sys.exit(f"{label}: `confluence_space` must be text.")
     if "confluence_page_id" in entry:
         _validate_page_id(f"{label}: `confluence_page_id`", entry.get("confluence_page_id"))
 
@@ -277,11 +279,16 @@ def _validate_confluence_tree(cfg):
     block = cfg.get("confluence")
     if not isinstance(block, dict):
         return
-    for key in ("space", "root_title"):
+    for key in ("space", "team_page", "root_title"):
         if block.get(key) is not None and not isinstance(block.get(key), str):
             sys.exit(f"`confluence.{key}` must be text.")
-    if "root_page_id" in block:
-        _validate_page_id("`confluence.root_page_id`", block.get("root_page_id"))
+    for key in ("team_page_id", "root_page_id"):
+        if key in block:
+            _validate_page_id(f"`confluence.{key}`", block.get(key))
+    skip = block.get("skip")
+    if skip is not None and not (
+            isinstance(skip, list) and all(isinstance(item, (str, int)) for item in skip)):
+        sys.exit("`confluence.skip` must be a list of page titles or page ids.")
 
 
 def validate(cfg):

@@ -228,6 +228,10 @@ def excluded(page, cfg, skip_ids=None):
     """True for the tool's own published reports and register pages."""
     if str(page.get("page_id") or "") in set(skip_ids or []):
         return True
+    from core import confluence_tree
+    if confluence_tree.skipped(cfg, page.get("title"), page.get("page_id"),
+                               page.get("ancestor_titles"), page.get("ancestor_ids")):
+        return True
     if "pm-report" in [str(label).lower() for label in (page.get("labels") or [])]:
         return True
     publish = ((cfg.get("publish") or {}).get("confluence") or {})

@@ -361,7 +361,14 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
+def _docs_under(pages, heading):
+    block = docs_block(pages)
+    if not block:
+        return ""
+    return block.replace("#### Documentation changed", heading, 1)
+
+
+def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm", team_pages=None):
     today = dt.date.today().isoformat()
     from core import audience
     name = audience.display_name(cfg, who)
@@ -388,10 +395,20 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
         lines.append("")
         lines.append(at_a_glance(groups, rows))
         lines.append("")
+        block = _docs_under(team_pages, "### Team pages changed")
+        if block:
+            lines.extend([block, ""])
         append_registers(lines, records, who, since, lambda scope: not scope)
+    else:
+        block = _docs_under(team_pages, "## Team pages changed")
+        if block:
+            lines.extend([block, ""])
     body_by = {ws["abbrev"]: body for ws, body in sections}
     row_by = {ws["abbrev"]: row for ws, row in rows}
     for product, streams in groups or [({}, [ws for ws, _row in rows])]:
+        product_docs = [it for ws in streams
+                        for it in (row_by.get(ws["abbrev"]) or {}).get("items") or []
+                        if it.get("product_only")]
         if show_products and product:
             lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
             lines.append("")
@@ -400,6 +417,9 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
                 lines.append(f"Product Goal: {goal}")
                 lines.append("")
             lines.extend(_increment_lines(cfg, product))
+            block = _docs_under(product_docs, "### Product pages changed")
+            if block:
+                lines.extend([block, ""])
             abbrev = product.get("abbrev")
             append_registers(
                 lines, records, who, since,
@@ -422,7 +442,8 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
                     lines.append(epic_block(epic))
                     lines.append("")
             loose = [it for it in row.get("items") or []
-                     if it.get("source") in ("Confluence", "SharePoint") and not it.get("epic")]
+                     if it.get("source") in ("Confluence", "SharePoint") and not it.get("epic")
+                     and not (show_products and product and it.get("product_only"))]
             block = docs_block(loose)
             if block and heading != "###":
                 block = block.replace("#### ", "### ", 1)

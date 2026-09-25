@@ -307,9 +307,10 @@ def build_parser():
         "--model-api-key-env", default=None,
         help="Write the model API key as ${ENV:NAME}")
     p_setup.add_argument("--confluence-space", default=None,
-                         help="Shared Confluence space key, written when blank")
-    p_setup.add_argument("--confluence-root", default=None,
-                         help="Team page title in that space, written when blank")
+                         help="Shared Confluence space key or name, written when blank")
+    p_setup.add_argument("--confluence-team-page", "--confluence-root",
+                         dest="confluence_team_page", default=None,
+                         help="Your team page title in that space, written when blank")
     p_setup.add_argument("--yes", action="store_true",
                          help="Write the flags and do not prompt or install")
     p_setup.set_defaults(func=setup.run, needs_config=False)

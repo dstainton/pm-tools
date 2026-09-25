@@ -197,7 +197,7 @@ class DoctorTreeTests(unittest.TestCase):
         shown = buf.getvalue()
         self.assertIn("SDX page Missing was not found", shown)
         self.assertNotIn("0 page(s) in 7 days  ok", shown)
-        self.assertIn("product IP folder 200", shown)
+        self.assertIn('product IP folder "Integration Platform" (named in config)', shown)
 
 
 class SplitScopeTests(unittest.TestCase):

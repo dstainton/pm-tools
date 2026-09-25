@@ -34,8 +34,9 @@ and replace the placeholders:
 
 A token can be `${ENV:SOME_VAR}` instead of a literal. Confluence, SharePoint,
 and Teams stay off until you want them. `pm setup --section confluence` records
-one shared space and the team page. A space set on a workstream, with no page,
-still reads that whole space. `pm update` does not insert those keys.
+the shared space (its name or key) and your team page, then shows the product
+and workstream folders it found under the team page. A space set on a
+workstream, with no page, still reads that whole space. `pm update` does not insert those keys.
 
 ```text
 pm doctor

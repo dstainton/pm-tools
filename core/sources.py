@@ -505,6 +505,72 @@ def fetch_confluence_spaces(cfg):
     return out
 
 
+def find_confluence_space(cfg, wanted):
+    """`{key, name}` for a space given its key or its name, or None.
+
+    Reads every page of the space list, so a site with hundreds of spaces
+    still finds the one you named. The name match ignores capitals.
+    """
+    block = _confluence_block(cfg)
+    base = (block.get("base_url") or "").rstrip("/")
+    text = str(wanted or "").strip()
+    if not base or not text:
+        return None
+
+    def fetch():
+        found = []
+        start = 0
+        for _page in range(40):
+            resp = send(
+                "GET", f"{base}/rest/api/space",
+                params={"limit": 100, "start": start},
+                auth=(block.get("email"), block.get("api_token")),
+                headers={"Accept": "application/json"}, timeout=30)
+            resp.raise_for_status()
+            payload = resp.json()
+            batch = payload.get("results") or []
+            for space in batch:
+                found.append({"key": space.get("key") or "",
+                              "name": space.get("name") or ""})
+            if not batch or not (payload.get("_links") or {}).get("next"):
+                break
+            start += len(batch)
+        return found
+
+    from core import pages as page_core
+    spaces = page_core.cache_fetch(cfg, "confluence-spaces", (base,), fetch) or []
+    for space in spaces:
+        if space["key"] == text:
+            return space
+    folded = text.casefold()
+    named = [space for space in spaces if space["name"].casefold() == folded]
+    if len(named) == 1:
+        return named[0]
+    keyed = [space for space in spaces if space["key"].casefold() == folded]
+    return keyed[0] if len(keyed) == 1 else None
+
+
+def list_confluence_children(cfg, space, parent_id):
+    """Pages and folders directly under one page, whatever their age."""
+    if not space or not parent_id:
+        return []
+
+    def run(types):
+        cql = " AND ".join([
+            queries.render(cfg, "confluence.space", space=space),
+            queries.render(cfg, "confluence.parent", page_id=str(parent_id)),
+            queries.render(cfg, "confluence.types", types=list(types)),
+        ])
+        return fetch_confluence_results(cfg, cql, since="1970-01-01", limit=100)
+
+    try:
+        return run(("page", "folder"))
+    except Exception as err:  # noqa: BLE001 — Cloud names the rejected type in a 400
+        if "400" not in str(err):
+            raise
+        return run(("page",))
+
+
 def models_url(endpoint):
     """`/v1/models` for a base URL or a chat-completions URL."""
     url = (endpoint or "").rstrip("/")
