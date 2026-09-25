@@ -374,6 +374,41 @@ def _query_report(cfg, only=None):
     return 0
 
 
+def _check_confluence(cfg):
+    import datetime as dt
+    from core import filters, pages
+    for ws in cfg.get("workstreams") or []:
+        abbrev = ws.get("abbrev") or "?"
+        space = ws.get("confluence_space")
+        if not space:
+            print(f"  confluence      {abbrev} has no confluence_space          warn")
+            continue
+        try:
+            opts = pages.page_settings(cfg)
+            types = list(opts["content_types"]) + list(opts["title_only_types"])
+            cql = filters.build_cql(ws, cfg, scope="space", types=types)
+            since = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+            found = sources.fetch_confluence_results(cfg, cql, since=since, limit=5) if cql else []
+            print(f"  confluence      {abbrev} {space}: {len(found)} page(s) in 7 days  ok")
+        except Exception as err:  # noqa: BLE001
+            print(f"  confluence      {abbrev} {err}                              warn")
+
+
+def _check_registers(cfg):
+    from core import registers
+    raw = cfg.get("registers") or []
+    if not raw:
+        print("  registers       none configured                              warn")
+        return
+    for reg in registers.settings(cfg):
+        root = registers.resolve_root(cfg, reg)
+        name = reg.get("name") or reg.get("type")
+        if root is None:
+            print(f"  registers       {name}: summary page not found — set page_id  warn")
+        else:
+            print(f"  registers       {name}: {root.get('title')}                     ok")
+
+
 def run(cfg, args):
     prompt_id = getattr(args, "prompts", None)
     if prompt_id is not None:
@@ -417,6 +452,8 @@ def run(cfg, args):
     problems += _check_statuses(cfg)
     problems += _check_model(cfg)
     problems += _check_cache(cfg)
+    _check_confluence(cfg)
+    _check_registers(cfg)
 
     if getattr(args, "discover_fields", False):
         if fields:

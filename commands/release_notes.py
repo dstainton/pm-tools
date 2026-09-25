@@ -45,6 +45,8 @@ def _row(product, ws, issue):
         "url": issue.get("url") or "",
         "updated": issue.get("updated"),
         "comments": [],
+        "epic": issue.get("epic") or "",
+        "labels": list(issue.get("labels") or []),
     }
 
 
@@ -98,7 +100,7 @@ def _attach_comments(cfg, rows, since):
         comments.attach(cfg, jira, group, cutoff)
 
 
-def bullet_lines(rows, comment_budget=6000):
+def bullet_lines(rows, comment_budget=6000, level="pm"):
     """Markdown bullets grouped by product, then workstream."""
     if not rows:
         return ["_No done issues in that window._", ""]
@@ -128,7 +130,22 @@ def bullet_lines(rows, comment_budget=6000):
             lines.append("")
             used = 0
             omitted = 0
-            for issue in stream["issues"]:
+            if level == "leadership":
+                by_epic = {}
+                for issue in stream["issues"]:
+                    by_epic.setdefault(issue.get("epic") or "Not under an Epic", []).append(issue)
+                for epic, issues in by_epic.items():
+                    lines.append(f"- {epic} — {len(issues)} done this window")
+                lines.append("")
+                continue
+            shown = stream["issues"]
+            if level == "partner":
+                shown = [issue for issue in shown
+                         if "partner-visible" in [str(l).lower() for l in issue.get("labels") or []]
+                         or "partner-visible" in str(issue.get("epic") or "").lower()]
+            for issue in shown:
+                if issue.get("epic"):
+                    lines.append(f"**{issue['epic']}**")
                 lines.append(f"- {issue['key']}: {issue['summary']}")
                 wrote = False
                 for line in issue.get("comments") or []:
@@ -162,7 +179,7 @@ def draft(cfg, bullets):
     return raw.strip()
 
 
-def render(since, version, rows, prose, comment_budget=6000):
+def render(since, version, rows, prose, comment_budget=6000, level="pm"):
     bits = []
     if since:
         bits.append(f"since {since}")
@@ -174,7 +191,7 @@ def render(since, version, rows, prose, comment_budget=6000):
         f"_{window}. The model does not choose which issues are included._",
         "",
     ]
-    bullets = bullet_lines(rows, comment_budget)
+    bullets = bullet_lines(rows, comment_budget, level)
     if prose:
         lines.append(prose)
         lines.append("")
@@ -197,9 +214,11 @@ def run(cfg, args):
     print("Gathering done issues ...")
     rows = collect(cfg, since, version)
     budget = comments.settings(cfg)["section_chars"]
-    bullets = bullet_lines(rows, budget)
+    from core import audience
+    level = audience.level(cfg, args)
+    bullets = bullet_lines(rows, budget, level)
     prose = draft(cfg, bullets) if rows else None
-    text = render(since, version, rows, prose, budget)
+    text = render(since, version, rows, prose, budget, level)
     path = output.place(
         cfg, f"release_notes_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

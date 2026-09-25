@@ -87,6 +87,7 @@ def gather(cfg, audience, window=None):
     for product, group in product_core.group_workstreams(cfg, streams):
         product_issues = []
         risks = []
+        product_pages = []
         for ws in group:
             jql = workstreams.scope_jql(cfg, ws, "lint")
             issues = (sources.fetch_jira_detailed(cfg["jira"], jql)
@@ -97,8 +98,11 @@ def gather(cfg, audience, window=None):
             for issue in issues:
                 issue["workstream"] = ws["abbrev"]
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
-            page_since = window["start"] if window and window.get("explicit") else None
+            page_since = window["start"] if window and window.get("start") else None
             risks.extend(_risks(cfg, ws, since=page_since))
+            from core import pages as page_core
+            page_window = {"start": page_since} if page_since else (window or {})
+            product_pages.extend(page_core.gather(cfg, ws, window=page_window))
         items = _as_items(product_issues)
         key = product.get("abbrev") or "UNASSIGNED"
         prev_snap = prev.get(key) or {}
@@ -112,18 +116,22 @@ def gather(cfg, audience, window=None):
             "change": state.build_change_block(new, changed, dropped, first),
             "first": first,
             "risks": risks[:3],
+            "pages": product_pages[:5],
+            "registers": [],
             "new": len(new),
             "changed": len(changed),
             "dropped": len(dropped),
         })
     found, _skip = registers.gather(cfg, window or {"start": None}, prev)
+    for section in sections:
+        section["registers"] = found
     snapshot["_registers"] = registers.snapshot(found)
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
     return sections, snapshot, last
 
 
-def render_prep(audience, sections, last):
+def render_prep(audience, sections, last, level="pm"):
     today = dt.date.today()
     since = f"since {last}" if last else "first time with this audience"
     lines = [
@@ -131,6 +139,9 @@ def render_prep(audience, sections, last):
         f"_{today.strftime(f'%A {today.day} %B')} · {since}_",
         "",
     ]
+    if level == "partner":
+        lines.append("_Prep for a partner meeting — internal, do not forward._")
+        lines.append("")
     for section in sections:
         product = section["product"]
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
@@ -156,12 +167,20 @@ def render_prep(audience, sections, last):
                   if k not in ("overdue", "blocked")]
         lines.append("### What you owe the room")
         lines.append("")
-        if not owed:
+        if level == "leadership":
+            overdue = sum(1 for kind, _issue in section["needs"] if kind == "overdue")
+            blocked = sum(1 for kind, _issue in section["needs"] if kind == "blocked")
+            lines.append(f"- {overdue} overdue, {blocked} blocked.")
+        elif not owed:
             lines.append("_Nothing you owe this room._")
-        for kind, issue in owed:
-            lines.append(
-                f"- {issue['key']}: {issue.get('summary')} "
-                f"({kind} — {today_cmd.describe_action(kind, issue)})")
+        else:
+            for kind, issue in owed:
+                if level == "partner":
+                    lines.append(f"- {issue.get('summary')} ({kind})")
+                else:
+                    lines.append(
+                        f"- {issue['key']}: {issue.get('summary')} "
+                        f"({kind} — {today_cmd.describe_action(kind, issue)})")
         lines.append("")
         lines.append("### What you need from the room")
         lines.append("")
@@ -176,13 +195,31 @@ def render_prep(audience, sections, last):
         lines.append("")
         if not section["risks"]:
             lines.append("_No recent risk pages._")
+        from core import render as render_core
         for risk in section["risks"]:
-            from core import render as render_core
             title = risk.get("title") or "page"
             link = render_core.markdown_link(title, risk.get("url"))
-            sentence = sources.short(risk.get("detail") or "", 200)
+            sentence = risk.get("summary") or sources.short(risk.get("detail") or "", 200)
             lines.append(f"- {link}" + (f" — {sentence}" if sentence else ""))
         lines.append("")
+        docs = section.get("pages") or []
+        if level == "pm" and docs:
+            lines.append("### Documents changed")
+            lines.append("")
+            for page in docs[:5]:
+                title = page.get("title") or "page"
+                link = render_core.markdown_link(title, page.get("url"))
+                summary = page.get("summary") or ""
+                lines.append(f"- {link}" + (f" — {summary}" if summary else ""))
+            lines.append("")
+        from core import report_render
+        records = [row for row in (section.get("registers") or [])
+                   if (row.get("scope") or {}).get("product") in (None, product.get("abbrev"))
+                   or not (row.get("scope") or {})]
+        if records:
+            report_render.append_registers(
+                lines, records, level, "",
+                lambda scope: True)
     return "\n".join(lines)
 
 
@@ -190,14 +227,18 @@ def run_prep(cfg, args):
     audience = getattr(args, "for_audience", None) or getattr(args, "for", None)
     if not audience:
         sys.exit("Which audience? e.g.  pm brief --for \"Monthly portfolio review\"")
-    print(f"Preparing the brief for {audience} ...")
+    from core import audience as audience_core
+    previous = state.load_state(_state_path(cfg, audience))
+    level = getattr(args, "audience", None) or previous.get("_audience_level") or "pm"
+    print(f"Preparing the brief for {audience} ({level}) ...")
     from core import window as window_core
     try:
         window = window_core.resolve(cfg, args, default_start=None, projects=[])
     except window_core.WindowError as exc:
         sys.exit(str(exc))
     sections, snapshot, last = gather(cfg, audience, window)
-    text = render_prep(audience, sections, last)
+    text = render_prep(audience, sections, last, level)
+    snapshot["_audience_level"] = level
     path = output.place(
         cfg, f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

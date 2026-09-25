@@ -33,25 +33,35 @@ def _warm_pages(cfg):
     page_summaries.fill(cfg, collected)
 
 
-def _warm_report(cfg):
+def _warm_report(cfg, levels):
     from commands import report as report_cmd
+    from core import products as product_core
     state_path = output.place(
         cfg, cfg["output"].get("state_file", "report_state.json"), None)
     previous = state.load_state(state_path)
     prepared = []
+    from core import window as window_core
+    window = window_core.resolve(cfg, None, default_start=None, projects=[])
     for ws in cfg["_workstreams"]:
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        from core import window as window_core
-        window = window_core.resolve(cfg, None, default_start=None, projects=[])
         prepared.append((ws, report_cmd.prepare(cfg, ws, previous, window)))
-    model.announce(cfg["model"], len(prepared), "pm warm report")
-    for ws, row in prepared:
-        model.tick(cfg["model"], ws["abbrev"])
-        model.infer_report_section(
-            cfg["model"], cfg["output"]["audience"],
-            ws, row["items"], row["change_block"],
-            comment_budget=comments.settings(cfg)["section_chars"],
-            cfg=cfg)
+    sections = []
+    if "pm" in levels or "leadership" in levels:
+        model.announce(cfg["model"], len(prepared), "pm warm report")
+        for ws, row in prepared:
+            model.tick(cfg["model"], ws["abbrev"])
+            body = model.infer_report_section(
+                cfg["model"], cfg["output"]["audience"],
+                ws, row["items"], row["change_block"],
+                comment_budget=comments.settings(cfg)["section_chars"],
+                cfg=cfg)
+            sections.append((ws, body))
+    groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
+    if "leadership" in levels and sections:
+        report_cmd._audience_summaries(cfg, groups, prepared, sections, "leadership")
+    if "partner" in levels:
+        report_cmd._audience_summaries(cfg, groups, prepared, sections or [
+            (ws, "") for ws, _row in prepared], "partner")
 
 
 def _warm_inbox(cfg):
@@ -75,8 +85,18 @@ def run(cfg, args):
         print("Warming page summaries ...")
         _warm_pages(cfg)
     if wanted["report"]:
+        from core import audience
+        raw = getattr(args, "audience", None)
+        if raw:
+            levels = [part.strip() for part in str(raw).split(",") if part.strip()]
+            bad = [part for part in levels if part not in audience.LEVELS]
+            if bad:
+                raise SystemExit(
+                    f"Unknown audience {bad[0]}. Use {', '.join(audience.LEVELS)}.")
+        else:
+            levels = list(audience.settings(cfg)["warm"] or ["pm"])
         print("Warming report ...")
-        _warm_report(cfg)
+        _warm_report(cfg, levels)
     if wanted["inbox"]:
         print("Warming inbox ...")
         _warm_inbox(cfg)

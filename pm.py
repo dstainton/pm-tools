@@ -407,6 +407,9 @@ def build_parser():
                          help="With --debrief, create the action tickets")
     p_brief.add_argument("--publish", action="store_true",
                          help="Also send the brief to Confluence and/or Teams")
+    p_brief.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                         help="How deep the prep goes (default: the level saved "
+                              "for this meeting, else pm)")
     p_brief.add_argument("--since", metavar="YYYY-MM-DD",
                          help="Start of the window. Does not move last-met memory.")
     p_brief.add_argument("--sprint", nargs="?", const="open", default=None,
@@ -453,6 +456,8 @@ def build_parser():
                         help="Warm pm report")
     p_warm.add_argument("--deep", action="store_true",
                         help="Same model work as --review")
+    p_warm.add_argument("--audience",
+                        help="Comma-separated levels to warm (default: audiences.warm)")
     p_warm.add_argument("--pages", action="store_true",
                         help="Summarise Confluence pages changed in the report window")
     p_warm.add_argument("--inbox", action="store_true",
@@ -506,6 +511,9 @@ def build_parser():
                          help="Include issues resolved on or after this date")
     p_notes.add_argument("--version", metavar="NAME",
                          help="Include issues in this fixVersion")
+    p_notes.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                         help="pm lists items, leadership lists Epics, "
+                              "partner lists visible work")
     p_notes.set_defaults(func=release_notes.run, needs_config=True)
 
     p_update = sub.add_parser(
