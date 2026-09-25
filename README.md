@@ -321,7 +321,14 @@ you walked away.
 pm doctor
 pm doctor --discover-fields
 pm doctor --discover-fields --yes
+pm doctor --prompts
+pm doctor --queries
 ```
+
+`pm doctor --prompts` and `--queries` show the prompts and the Jira queries
+this install is using, including anything set under `prompts:` or `queries:`
+in the config. The defaults and how to override them are in
+`docs/CUSTOMISING.md`.
 
 One command that names its own fix: config, Jira login, projects, custom-field
 IDs, membership (including unclaimed open work), the project's status list,
