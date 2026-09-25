@@ -115,6 +115,42 @@ def add_list_entry(text, key, entry, render, before_key=None, create=False):
     return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
 
 
+def set_entry_scalar(text, key, abbrev, field, value):
+    """Set one scalar on a products or workstreams entry when it is missing or empty.
+
+    Returns (text, status) where status is `written`, `kept`, or `missing`.
+    A value that is already set is left alone.
+    """
+    lines = text.splitlines()
+    start, end = find_block(lines, key)
+    if start is None:
+        return text, "missing"
+    pattern = re.compile(rf"^(\s*){re.escape(field)}:\s*(.*?)(\s+#.*)?$")
+    quoted = _yaml_double(value)
+    for found, first, last in items(lines, start, end):
+        if not found or found.lower() != str(abbrev).lower():
+            continue
+        for index in range(first, last + 1):
+            match = pattern.match(lines[index])
+            if not match:
+                continue
+            raw = match.group(2).strip().strip("\"'")
+            if raw:
+                return text, "kept"
+            comment = match.group(3) or ""
+            lines[index] = f"{match.group(1)}{field}: {quoted}{comment}"
+            return "\n".join(lines) + "\n", "written"
+        indent = "    "
+        for index in range(first, last + 1):
+            body = re.match(r"^(\s+)\S", lines[index])
+            if body and not lines[index].lstrip().startswith("-"):
+                indent = body.group(1)
+                break
+        lines.insert(last + 1, f"{indent}{field}: {quoted}")
+        return "\n".join(lines) + "\n", "written"
+    return text, "missing"
+
+
 def set_scalar(text, block, key, value, replace=()):
     """Set one scalar when it is missing, empty, or one of `replace`.
 

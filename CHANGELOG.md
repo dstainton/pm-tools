@@ -31,6 +31,10 @@
   abbreviation on its labels. A page that matches more than one register is
   listed once: on the workstream, then the product, then the portfolio. A
   workstream `confluence_space` with no page still reads the whole space.
+  `pm setup --section confluence` writes the shared space and folder titles
+  when they are blank. `pm doctor` checks those folders. `pm products add`
+  and `pm workstreams add` take `--confluence-page`. `pm update` does not
+  insert these keys.
 - `pm setup` probes the local servers in `local_models.endpoints`, lists
   the models each one is serving, and recommends one that fits installed
   RAM (`config_version` 7). When none answer, it can install Ollama or

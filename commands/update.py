@@ -16,6 +16,10 @@ starts `pm update --config-only` so the new code applies the new steps.
 
 This command does not load config first. A file that is one version behind
 may not pass validation until the migration has run.
+
+Optional Confluence tree keys (a shared space, a folder title, registers)
+are not inserted. An existing file keeps working. The template comments
+show the shape, and `pm setup --section confluence` can write the space.
 """
 
 import difflib

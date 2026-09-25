@@ -170,6 +170,36 @@ class DedupeTests(unittest.TestCase):
         self.assertEqual([row["name"] for row in kept], ["IP risks"])
 
 
+class DoctorTreeTests(unittest.TestCase):
+    def test_a_missing_folder_is_a_warning(self):
+        import io
+        from contextlib import redirect_stdout
+        from commands import doctor
+        jira = FakeJira([], pages=_tree())
+        jira.__enter__()
+        self.addCleanup(lambda: jira.__exit__(None, None, None))
+        cfg = {
+            "confluence": {
+                "base_url": jira.url + "/wiki", "email": "a", "api_token": "t",
+                "space": "APS", "root_title": "API Program Services",
+            },
+            "products": [{
+                "abbrev": "IP", "name": "Integration Platform",
+                "confluence_page": "Integration Platform",
+            }],
+            "workstreams": [
+                {"abbrev": "SDX", "confluence_page": "Missing", "product": "IP"},
+            ],
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            doctor._check_confluence(cfg)
+        shown = buf.getvalue()
+        self.assertIn("SDX page Missing was not found", shown)
+        self.assertNotIn("0 page(s) in 7 days  ok", shown)
+        self.assertIn("product IP folder 200", shown)
+
+
 class SplitScopeTests(unittest.TestCase):
     def test_a_workstream_label_beats_a_product_label(self):
         cfg = {

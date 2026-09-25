@@ -5,8 +5,8 @@
 
 Checks, in order: the config, Jira credentials, every product/workstream
 project, the custom-field IDs lint depends on, membership (including
-unclaimed work), the project's status list, the local model, and both
-caches (Jira fetches and model replies).
+unclaimed work), the project's status list, the local model, both
+caches (Jira fetches and model replies), Confluence folders, and registers.
 
 `--discover-fields` lists fields whose names look like story points, start
 date, acceptance criteria or Epic Link, and prints a YAML snippet.
@@ -381,8 +381,12 @@ def _check_confluence(cfg):
         abbrev = ws.get("abbrev") or "?"
         located = confluence_tree.locate_workstream(cfg, ws)
         space = located.get("space") or ""
+        if located.get("missing"):
+            named = ws.get("confluence_page") or ws.get("confluence_page_id")
+            print(f"  confluence      {abbrev} page {named} was not found          warn")
+            continue
         if not space and not ws.get("confluence_cql"):
-            print(f"  confluence      {abbrev} has no confluence_space          warn")
+            print(f"  confluence      {abbrev} has no confluence_space or confluence_page  warn")
             continue
         try:
             opts = pages.page_settings(cfg)
@@ -402,9 +406,24 @@ def _check_confluence(cfg):
                         print(f"  confluence      {abbrev} type {content_type}: {err}          warn")
             cql = filters.build_cql(ws, cfg, scope="space", types=accepted or types)
             found = sources.fetch_confluence_results(cfg, cql, since=since, limit=5) if cql else []
-            print(f"  confluence      {abbrev} {space}: {len(found)} page(s) in 7 days  ok")
+            where = f"{abbrev} {space}"
+            if located.get("ancestor_id"):
+                where += f" under {located['ancestor_id']}"
+            print(f"  confluence      {where}: {len(found)} page(s) in 7 days  ok")
         except Exception as err:  # noqa: BLE001
             print(f"  confluence      {abbrev} {err}                              warn")
+    for product in cfg.get("products") or []:
+        if not isinstance(product, dict):
+            continue
+        if not (product.get("confluence_page") or product.get("confluence_page_id")):
+            continue
+        label = product.get("abbrev") or "?"
+        located = confluence_tree.locate_product(cfg, product)
+        if located.get("missing") or not located.get("ancestor_id"):
+            named = product.get("confluence_page") or product.get("confluence_page_id")
+            print(f"  confluence      product {label} page {named} was not found   warn")
+            continue
+        print(f"  confluence      product {label} folder {located['ancestor_id']}  ok")
 
 
 def _check_registers(cfg):
@@ -417,7 +436,8 @@ def _check_registers(cfg):
         root = registers.resolve_root(cfg, reg)
         name = reg.get("name") or reg.get("type")
         if root is None:
-            print(f"  registers       {name}: summary page not found — set page_id  warn")
+            print(f"  registers       {name}: summary page not found — set page_id, "
+                  f"or space and title  warn")
             continue
         try:
             listed = registers.list_entries(cfg, reg, root["page_id"])

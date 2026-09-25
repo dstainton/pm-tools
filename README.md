@@ -393,7 +393,10 @@ A workstream is three lines of config. No JQL, anywhere:
 `components` are exact Jira **Component** names, and `jira.project` says which
 project to look in (a workstream can override it with its own `project:`).
 A workstream can list several Components, and optionally say where its documents
-live (`confluence_space`, `confluence_labels`, `sharepoint_query`).
+live (`confluence_space`, `confluence_page`, `confluence_labels`,
+`sharepoint_query`). `confluence_space` on its own reads that whole space.
+`confluence_page` is a folder in one shared space (`confluence.space`).
+`pm setup --section confluence` can write that space and the team page.
 
 ### Adding and removing one
 

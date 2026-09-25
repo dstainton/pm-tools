@@ -40,6 +40,15 @@ def _entry_lines(entry, indent="  "):
     goal = (entry.get("product_goal") or "").strip()
     if goal:
         body.append(f'{indent}  product_goal: {quoted(goal)}')
+    if entry.get("confluence_space"):
+        body.append(f'{indent}  confluence_space: '
+                    f'{quoted(entry["confluence_space"])}')
+    if entry.get("confluence_page"):
+        body.append(f'{indent}  confluence_page: '
+                    f'{quoted(entry["confluence_page"])}')
+    if entry.get("confluence_page_id"):
+        body.append(f'{indent}  confluence_page_id: '
+                    f'{quoted(entry["confluence_page_id"])}')
     return body
 
 
@@ -112,6 +121,10 @@ def _add(cfg, args):
     goal = getattr(args, "goal", None)
     if goal:
         entry["product_goal"] = goal
+    for key in ("confluence_space", "confluence_page", "confluence_page_id"):
+        value = getattr(args, key, None)
+        if value:
+            entry[key] = value
 
     path = cfg["_config_path"]
     with open(path, "r", encoding="utf-8") as fh:

@@ -58,9 +58,32 @@ def _flags_help():
         "--token-env JIRA_TOKEN --project APS --yes\n"
         "  pm setup --section model --model-endpoint http://127.0.0.1:11434/v1 "
         "--model-name qwen3:8b\n"
+        "  pm setup --section confluence --confluence-space APS "
+        "--confluence-root \"API Program Services\"\n"
         "One section later:  pm setup --section jira|model|workstreams|confluence\n"
         "A non-interactive run never installs Ollama or Lemonade."
     )
+
+
+def _confluence_hint():
+    return (
+        "Confluence is optional. One shared space:\n"
+        "  pm setup --section confluence --confluence-space APS "
+        "--confluence-root \"API Program Services\"\n"
+        "Then set confluence_page on a product or workstream, or pass\n"
+        "  --confluence-page to pm products add / pm workstreams add.\n"
+        "A space on its own still reads that whole space. Registers are\n"
+        "edited in the config; the template has a commented example."
+    )
+
+
+def _real(value):
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if text.startswith("<") and text.endswith(">"):
+        return False
+    return True
 
 
 def _jira_cfg(text_path):
@@ -131,6 +154,97 @@ def apply_known(text, args):
                 notes.append(f"model.api_key {status} (env {key_env})")
             else:
                 notes.append(f"model.api_key {status}")
+    text, extra = apply_confluence_settings(text, args)
+    notes.extend(extra)
+    return text, notes
+
+
+def _ask_confluence(text, args):
+    """Ask for one shared space and folder titles. Blank answers skip."""
+    import yaml
+    loaded = yaml.safe_load(text) or {}
+    block = loaded.get("confluence") if isinstance(loaded.get("confluence"), dict) else {}
+    print("Confluence")
+    print("  One shared space, or a space on each workstream.")
+    print("  Leave a prompt blank to skip it. A value already set is left alone.")
+    if not _real(block.get("space")) and not getattr(args, "confluence_space", None):
+        space = _ask("Shared space key (blank to skip): ")
+        if space:
+            args.confluence_space = space
+    if (getattr(args, "confluence_space", None) or _real(block.get("space"))) \
+            and not _real(block.get("root_title")) \
+            and not getattr(args, "confluence_root", None):
+        root = _ask("Team page title (blank to skip): ")
+        if root:
+            args.confluence_root = root
+    if not (getattr(args, "confluence_space", None) or _real(block.get("space"))):
+        return
+    pages = []
+    for kind, rows in (("product", loaded.get("products") or []),
+                       ("workstream", loaded.get("workstreams") or [])):
+        for row in rows:
+            if not isinstance(row, dict) or not row.get("abbrev"):
+                continue
+            if _real(row.get("confluence_page")) or _real(row.get("confluence_page_id")) \
+                    or _real(row.get("confluence_space")):
+                continue
+            title = _ask(f"{kind} {row['abbrev']} folder title (blank to skip): ")
+            if title:
+                pages.append((kind, row["abbrev"], title))
+    if pages:
+        args.confluence_pages = pages
+
+
+def apply_confluence_settings(text, args):
+    """Write a shared space, the team page, and folder titles when blank."""
+    notes = []
+    space = getattr(args, "confluence_space", None)
+    root = getattr(args, "confluence_root", None)
+    pages = getattr(args, "confluence_pages", None) or []
+    if not (space or root or pages):
+        return text, notes
+    import yaml
+    loaded = yaml.safe_load(text) or {}
+    jira = loaded.get("jira") if isinstance(loaded.get("jira"), dict) else {}
+    site = getattr(args, "site", None)
+    if site:
+        wiki = site if str(site).startswith("http") else f"https://{site}.atlassian.net"
+        wiki = wiki.rstrip("/")
+        if not wiki.endswith("/wiki"):
+            wiki += "/wiki"
+    else:
+        base = str(jira.get("base_url") or "").rstrip("/")
+        wiki = (base + "/wiki") if _real(base) and not base.endswith("/wiki") else base
+    email = getattr(args, "email", None) or (jira.get("email") if _real(jira.get("email")) else "")
+    token = ""
+    if getattr(args, "token_env", None):
+        token = "${{ENV:{0}}}".format(args.token_env)
+    elif getattr(args, "token", None):
+        token = args.token
+    elif _real(jira.get("api_token")):
+        token = jira.get("api_token")
+    placeholders = {
+        "base_url": ("https://<YOUR_ORG>.atlassian.net/wiki",),
+        "email": ("<YOUR_LOGIN_EMAIL>",),
+        "api_token": ("<YOUR_CONFLUENCE_API_TOKEN>",),
+    }
+    for key, value in (("base_url", wiki), ("email", email), ("api_token", token)):
+        if not value:
+            continue
+        text, status = config_edit.set_scalar(
+            text, "confluence", key, value, replace=placeholders[key])
+        notes.append(f"confluence.{key} {status}")
+    if space:
+        text, status = config_edit.set_scalar(text, "confluence", "space", space)
+        notes.append(f"confluence.space {status}")
+    if root:
+        text, status = config_edit.set_scalar(text, "confluence", "root_title", root)
+        notes.append(f"confluence.root_title {status}")
+    for kind, abbrev, title in pages:
+        list_key = "products" if kind == "product" else "workstreams"
+        text, status = config_edit.set_entry_scalar(
+            text, list_key, abbrev, "confluence_page", title)
+        notes.append(f"{list_key} {abbrev} confluence_page {status}")
     return text, notes
 
 
@@ -275,6 +389,8 @@ def run(args):
             getattr(args, "model_name", None),
             getattr(args, "model_api_key", None),
             getattr(args, "model_api_key_env", None),
+            getattr(args, "confluence_space", None),
+            getattr(args, "confluence_root", None),
             section]):
         sys.exit(_flags_help())
 
@@ -306,6 +422,9 @@ def run(args):
     discover = section == "model" or (interactive and section is None)
     if discover:
         _discover_models(text, args, interactive)
+
+    if interactive and section in (None, "confluence"):
+        _ask_confluence(text, args)
 
     text, notes = apply_known(text, args)
     _write(dest, text)
@@ -343,3 +462,8 @@ def run(args):
     print("Next: pm doctor")
     if section:
         print(f"Section: {section}")
+    if section == "confluence" and not interactive \
+            and not getattr(args, "confluence_space", None) \
+            and not getattr(args, "confluence_root", None) \
+            and not getattr(args, "confluence_pages", None):
+        print(_confluence_hint())
