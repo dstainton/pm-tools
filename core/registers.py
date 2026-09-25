@@ -62,9 +62,12 @@ def _resolve_under(cfg, reg, space):
     if not title:
         return ""
     from core import confluence_tree
+    label = reg.get("name") or "register"
     ancestor = confluence_tree._search_under(cfg, space, title)
     found = confluence_tree.find_titled(
-        cfg, space, title, under_id=ancestor or None, label=reg.get("name") or "register")
+        cfg, space, title, under_id=ancestor or None, label=label, quiet=bool(ancestor))
+    if not found and ancestor:
+        found = confluence_tree.find_titled(cfg, space, title, label=label)
     if not found:
         return None
     return str(found.get("id") or "")

@@ -73,6 +73,22 @@ def has_team_page(cfg):
     return bool(team_page_title(cfg) or team_page_setting_id(cfg))
 
 
+def skip_list(cfg):
+    raw = _block(cfg).get("skip") or []
+    if isinstance(raw, (str, int)):
+        raw = [raw]
+    return {str(item).strip() for item in raw if str(item).strip()}
+
+
+def skipped(cfg, title, page_id=None, ancestor_titles=(), ancestor_ids=()):
+    """True when this page, or a page above it, is in `confluence.skip`."""
+    skip = skip_list(cfg)
+    if not skip:
+        return False
+    names = [title, page_id, *(ancestor_titles or []), *(ancestor_ids or [])]
+    return any(str(name) in skip for name in names if name)
+
+
 def find_titled(cfg, space, title, under_id=None, label="Confluence", quiet=False):
     """The page or folder named `title`.
 
@@ -152,7 +168,8 @@ def children(cfg, space, parent_id):
         _note(cfg, f"_Confluence: could not list the pages under {parent_id} ({err})._")
         rows = []
     cache[key] = [{"id": str(row.get("id") or ""), "title": row.get("title") or "",
-                   "type": row.get("type") or "page"} for row in rows if row.get("id")]
+                   "type": row.get("type") or "page"} for row in rows
+                  if row.get("id") and not skipped(cfg, row.get("title"), row.get("id"))]
     return cache[key]
 
 

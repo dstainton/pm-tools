@@ -29,13 +29,32 @@ def _page(page_id, title, parents, kind="page", when=None):
             "ancestors": [{"id": pid, "title": name} for pid, name in parents]}
 
 
+PM = ("160", "APS PM Artifacts")
+LIFE = ("170", "Life Events")
+CST = ("20", "Connected Services Teams")
+
+
 def _space():
     return [
+        _page("20", CST[1], [], "folder", OLD),
+        _page("21", "Decision log", [CST], when=OLD),
+        _page("30", "DSS Teams and the Matrix", []),
+        _page("31", "BCDS Pulse Checks", []),
         _page("100", APS[1], [], when=OLD),
+        _page("160", PM[1], [APS], "folder", OLD),
+        _page("161", "PM checklist", [APS, PM]),
         _page("110", "APS API Portal", [APS], "folder", OLD),
-        _page("120", SDX[1], [APS], "folder", OLD),
         _page("130", "Integration Toolkit (ITK)", [APS], "folder", OLD),
-        _page("140", "Team charter", [APS]),
+        _page("120", SDX[1], [APS], "folder", OLD),
+        _page("180", "Other APS Artifacts", [APS], "folder", OLD),
+        _page("190", "SM WIP", [APS], "folder", OLD),
+        _page("191", "SM draft", [APS, ("190", "SM WIP")]),
+        _page("140", "Master To-Do List", [APS]),
+        _page("141", "Vacation Support - Drew - 2025-12-19", [APS]),
+        _page("170", LIFE[1], [APS], "folder", OLD),
+        _page("171", "Life event note", [APS, LIFE]),
+        _page("142", "Wildcard SSL renewal: production downtime", [APS]),
+        _page("143", "APS F27Q2 Branch Update", [APS]),
         _page("150", "Risks", [APS], when=OLD),
         _page("121", "SDX design notes", [APS, SDX]),
         _page("122", "Risks", [APS, SDX], when=OLD),
@@ -56,6 +75,13 @@ def _spaces():
     return rows
 
 
+TEAM_LEVEL = [
+    "PM checklist", "SM draft", "Master To-Do List",
+    "Vacation Support - Drew - 2025-12-19", "Life event note",
+    "Wildcard SSL renewal: production downtime", "APS F27Q2 Branch Update",
+]
+
+
 class TeamPageTests(unittest.TestCase):
     def setUp(self):
         self.jira = FakeJira([], pages=_space(), spaces=_spaces())
@@ -72,7 +98,7 @@ class TeamPageTests(unittest.TestCase):
             "pages": {"summaries": False, "follow_jira_links": False,
                       "match_epics_with_model": False},
             "products": [
-                {"abbrev": "PORTAL", "name": "APS API Portal"},
+                {"abbrev": "PORTAL", "name": "API Portal"},
                 {"abbrev": "SDX", "name": "Secure Data Exchange"},
                 {"abbrev": "ITK", "name": "Integration Toolkit"},
             ],
@@ -140,7 +166,7 @@ class TeamPageTests(unittest.TestCase):
         groups = [(p, [ws for ws, _r in prepared if ws["product"] == p["abbrev"]])
                   for p in self.cfg["products"]]
         report_cmd._attach_product_pages(self.cfg, groups, prepared, self.window, set())
-        self.assertEqual([page["title"] for page in team], ["Team charter"])
+        self.assertEqual(sorted(page["title"] for page in team), sorted(TEAM_LEVEL))
         by = {ws["abbrev"]: row for ws, row in prepared}
         core = [item["title"] for item in by["CORE"]["items"]]
         self.assertEqual(core.count("Core runbook"), 1)
@@ -148,23 +174,53 @@ class TeamPageTests(unittest.TestCase):
         sdx_product = [item["title"] for item in by["CORE"]["items"] if item.get("product_only")]
         self.assertEqual(sdx_product, ["SDX design notes"])
         every = [item["title"] for _ws, row in prepared for item in row["items"]]
-        for title in ("DES plan", "DES toolkit notes", "Portal launch plan", "Team charter"):
+        for title in ("DES plan", "DES toolkit notes", "Portal launch plan",
+                      "Master To-Do List", "DSS Teams and the Matrix"):
             self.assertNotIn(title, every)
 
         sections = [(ws, "Body.") for ws, _r in prepared]
         text = report_render.render_pm(
             self.cfg, [g for g in groups if g[1]], prepared, sections, self.window, "",
             team_pages=team)
-        self.assertEqual(text.count("Team charter"), 1)
+        self.assertEqual(text.count("Master To-Do List"), 1)
         self.assertEqual(text.count("SDX design notes"), 1)
         glance = text.index("## At a glance")
         product = text.index("## Secure Data Exchange (SDX)")
         workstream = text.index("### Core services (CORE)")
-        self.assertLess(glance, text.index("Team charter"))
-        self.assertLess(text.index("Team charter"), product)
+        self.assertLess(glance, text.index("Master To-Do List"))
+        self.assertLess(text.index("Master To-Do List"), product)
         self.assertLess(product, text.index("SDX design notes"))
         self.assertLess(text.index("SDX design notes"), workstream)
         self.assertLess(workstream, text.index("Core runbook"))
+
+    def test_skipped_folders_and_pages_are_never_read(self):
+        self.cfg["confluence"]["skip"] = [
+            "Life Events", "SM WIP", "Vacation Support - Drew - 2025-12-19"]
+        prepared = self._quiet(self._prepared)
+        team = report_cmd.team_pages(self.cfg, prepared, self.window, set())
+        titles = sorted(page["title"] for page in team)
+        self.assertEqual(titles, sorted(set(TEAM_LEVEL) - {
+            "Life event note", "SM draft", "Vacation Support - Drew - 2025-12-19"}))
+
+    def test_a_short_name_used_by_several_folders_is_not_guessed(self):
+        aps = {"abbrev": "APS", "name": "API Platform"}
+        sm = {"abbrev": "SM", "name": "Service management"}
+        self.cfg["workstreams"] += [aps, sm]
+        self.assertEqual(confluence_tree.locate_workstream(self.cfg, aps)["ancestor_id"], "")
+        self.assertEqual(confluence_tree.locate_workstream(self.cfg, sm)["ancestor_id"], "190")
+        self.cfg["confluence"]["skip"] = ["SM WIP"]
+        self.cfg.pop("_confluence_located")
+        self.cfg.pop("_confluence_children")
+        self.assertEqual(confluence_tree.locate_workstream(self.cfg, sm)["ancestor_id"], "")
+
+    def test_under_may_name_a_page_outside_the_team_page(self):
+        missing = self._quiet(registers.resolve_root, self.cfg, {
+            "type": "decision", "name": "Decisions", "title": "Decision log"})
+        self.assertIsNone(missing)
+        found = self._quiet(registers.resolve_root, self.cfg, {
+            "type": "decision", "name": "Decisions", "title": "Decision log",
+            "under": "Connected Services Teams"})
+        self.assertEqual(found["page_id"], "21")
 
     def test_a_register_title_is_found_in_its_own_folder_first(self):
         product = self._quiet(registers.resolve_root, self.cfg, {
@@ -195,6 +251,9 @@ class TeamPageConfigTests(unittest.TestCase):
         config._validate_confluence_tree({"confluence": {
             "space": "POSM Chapter", "team_page": "APS Team", "team_page_id": "100"}})
         config._validate_confluence_ref("Product SDX", {"confluence_page": False})
+        config._validate_confluence_tree({"confluence": {"skip": ["Life Events", 170]}})
+        with self.assertRaises(SystemExit):
+            config._validate_confluence_tree({"confluence": {"skip": "Life Events"}})
         with self.assertRaises(SystemExit):
             config._validate_confluence_ref("Product SDX", {"confluence_page": 5})
         with self.assertRaises(SystemExit):

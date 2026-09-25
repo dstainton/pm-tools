@@ -285,6 +285,10 @@ def _validate_confluence_tree(cfg):
     for key in ("team_page_id", "root_page_id"):
         if key in block:
             _validate_page_id(f"`confluence.{key}`", block.get(key))
+    skip = block.get("skip")
+    if skip is not None and not (
+            isinstance(skip, list) and all(isinstance(item, (str, int)) for item in skip)):
+        sys.exit("`confluence.skip` must be a list of page titles or page ids.")
 
 
 def validate(cfg):
