@@ -407,6 +407,61 @@ workstreams:
     sharepoint_query: "Integration Toolkit"
 
 # ----------------------------------------------------------------------------
+#  5m. Prompts, queries and conventions
+# ----------------------------------------------------------------------------
+#  The words sent to the model, and the JQL and CQL sent to Jira and
+#  Confluence, have named defaults in the code. Override one here when your
+#  Jira is set up differently. `pm doctor --prompts` and `pm doctor --queries`
+#  show the effective text. See docs/CUSTOMISING.md for every default.
+#
+#  prompts:
+#    report.section:
+#      append: |
+#        8. Name a Jira Component only if the Material names it.
+#    # values.headings renames a section. The seven roles stay put.
+#    # refine.titles:
+#    #   file: prompts/refine-titles.txt
+#    #   based_on: 1
+#  queries:
+#    # status.review: {text: 'status = "In Review"'}
+#    # membership.inherit.epic: {text: '"Epic Link" IN ({epic_keys})'}
+#  conventions:
+#    # bug_types: [Bug]
+#    # blocked_by_links: ["is blocked by", "blocked by"]
+#    # blocks_links: [blocks]
+#    # note_issuetypes: [Story, Task, Bug]
+#    # note_issuetype: Story
+#    # action_issuetypes: [Story, Task]
+#    # action_issuetype: Task
+#    # risk_label: risk
+#  Prompt ids:
+#    report.section — weekly workstream section
+#    report.section_tail — last line of that user message
+#    brief.debrief — decisions and actions from meeting notes
+#    inbox.file_note — where a captured note belongs
+#    refine.titles — clearer titles
+#    refine.criteria — acceptance criteria
+#    refine.tail — last line of a refine user message
+#    review.titles — why a title is unclear
+#    review.criteria — what acceptance criteria are missing
+#    review.titles_tail — last line of the titles user message
+#    review.criteria_tail — last line of the criteria user message
+#    release_notes.prose — done work turned into prose
+#  Query ids:
+#    status.open status.done status.in-progress status.todo
+#    sprint.open sprint.future sprint.none sprint.by_id
+#    assignee.me assignee.unassigned assignee.assigned
+#    membership.anchor.component membership.anchor.label membership.anchor.field
+#    membership.epics membership.tagged
+#    membership.inherit.epic membership.inherit.parent
+#    membership.own_empty.component membership.own_empty.field
+#    coverage.open_in_project doctor.membership_open
+#    release_notes.done release_notes.since release_notes.version
+#    today.in_sprint_open
+#    confluence.space confluence.labels confluence.window
+#    brief.risk_pages
+
+# ----------------------------------------------------------------------------
 #  7. Output (used by `pm report`)
 # ----------------------------------------------------------------------------
 output:

@@ -253,6 +253,10 @@ def build_parser():
                                "points, start date, or acceptance criteria")
     p_doctor.add_argument("--yes", "-y", action="store_true",
                           help="With --discover-fields, write blank field IDs")
+    p_doctor.add_argument("--prompts", nargs="?", const="all", metavar="ID",
+                          help="Show where each prompt comes from, or one prompt's text")
+    p_doctor.add_argument("--queries", nargs="?", const="all", metavar="ID",
+                          help="Show each query and check it against Jira")
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
     p_setup = sub.add_parser(
