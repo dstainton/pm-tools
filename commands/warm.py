@@ -10,7 +10,7 @@ and `pm ready --deep` ask the same questions, so warming one warms the other.
 """
 
 from commands import inbox, review
-from core import comments, model, output, state
+from core import comments, model, output, progress, state
 
 
 def _wanted(args):
@@ -48,13 +48,17 @@ def _warm_report(cfg, levels):
     window = window_core.resolve(cfg, None, default_start=None, projects=[])
     from core import registers
     found_registers, skip_ids = registers.gather(cfg, window, previous)
-    for ws in cfg["_workstreams"]:
-        print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        row = report_cmd.prepare(cfg, ws, previous, window, skip_ids=skip_ids)
+    streams = cfg["_workstreams"]
+    for index, ws in enumerate(streams, 1):
+        label = progress.numbered(index, len(streams), f"{ws['name']} ({ws['abbrev']})")
+        row = report_cmd.prepare(cfg, ws, previous, window, skip_ids=skip_ids,
+                                progress_label=label)
         row["registers"] = found_registers
         report_cmd.stamp_register_entries(row)
         prepared.append((ws, row))
     groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
+    if report_cmd._will_read_product_pages(cfg):
+        progress.start("Reading product pages")
     report_cmd._attach_product_pages(cfg, groups, prepared, window, skip_ids)
     sections = []
     if "pm" in levels or "leadership" in levels:

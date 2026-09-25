@@ -24,7 +24,7 @@ import time
 
 import requests
 
-from core import model_cache, prompts
+from core import model_cache, progress, prompts
 
 
 # ---------------------------------------------------------------------------
@@ -174,30 +174,30 @@ def attach(cfg, mode="default"):
 
 
 def announce(model_cfg, count, what):
-    """Print the call count and an estimate before a multi-call run."""
+    """Print the call count and an estimate before the model is asked."""
     model_cfg["_progress_total"] = count
     model_cfg["_progress_done"] = 0
-    if count < 2:
+    if count < 1:
         return
+    noun = "model call" if count == 1 else "model calls"
     seconds, measured = _read_rate(model_cfg)
     if seconds:
         minutes = max(1, int(round(count * seconds / 60.0)))
         when = f", {measured}" if measured else ""
-        print(f"{what} — {count} model calls. "
+        print(f"{what} — {count} {noun}. "
               f"Last measured: {seconds:.0f}s per call (pm doctor{when}). "
               f"Estimate: ~{minutes} minute{'s' if minutes != 1 else ''}.")
     else:
-        print(f"{what} — {count} model calls. "
+        print(f"{what} — {count} {noun}. "
               f"Run `pm doctor` once to time the model on this machine.")
 
 
 def tick(model_cfg, detail):
-    """One line of progress for a run `announce` already counted."""
+    """Name the model call that is about to start, counted when there are several."""
     total = int(model_cfg.get("_progress_total") or 0)
     done = int(model_cfg.get("_progress_done") or 0) + 1
     model_cfg["_progress_done"] = done
-    if total >= 2:
-        print(f"  [{done}/{total}] {detail}")
+    progress.start(progress.numbered(done, total, detail))
 
 
 def _read_rate(model_cfg):
@@ -253,6 +253,9 @@ def call_model(model_cfg, system_prompt, user_content, temperature=None,
     payload = build_payload(model_cfg, system_prompt, user_content, temperature)
     model_cfg["_calls"] = int(model_cfg.get("_calls") or 0) + 1
     headers = _auth_headers(model_cfg)
+    owned = not progress.busy()
+    if owned:
+        progress.start("Asking the model", hold=True)
     try:
         resp = requests.post(model_cfg["endpoint"], json=payload,
                              headers=headers, timeout=model_cfg["timeout"])
@@ -262,6 +265,9 @@ def call_model(model_cfg, system_prompt, user_content, temperature=None,
     except requests.RequestException as err:
         return (f"_Could not reach the model endpoint ({err}). "
                 f"Is the local OpenAI-compatible server running?_")
+    finally:
+        if owned:
+            progress.finish()
     if use_cache:
         model_cache.store(model_cfg, system_prompt, user_content, used, text)
     return text
@@ -393,8 +399,12 @@ def ping(model_cfg):
     """Cheap connectivity check for `pm doctor`. Returns (ok, detail)."""
     import time
     start = time.monotonic()
-    text = call_model(model_cfg, "Reply with the single word pong and nothing else.",
-                      "pong", use_cache=False)
+    progress.start("Checking the model")
+    try:
+        text = call_model(model_cfg, "Reply with the single word pong and nothing else.",
+                          "pong", use_cache=False)
+    finally:
+        progress.finish()
     elapsed = time.monotonic() - start
     thinking = "thinking on" if model_cfg.get("enable_thinking") else "thinking off"
     if text.startswith("_Could not reach"):

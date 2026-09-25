@@ -12,7 +12,7 @@ import sys
 from core import metrics as core
 from core import output
 from core import products as product_core
-from core import sources, statuses, workstreams
+from core import progress, sources, statuses, workstreams
 
 
 def _history(cfg, project, jql):
@@ -35,9 +35,14 @@ def gather(cfg, weeks, today=None):
     groups = product_core.group_workstreams(cfg, streams)
     out = []
     seen_projects = {}
+    seen = 0
     for product, group in groups:
         product_rows = []
         for ws in group:
+            seen += 1
+            progress.start(progress.numbered(
+                seen, len(streams),
+                f"Measuring {ws.get('name')} ({ws.get('abbrev')})"))
             project = workstreams.project_of(cfg, ws)
             if project and project not in seen_projects:
                 seen_projects[project] = sources.fetch_active_sprints(
@@ -53,6 +58,7 @@ def gather(cfg, weeks, today=None):
             bundle["workstream_name"] = ws.get("name")
             product_rows.append(bundle)
         out.append((product, product_rows))
+    progress.finish()
     return out
 
 

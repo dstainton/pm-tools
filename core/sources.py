@@ -174,6 +174,9 @@ def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
         page = data.get("issues") or []
         issues.extend(page)
         token = data.get("nextPageToken")
+        if len(issues) > len(page):
+            from core import progress
+            progress.note(f"{len(issues)} issues")
         if not token or not page:
             break
         if max_items and len(issues) >= max_items:

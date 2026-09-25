@@ -91,6 +91,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core import cache as fetch_cache                           # noqa: E402
 from core import model as model_core                           # noqa: E402
+from core import progress                                      # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
 from core.paths import config_file                          # noqa: E402
 from core.products import filter_by_product                    # noqa: E402
@@ -649,7 +650,8 @@ def main():
     if scope_bits:
         print(f"(scope: {' / '.join(scope_bits)})\n")
 
-    args.func(cfg, args)
+    with progress.running():
+        args.func(cfg, args)
 
 
 if __name__ == "__main__":

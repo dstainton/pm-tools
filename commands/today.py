@@ -288,9 +288,15 @@ def gather(cfg):
     projects = []
     seen_projects = set()
 
+    from core import progress
+    seen = 0
     for product, group in groups:
         product_ready = {"ready": 0, "total": 0, "streams": []}
         for ws in group:
+            seen += 1
+            progress.start(progress.numbered(
+                seen, len(streams),
+                f"{ws.get('name')} ({ws.get('abbrev')})"))
             project = workstreams.project_of(cfg, ws)
             if project and project not in seen_projects:
                 seen_projects.add(project)
@@ -326,12 +332,14 @@ def gather(cfg):
 
     sprints = []
     sprint_items = {}
+    if projects:
+        progress.start("Reading the open sprint")
     for project in projects:
         sprints.extend(sources.fetch_active_sprints(cfg["jira"], project))
         jql = queries.render(cfg, "today.in_sprint_open", project=project)
         sprint_items[project] = sources.fetch_jira_detailed(cfg["jira"], jql)
 
-    return {
+    gathered = {
         "open_items": open_items,
         "moved": moved,
         "ready_gaps": ready_gaps,
@@ -343,6 +351,8 @@ def gather(cfg):
         "products": len(groups),
         "streams": len(streams),
     }
+    progress.finish()
+    return gathered
 
 
 def _open_sprint_end(sprints, today=None):

@@ -14,7 +14,7 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, conventions, filters, model, output, paths, prompts, queries, registers, sources, state,
+    checklist, comments, conventions, filters, model, output, paths, progress, prompts, queries, registers, sources, state,
     workstreams, writes,
 )
 from core import products as product_core
@@ -92,10 +92,14 @@ def gather(cfg, audience, window=None):
     last = prev.get("_last")
     snapshot = {}
     sections = []
+    seen = 0
     for product, group in product_core.group_workstreams(cfg, streams):
         product_issues = []
         product_pages = []
         for ws in group:
+            seen += 1
+            name = progress.numbered(seen, len(streams), f"{ws.get('name')} ({ws.get('abbrev')})")
+            progress.start(f"{name} — reading Jira")
             jql = workstreams.scope_jql(cfg, ws, "lint")
             issues = (sources.fetch_jira_detailed(cfg["jira"], jql)
                       if jql else [])
@@ -108,6 +112,7 @@ def gather(cfg, audience, window=None):
             page_since = window["start"] if window and window.get("start") else None
             from core import pages as page_core
             page_window = {"start": page_since} if page_since else (window or {})
+            progress.start(f"{name} — reading Confluence")
             product_pages.extend(page_core.gather(cfg, ws, window=page_window))
         items = _as_items(product_issues)
         from core import epics as epic_core
@@ -148,6 +153,8 @@ def gather(cfg, audience, window=None):
             "changed": len(changed),
             "dropped": len(dropped),
         })
+    if cfg.get("registers"):
+        progress.start("Reading registers")
     found, _skip = registers.gather(cfg, window or {"start": None}, prev)
     from core import page_summaries
     for section in sections:
@@ -161,6 +168,7 @@ def gather(cfg, audience, window=None):
     snapshot["_registers"] = registers.saved_memory(cfg, found)
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
+    progress.finish()
     return sections, snapshot, last
 
 
@@ -474,6 +482,7 @@ def run_debrief(cfg, args):
     audience = getattr(args, "for_audience", None) or "meeting"
     with open(notes, encoding="utf-8") as fh:
         text = fh.read()
+    progress.start(f"Writing the debrief for {audience}")
     raw = model.call_model(
         cfg["model"], prompts.get(cfg, "brief.debrief"),
         f"{_catalogue(cfg)}\n\nNotes:\n{text}\n\nReturn the JSON object now.")

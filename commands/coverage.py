@@ -125,7 +125,8 @@ def run(cfg, args):
     projects = _projects(cfg)
     reports = []
     for project in projects:
-        print(f"Checking coverage in {project} ...")
+        from core import progress
+        progress.start(f"Checking coverage in {project}")
         reports.append(inspect_project(cfg, project))
     text = render(reports)
     print(text, end="")

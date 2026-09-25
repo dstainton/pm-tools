@@ -2,6 +2,12 @@
 
 ## 0.12.0 - 2026-09-25
 
+- Long commands say what they are doing. A report names each step (Jira,
+  Confluence, comments, writing the section), and the same line counts the
+  seconds in a terminal. A scheduled run prints the step, then a reminder
+  every 15 seconds until it finishes. This covers report, brief, today,
+  daily, lint, triage, ready, review, metrics, release notes, warm, and
+  coverage, and any model call that would otherwise sit there quietly.
 - The weekly report is organised by Epic. Citations are Jira keys and page
   titles. Confluence pages changed in the same window are included, and a
   decision log, risk register, or ADR list can be configured as a register.

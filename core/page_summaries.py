@@ -6,7 +6,7 @@ import json
 import os
 
 from core import cache as cache_core
-from core import model, pages, prompts
+from core import model, pages, progress, prompts
 
 
 PAGE_KINDS = ("decision", "risk", "dependency", "requirement", "design",
@@ -122,6 +122,9 @@ def fill(cfg, pages_in, budget=None):
     cap = opts["max_summaries"] if budget is None else budget
     ordered = sorted(pages_in, key=lambda page: page.get("updated") or "", reverse=True)
     calls = 0
+    needing = [page for page in ordered
+               if not page.get("title_only") and load(cfg, page) is None]
+    done = 0
     for page in ordered:
         if page.get("title_only"):
             continue
@@ -135,6 +138,12 @@ def fill(cfg, pages_in, budget=None):
             page["summary"] = ""
             page["unsummarised"] = True
             continue
+        done += 1
+        title = str(page.get("title") or "page").replace('"', "")[:60]
+        label = f'Summarising "{title}"'
+        if len(needing) > 1:
+            label += f" ({done} of {len(needing)})"
+        progress.start(label)
         before = load(cfg, page)
         result = summarise(cfg, page)
         if result.get("summary") and before is None:

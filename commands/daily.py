@@ -138,7 +138,8 @@ def run(cfg, args):
 
     results = []
     for ws in cfg["_workstreams"]:
-        print(f"Daily Scrum: {ws['name']} ({ws['abbrev']}) ...")
+        from core import progress
+        progress.start(f"Daily Scrum: {ws['name']} ({ws['abbrev']})")
 
         moved_jql = _moved_jql(cfg, ws, days)
         wip_jql = workstreams.scope_jql(cfg, ws, "daily_wip")
