@@ -12,7 +12,10 @@ import sys
 
 import yaml
 
-from core import filters, products as product_core, prompts, queries, workstreams as ws_core
+from core import (
+    conventions, filters, products as product_core, prompts, queries,
+    workstreams as ws_core,
+)
 from core.paths import HOME
 
 
@@ -43,6 +46,7 @@ SECTION_DEFAULTS = {
         "min_title_words": 3,
         "vague_title_alone": ["refactor", "test"],
         "story_types": ["story", "bug"],
+        "estimate_types": ["story"],
         "require_acceptance_criteria": True,
         "require_estimate": True,
     },
@@ -145,6 +149,43 @@ def load_config(path):
     return data
 
 
+def _validate_conventions(cfg):
+    block = cfg.get("conventions")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`conventions:` must be a mapping.")
+    for key, value in block.items():
+        if key not in conventions.DEFAULTS:
+            sys.exit(f"Unknown conventions key `{key}`. "
+                     f"Valid: {', '.join(sorted(conventions.DEFAULTS))}.")
+        default = conventions.DEFAULTS[key]
+        if isinstance(default, list):
+            items = [value] if isinstance(value, str) else value
+            if not isinstance(items, list) or not items or not all(
+                    isinstance(item, str) and item.strip() for item in items):
+                sys.exit(f"`conventions.{key}` must be a non-empty list of names.")
+        elif not isinstance(value, str) or not str(value).strip():
+            sys.exit(f"`conventions.{key}` must be a non-empty string.")
+
+
+def _apply_convention_prompts(cfg):
+    """Prompt lists follow conventions unless the prompt override set them."""
+    resolved = cfg.get("_prompts") or {}
+    mapping = {
+        "brief.debrief": ("action_types", "action_issuetypes"),
+        "inbox.file_note": ("note_types", "note_issuetypes"),
+    }
+    for prompt_id, (value_name, convention_key) in mapping.items():
+        record = resolved.get(prompt_id)
+        if not record or "values" in (record.get("parts") or []):
+            continue
+        value = conventions.get(cfg, convention_key)
+        if isinstance(value, str):
+            value = [value]
+        record["values"][value_name] = list(value)
+
+
 def validate(cfg):
     """Check the whole config before a single Jira call is made.
 
@@ -162,6 +203,8 @@ def validate(cfg):
     queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)
     prompts.validate_config(cfg)
+    _validate_conventions(cfg)
+    _apply_convention_prompts(cfg)
 
 
 def _validate_products(cfg):

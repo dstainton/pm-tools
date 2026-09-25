@@ -14,7 +14,7 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, filters, model, output, paths, prompts, queries, sources, state,
+    checklist, comments, conventions, filters, model, output, paths, prompts, queries, sources, state,
     workstreams, writes,
 )
 from core import products as product_core
@@ -61,7 +61,8 @@ def _risk_cql(ws, cfg=None):
     the word is not, and a title that does not is still a risk page.
     """
     labels = [str(label).strip() for label in (ws.get("confluence_labels") or [])]
-    risk = next((label for label in labels if label.lower() == "risk"), None)
+    wanted = str(conventions.get(cfg, "risk_label") or "risk").lower()
+    risk = next((label for label in labels if label.lower() == wanted), None)
     space = ws.get("confluence_space")
     if risk and space:
         return queries.render(cfg, "brief.risk_pages", space=space, label=risk)
@@ -265,7 +266,7 @@ def _action_ticket(cfg, item):
     fields = {
         "project": {"key": project},
         "summary": item.get("title") or "Follow-up",
-        "issuetype": {"name": item.get("issuetype") or "Task"},
+        "issuetype": {"name": item.get("issuetype") or conventions.get(cfg, "action_issuetype")},
         "description": writes.adf_doc(
             f"From debrief. Owner: {item.get('owner') or 'unassigned'}."),
     }

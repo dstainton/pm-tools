@@ -124,7 +124,7 @@ def sprint_risk_sentence(sprint, issues, today=None, cfg=None):
     for issue in issues or []:
         if _is_done(issue):
             continue
-        if (issue.get("issuetype") or "").lower() == "epic":
+        if workstreams.is_epic(cfg, issue):
             continue
         if _is_not_started(issue):
             not_started += 1
@@ -159,7 +159,7 @@ def classify_need(issue, untouched_days, today=None, cfg=None):
     if _is_done(issue):
         return None
     # Epics are containers, not a daily action. The child work is what needs you.
-    if (issue.get("issuetype") or "").lower() == "epic":
+    if workstreams.is_epic(cfg, issue):
         return None
     if _is_overdue(issue, today=today):
         return "overdue"

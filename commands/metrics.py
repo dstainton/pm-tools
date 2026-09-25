@@ -46,7 +46,8 @@ def gather(cfg, weeks, today=None):
             issues = _history(cfg, project, jql)
             bundle = core.summarise_stream(
                 issues, weeks, sprints=seen_projects.get(project) or [],
-                today=today)
+                today=today,
+                epic_types=workstreams.membership_settings(cfg)["epic_types"])
             bundle["workstream"] = ws.get("abbrev")
             bundle["workstream_name"] = ws.get("name")
             product_rows.append(bundle)

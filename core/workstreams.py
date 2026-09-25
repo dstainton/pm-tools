@@ -112,6 +112,12 @@ def uses_component_scope(cfg, ws):
     return bool(project_of(cfg, ws) and anchor_values(cfg, ws))
 
 
+def is_epic(cfg, issue):
+    """True when the issue's type is one of membership.epic_types."""
+    types = [t.lower() for t in membership_settings(cfg or {})["epic_types"]]
+    return (issue.get("issuetype") or "").lower() in types
+
+
 def membership_settings(cfg):
     """The `membership:` config block, with defaults filled in."""
     settings = dict(DEFAULT_MEMBERSHIP)

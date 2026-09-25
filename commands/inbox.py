@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from core import model, paths, products as product_core, prompts, writes
+from core import conventions, model, paths, products as product_core, prompts, writes
 
 
 def _load(cfg):
@@ -133,7 +133,8 @@ def _create(cfg, args):
     # is the one that gets filed. The model does not overwrite them.
     title = (getattr(args, "title", None) or note.get("title")
              or suggestion.get("title") or note["text"])
-    itype = getattr(args, "issuetype", None) or suggestion.get("issuetype") or "Story"
+    itype = (getattr(args, "issuetype", None) or suggestion.get("issuetype")
+             or conventions.get(cfg, "note_issuetype"))
     product = note.get("product") or suggestion.get("product")
     stream_ab = (getattr(args, "workstream", None) or note.get("workstream")
                  or suggestion.get("workstream"))

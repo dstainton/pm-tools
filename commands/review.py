@@ -46,10 +46,13 @@ def _batches(items, size):
         yield items[i:i + size]
 
 
-def candidates_for(aspect, issues):
+def candidates_for(aspect, issues, cfg=None):
     if aspect == "titles":
         return list(issues)
-    return [i for i in issues if (i.get("issuetype") or "").lower() in ("story", "bug")]
+    story_types = ["story", "bug"]
+    if cfg is not None:
+        story_types = [t.lower() for t in (cfg.get("lint") or {}).get("story_types", story_types)]
+    return [i for i in issues if (i.get("issuetype") or "").lower() in story_types]
 
 
 def call_count(aspects, issues, batch_size):
@@ -95,12 +98,12 @@ def review_aspect(model_cfg, aspect, issues, batch_size, cfg=None):
     if aspect == "titles":
         prompt = prompts.get(cfg, "review.titles")
         builder, keys = build_titles_input, ("problem", "suggestion")
-        candidates = candidates_for(aspect, issues)
+        candidates = candidates_for(aspect, issues, cfg)
     else:  # criteria — only look at story-type issues
         prompt = prompts.get(cfg, "review.criteria")
         builder = build_criteria_input
         keys = ("problem", "missing")
-        candidates = candidates_for(aspect, issues)
+        candidates = candidates_for(aspect, issues, cfg)
 
     valid_keys = {i["key"] for i in candidates}
     findings, errors = [], []
