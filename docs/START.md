@@ -14,4 +14,4 @@ Then one step further, when you need it: `pm brief --for "Monthly portfolio revi
 
 `pm today --all` is the same list with mentions and new bugs included. `pm triage` is that list.
 
-Nothing here calls the model. The model is for `pm report` and `pm brief`, and it stays on your machine unless you start `pm mcp`.
+Nothing here calls the model. The model is for `pm report` and `pm brief`, and it stays on your machine unless you start `pm mcp`. `pm setup --section model` looks for a local server, recommends a model that fits this machine, and can install Ollama or Lemonade when you type `yes`. `model.api_key` is optional.

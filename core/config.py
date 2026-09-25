@@ -24,6 +24,7 @@ SECTION_DEFAULTS = {
     "model": {
         "endpoint": "http://127.0.0.1:8080/v1/chat/completions",
         "name": "qwen-local",
+        "api_key": "",
         "temperature": 0.4,
         "json_temperature": 0.2,
         "top_p": 0.8,

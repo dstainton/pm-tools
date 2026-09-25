@@ -226,6 +226,31 @@ Other OpenAI-compatible local servers can still be used by changing
 `model.endpoint` and `model.name`. If you turn thinking back on, set
 `model.enable_thinking: true` so `pm` stops sending `/no_think`.
 
+`pm setup` and `pm setup --section model` ask every server in
+`local_models.endpoints` which models it is serving. The shipped list
+covers llama.cpp, Ollama, LM Studio, vLLM, Jan, Lemonade, and GPT4All.
+Pick a provider and a model and setup writes `model.endpoint` (the chat
+completions URL) and `model.name` when those fields are still blank or
+still the shipped default (`http://127.0.0.1:8080/v1/chat/completions`
+and `qwen-local`). A value you already changed is left alone.
+
+`local_models.recommendations` maps installed memory to model-size hints.
+Setup names a served model that fits. The catalog ships in this repo.
+`pm update` inserts `local_models:` only when the block is missing, so
+an edit you made is kept. Delete the block and run `pm update` to take
+the catalog from a newer release. When the block is absent, the same
+lists in code are used.
+
+When nothing answers, setup offers to install Ollama or Lemonade Server.
+It runs an official installer only after you type `yes`. `--yes` and a
+non-interactive run never install anything.
+
+`model.api_key` is optional. Leave it blank for a server that does not
+check a key. Set it, or `${ENV:NAME}`, when the server expects
+`Authorization: Bearer`. The same key is sent on `GET /v1/models` during
+setup. An entry under `local_models.endpoints` may set its own `api_key`
+for discovery.
+
 ---
 
 ## Scoping — `--product` and `--workstream`

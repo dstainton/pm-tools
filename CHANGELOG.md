@@ -19,6 +19,12 @@
 - A product may set `confluence_space`. SharePoint files are listed by title
   in Documentation changed and Sources. `pm warm` runs review, page
   summaries (including changed register entries), the report, then the inbox.
+- `pm setup` probes the local servers in `local_models.endpoints`, lists
+  the models each one is serving, and recommends one that fits installed
+  RAM (`config_version` 7). When none answer, it can install Ollama or
+  Lemonade Server after you type `yes`. `model.api_key` is an optional
+  bearer token for that server. `pm update` inserts `local_models:` only
+  when the block is missing.
 
 ## 0.11.0 - 2026-09-24
 

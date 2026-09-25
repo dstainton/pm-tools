@@ -82,6 +82,21 @@ class PayloadTests(unittest.TestCase):
             model.call_model_json(cfg(), "sys", "[]")
         self.assertEqual(post.call_args.kwargs["json"]["temperature"], 0.2)
 
+    def test_a_blank_api_key_sends_no_authorization_header(self):
+        reply = {"choices": [{"message": {"content": "hello"}}]}
+        with patch("core.model.requests.post",
+                   return_value=FakeResponse(reply)) as post:
+            model.call_model(cfg(api_key=""), "sys", "user", use_cache=False)
+        self.assertNotIn("Authorization", post.call_args.kwargs["headers"])
+
+    def test_api_key_is_sent_as_a_bearer_token(self):
+        reply = {"choices": [{"message": {"content": "hello"}}]}
+        with patch("core.model.requests.post",
+                   return_value=FakeResponse(reply)) as post:
+            model.call_model(cfg(api_key="secret"), "sys", "user", use_cache=False)
+        self.assertEqual(
+            post.call_args.kwargs["headers"]["Authorization"], "Bearer secret")
+
 
 class JsonParseTests(unittest.TestCase):
     def _parse(self, content):

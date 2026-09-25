@@ -52,8 +52,12 @@ replacing the file. One run is enough.
 
 Only `pm report`, `pm refine`, and `pm ready --deep` need a model. The default
 endpoint is `http://127.0.0.1:8080/v1/chat/completions` with the alias
-`qwen-local`. These scripts assume `pm` is already on PATH. They do not
-install it.
+`qwen-local`. `pm setup --section model` checks the usual local servers
+(Ollama, Lemonade, LM Studio, llama.cpp, and the others in
+`local_models.endpoints`), lists the models each one is serving, and can
+install Ollama or Lemonade Server after you type `yes`. Set `model.api_key`
+when that server expects a bearer token. These scripts assume `pm` is
+already on PATH. They do not install it.
 
 ```powershell
 .\setup-windows-qwen-small.ps1

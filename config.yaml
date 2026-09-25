@@ -13,7 +13,7 @@
 #  you have already filled in.
 # ============================================================================
 
-config_version: 6
+config_version: 7
 
 # ----------------------------------------------------------------------------
 #  1. The local model — Qwen3.8-27B Q3_K_M via llama.cpp
@@ -30,6 +30,10 @@ config_version: 6
 model:
   endpoint: "http://127.0.0.1:8080/v1/chat/completions"
   name: "qwen-local"
+  # Optional bearer token. Blank when the server does not check a key
+  # (llama.cpp and Ollama by default). ${ENV:NAME} keeps the key out of
+  # this file. Sent on chat and on GET /v1/models.
+  api_key: ""
   temperature: 0.4
   json_temperature: 0.2
   top_p: 0.8
@@ -41,6 +45,51 @@ model:
   # The per-call timeout above still applies to each request.
   total_timeout: 3600
   enable_thinking: false
+
+# ----------------------------------------------------------------------------
+#  1b. Local servers `pm setup` probes, and which model size fits this machine
+# ----------------------------------------------------------------------------
+local_models:
+  # Servers `pm setup` probes. `endpoint` is the OpenAI-compatible
+  # base, ending in /v1. Chat is that base plus /chat/completions.
+  # Add api_key on an entry when that server expects a bearer token.
+  # This catalog is updated in the GitHub template. `pm update`
+  # inserts the block only when it is missing. Delete `local_models:`
+  # and run `pm update` to take the catalog shipped with the new program.
+  endpoints:
+    - name: "llama.cpp"
+      endpoint: "http://127.0.0.1:8080/v1"
+    - name: "Ollama"
+      endpoint: "http://127.0.0.1:11434/v1"
+    - name: "LM Studio"
+      endpoint: "http://127.0.0.1:1234/v1"
+    - name: "vLLM"
+      endpoint: "http://127.0.0.1:8000/v1"
+    - name: "Jan"
+      endpoint: "http://127.0.0.1:1337/v1"
+    - name: "Lemonade"
+      endpoint: "http://127.0.0.1:13305/api/v1"
+    - name: "GPT4All"
+      endpoint: "http://127.0.0.1:4891/v1"
+  recommendations:
+    # First row whose min_gib is <= installed RAM wins.
+    # `models` are hints. A served id matches when the hint
+    # appears in it, ignoring case and - : _ / .
+    - min_gib: 48
+      models: ["qwen3-30b", "qwen3-32b", "qwen2.5-32b"]
+      note: "About 48 GB of RAM. A 30B-class model fits."
+    - min_gib: 24
+      models: ["qwen3-14b", "qwen2.5-14b"]
+      note: "About 24 GB of RAM. A 14B-class model fits."
+    - min_gib: 16
+      models: ["qwen3-8b", "qwen2.5-7b", "llama3.1-8b"]
+      note: "About 16 GB of RAM. An 8B-class model fits."
+    - min_gib: 8
+      models: ["qwen3-4b", "qwen2.5-3b", "llama3.2-3b"]
+      note: "About 8 GB of RAM. A 3B or 4B model fits."
+    - min_gib: 0
+      models: ["qwen3-1.7b", "qwen3-0.6b", "qwen2.5-1.5b"]
+      note: "Under 8 GB of RAM. Stay with a small model."
 
 # ----------------------------------------------------------------------------
 #  2. Jira (Cloud)

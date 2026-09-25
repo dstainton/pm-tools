@@ -282,6 +282,28 @@ def to_version_6(text):
 MIGRATIONS.append((5, to_version_6))
 
 
+def to_version_7(text):
+    """Add the local-server catalog and an optional model API key.
+
+    `local_models` is inserted only when the block is absent, so a catalog
+    you already edited is left alone. `model.api_key` is inserted only when
+    that key is absent.
+    """
+    from core.local_models import catalog_lines
+    if not has_top_level(text, "model"):
+        text = insert_missing_block(
+            text, "model", ['  api_key: ""'], before_key="jira")
+    elif not _block_has_key(text, "model", "api_key"):
+        text = _insert_under(text, "model", '  api_key: ""')
+    if not has_top_level(text, "local_models"):
+        text = insert_missing_block(
+            text, "local_models", catalog_lines(), before_key="jira")
+    return set_version(text, 7)
+
+
+MIGRATIONS.append((6, to_version_7))
+
+
 def apply_migrations(text, migrations, target):
     """Walk `migrations` until `text` is at `target`.
 

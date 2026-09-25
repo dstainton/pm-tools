@@ -34,7 +34,7 @@ from core.migrations import (MigrationError, apply_migrations,
 from core.paths import config_file
 
 
-SECRET_KEYS = ("api_token", "client_secret", "webhook")
+SECRET_KEYS = ("api_token", "client_secret", "webhook", "api_key")
 GIT_SPEC = "git+https://github.com/dstainton/pm-tools.git"
 _SECRET_RE = re.compile(
     r"^(\s*(?:" + "|".join(SECRET_KEYS) + r"):\s*)(.*)$", re.M)

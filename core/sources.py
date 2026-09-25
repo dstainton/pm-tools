@@ -505,12 +505,32 @@ def fetch_confluence_spaces(cfg):
     return out
 
 
-def fetch_model_ids(endpoint):
-    """Model ids from an OpenAI-compatible `/v1/models` (llama.cpp, Lemonade)."""
-    url = endpoint.rstrip("/")
-    if not url.endswith("/models"):
-        url = url + "/models" if url.endswith("/v1") else url + "/v1/models"
-    resp = send("GET", url, headers={"Accept": "application/json"}, timeout=15)
+def models_url(endpoint):
+    """`/v1/models` for a base URL or a chat-completions URL."""
+    url = (endpoint or "").rstrip("/")
+    for suffix in ("/chat/completions", "/completions"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)]
+            break
+    if url.endswith("/models"):
+        return url
+    if url.endswith("/v1"):
+        return url + "/models"
+    return url + "/v1/models"
+
+
+def fetch_model_ids(endpoint, api_key="", timeout=15):
+    """Model ids from an OpenAI-compatible `/v1/models` (llama.cpp, Lemonade).
+
+    `api_key`, when set, is sent as `Authorization: Bearer`. A chat URL
+    such as `.../v1/chat/completions` is rewritten to `.../v1/models`.
+    """
+    url = models_url(endpoint)
+    headers = {"Accept": "application/json"}
+    key = (api_key or "").strip()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    resp = send("GET", url, headers=headers, timeout=timeout)
     resp.raise_for_status()
     data = resp.json()
     rows = data.get("data") if isinstance(data, dict) else data
