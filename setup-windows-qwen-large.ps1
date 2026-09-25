@@ -15,6 +15,10 @@ It:
 It does NOT modify AMD drivers, BIOS/VGM settings, Windows firewall rules,
 execution policy outside the current shell, or system-wide environment
 variables.
+
+The CLI default is Ollama and qwen3:4b. This script publishes the alias
+qwen-local on port 8080. Point model.endpoint and model.name at this
+server when you use it.
 #>
 
 [CmdletBinding()]

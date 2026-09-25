@@ -19,8 +19,8 @@ from core import local_models, migrations, sources
 SHIPPED = textwrap.dedent("""\
     config_version: 7
     model:
-      endpoint: "http://127.0.0.1:8080/v1/chat/completions"
-      name: "qwen-local"
+      endpoint: "http://127.0.0.1:11434/v1/chat/completions"
+      name: "qwen3:4b"
       api_key: ""
     jira:
       base_url: "https://kept.atlassian.net"
@@ -98,6 +98,16 @@ class RecommendTests(unittest.TestCase):
             local_models.DEFAULT_RECOMMENDATIONS, 48)
         self.assertEqual(chosen, "Qwen/Qwen3-30B-A3B")
         self.assertIn("30B", note)
+
+    def test_a_32gb_machine_matches_the_27b_the_prompts_prefer(self):
+        chosen, note = local_models.recommend(
+            ["Qwen3.8-27B-GSQ-RCO-GGUF-IQ3_S", "qwen3:4b"],
+            local_models.DEFAULT_RECOMMENDATIONS, 32)
+        self.assertEqual(chosen, "Qwen3.8-27B-GSQ-RCO-GGUF-IQ3_S")
+        self.assertIn("27B", note)
+        chosen, _note = local_models.recommend(
+            ["qwen3:4b", "qwen3:8b"], local_models.DEFAULT_RECOMMENDATIONS, 8)
+        self.assertEqual(chosen, "qwen3:4b")
 
     def test_one_served_model_is_the_recommendation(self):
         chosen, _note = local_models.recommend(
@@ -177,6 +187,8 @@ class CatalogTests(unittest.TestCase):
         with open(migrations.bundled_template_path(), encoding="utf-8") as fh:
             data = yaml.safe_load(fh.read())
         self.assertEqual(data["config_version"], 7)
+        self.assertEqual(data["model"]["endpoint"], local_models.SHIPPED_ENDPOINT)
+        self.assertEqual(data["model"]["name"], local_models.SHIPPED_NAME)
         self.assertEqual(data["model"]["api_key"], "")
         self.assertEqual(
             data["local_models"]["endpoints"], local_models.DEFAULT_ENDPOINTS)
@@ -303,7 +315,8 @@ class SetupTests(unittest.TestCase):
             with patch("commands.setup.local_models.installer", return_value=plan):
                 text, _shown, run_install = self._run(
                     path, ["1", "y"], [[], found], section="model")
-            self.assertIn("http://127.0.0.1:8080/v1/chat/completions", text)
+            self.assertIn(local_models.SHIPPED_ENDPOINT, text)
+            self.assertIn(local_models.SHIPPED_NAME, text)
             run_install.assert_not_called()
 
             with open(path, "w", encoding="utf-8") as fh:
@@ -380,18 +393,19 @@ class SetupTests(unittest.TestCase):
                     patch("sys.stdout", StringIO()):
                 setup.run(_ns(
                     path=path, yes=True,
-                    model_endpoint="http://127.0.0.1:11434/v1",
+                    model_endpoint="http://127.0.0.1:1234/v1",
                     model_name="qwen3:8b",
                     model_api_key_env="LOCAL_KEY"))
             with open(path, encoding="utf-8") as fh:
                 text = fh.read()
             self.assertIn(
-                'endpoint: "http://127.0.0.1:11434/v1/chat/completions"', text)
+                'endpoint: "http://127.0.0.1:1234/v1/chat/completions"', text)
             self.assertIn('name: "qwen3:8b"', text)
             self.assertIn('api_key: "${ENV:LOCAL_KEY}"', text)
+            self.assertNotIn(local_models.SHIPPED_NAME, text)
 
             custom = text.replace(
-                'endpoint: "http://127.0.0.1:11434/v1/chat/completions"',
+                'endpoint: "http://127.0.0.1:1234/v1/chat/completions"',
                 'endpoint: "http://custom/v1/chat/completions"')
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(custom)

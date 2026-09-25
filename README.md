@@ -188,16 +188,23 @@ Only needed for `pm report`, `pm refine`, `pm review` (without `--apply`),
 `pm release-notes` is chosen without the model. `pm warm` only calls the
 model for the commands you ask it to prepare.
 
-The default config expects a local OpenAI-compatible endpoint at:
+The default config expects Ollama at:
 
 ```text
-http://127.0.0.1:8080/v1/chat/completions
+http://127.0.0.1:11434/v1/chat/completions
 ```
 
-and uses the model alias `qwen-local`.
+and the model `qwen3:4b` (about 2.5 GB). Install Ollama, then
+`ollama pull qwen3:4b`. That fits a low-end laptop, including `pm warm`.
+
+A 27B model follows the prompts more closely. On a 32 GB machine,
+Qwen3.8-27B works well — Ollama tag `qwen3.8:27b`, or Lemonade's
+`Qwen3.8-27B-GSQ-RCO-GGUF-IQ3_S` — and `pm warm` uses a lot of that memory.
 
 On the Windows Ryzen AI laptop, the bundled PowerShell scripts set up
-`llama.cpp` and keep the server bound to localhost:
+`llama.cpp` and keep the server bound to localhost. They still publish
+the alias `qwen-local` on port 8080, so point `model.endpoint` and
+`model.name` at that server if you use them instead of Ollama:
 
 ```powershell
 # Small tether-friendly model, about 2.5 GB:
@@ -231,8 +238,8 @@ Other OpenAI-compatible local servers can still be used by changing
 covers llama.cpp, Ollama, LM Studio, vLLM, Jan, Lemonade, and GPT4All.
 Pick a provider and a model and setup writes `model.endpoint` (the chat
 completions URL) and `model.name` when those fields are still blank or
-still the shipped default (`http://127.0.0.1:8080/v1/chat/completions`
-and `qwen-local`). A value you already changed is left alone.
+still the shipped default (`http://127.0.0.1:11434/v1/chat/completions`
+and `qwen3:4b`). A value you already changed is left alone.
 
 `local_models.recommendations` maps installed memory to model-size hints.
 Setup names a served model that fits. The catalog ships in this repo.

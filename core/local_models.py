@@ -18,15 +18,17 @@ import requests
 from core import sources
 
 
-SHIPPED_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
-SHIPPED_NAME = "qwen-local"
+# Ollama is the easiest install. `qwen3:4b` is about 2.5 GB, so a
+# low-end laptop can run it, including `pm warm`.
+SHIPPED_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions"
+SHIPPED_NAME = "qwen3:4b"
 
 # `endpoint` is the OpenAI-compatible base (it ends in /v1). Chat is
 # `{endpoint}/chat/completions`. An entry may set `api_key` (or
 # `${ENV:NAME}`) when that server expects a bearer token.
 DEFAULT_ENDPOINTS = [
-    {"name": "llama.cpp", "endpoint": "http://127.0.0.1:8080/v1"},
     {"name": "Ollama", "endpoint": "http://127.0.0.1:11434/v1"},
+    {"name": "llama.cpp", "endpoint": "http://127.0.0.1:8080/v1"},
     {"name": "LM Studio", "endpoint": "http://127.0.0.1:1234/v1"},
     {"name": "vLLM", "endpoint": "http://127.0.0.1:8000/v1"},
     {"name": "Jan", "endpoint": "http://127.0.0.1:1337/v1"},
@@ -42,6 +44,11 @@ DEFAULT_RECOMMENDATIONS = [
         "min_gib": 48,
         "models": ["qwen3-30b", "qwen3-32b", "qwen2.5-32b"],
         "note": "About 48 GB of RAM. A 30B-class model fits.",
+    },
+    {
+        "min_gib": 32,
+        "models": ["qwen3.8-27b", "qwen3-27b", "qwen3-30b", "qwen3-32b"],
+        "note": "About 32 GB of RAM. A 27B model fits, and pm warm will use a lot of that memory.",
     },
     {
         "min_gib": 24,

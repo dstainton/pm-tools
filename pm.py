@@ -287,7 +287,7 @@ def build_parser():
              "or still the shipped default")
     p_setup.add_argument(
         "--model-name", default=None,
-        help="Model id, written when blank or still qwen-local")
+        help="Model id, written when blank or still qwen3:4b")
     p_setup.add_argument(
         "--model-api-key", default=None,
         help="Bearer token for the local server, written when blank")

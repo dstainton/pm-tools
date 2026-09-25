@@ -22,8 +22,8 @@ from core.paths import HOME
 # Filled in memory when a block or key is absent. This does not write the file.
 SECTION_DEFAULTS = {
     "model": {
-        "endpoint": "http://127.0.0.1:8080/v1/chat/completions",
-        "name": "qwen-local",
+        "endpoint": "http://127.0.0.1:11434/v1/chat/completions",
+        "name": "qwen3:4b",
         "api_key": "",
         "temperature": 0.4,
         "json_temperature": 0.2,
