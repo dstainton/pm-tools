@@ -200,12 +200,16 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def render_pm(cfg, groups, rows, sections, window, scope_note):
+def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
     today = dt.date.today().isoformat()
-    name = ((cfg.get("audiences") or {}).get("pm") or {}).get("name") or "Product management"
+    from core import audience
+    name = audience.display_name(cfg, who)
+    title = "# Weekly State-of-Product Report"
+    if who != "pm":
+        title += f" — {name}"
     label = (window or {}).get("label") or "since last report"
     lines = [
-        "# Weekly State-of-Product Report",
+        title,
         f"_Audience: {name} · Window: {label} · Generated {today}_",
         "",
     ]

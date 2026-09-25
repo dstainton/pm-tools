@@ -301,8 +301,10 @@ def build_parser():
                           help="Start of the window. Does not move last-report memory.")
     p_report.add_argument("--sprint", nargs="?", const="open", default=None,
                           help="This Sprint (open), a number (138), or last")
+    p_report.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                          help="Who the report is for (default: pm)")
     p_report.add_argument("--json", action="store_true",
-                          help="Print a short JSON summary as well as the file")
+                          help="Also write the gathered report as JSON")
     p_report.set_defaults(func=report.run, needs_config=True)
 
     p_lint = sub.add_parser("lint", parents=[common, write_opts],
@@ -425,6 +427,8 @@ def build_parser():
                          help="Weekday time, e.g. 08:30")
     p_sched.add_argument("--weekly", metavar="DAY@HH:MM",
                          help="One day a week, e.g. fri@16:00")
+    p_sched.add_argument("--audience", choices=["pm", "leadership", "partner"],
+                         help="With add report, the audience. Partner is refused.")
     p_sched.add_argument("--for", dest="for_audience",
                          help="With `add brief`, the audience name")
     p_sched.add_argument("--fail-on", choices=["error", "warn", "review"],

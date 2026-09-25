@@ -220,6 +220,24 @@ def _validate_registers(cfg):
                 sys.exit(f'Register "{name}": highlight values must be a list.')
 
 
+def _validate_audiences(cfg):
+    block = cfg.get("audiences")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`audiences:` must be a mapping.")
+    if "default" in block and block["default"] not in ("pm", "leadership", "partner"):
+        sys.exit("`audiences.default` must be pm, leadership, or partner.")
+    for key in ("pm", "leadership", "partner"):
+        section = block.get(key)
+        if section is None:
+            continue
+        if not isinstance(section, dict):
+            sys.exit(f"`audiences.{key}` must be a mapping.")
+    if "warm" in block and not isinstance(block["warm"], list):
+        sys.exit("`audiences.warm` must be a list.")
+
+
 def validate(cfg):
     """Check the whole config before a single Jira call is made.
 
@@ -234,6 +252,7 @@ def validate(cfg):
     _validate_blocked(cfg)
     _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
+    _validate_audiences(cfg)
     _validate_registers(cfg)
     queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)

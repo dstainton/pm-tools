@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import checklist, citations, comments, epics, output, pages as page_core, registers, report_render, sources, model, state, workstreams
+from core import audience, checklist, citations, comments, epics, output, pages as page_core, registers, report_render, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -175,9 +175,11 @@ def run(cfg, args):
     """Entry point called by pm.py."""
     selected = cfg["_workstreams"]
 
-    state_path = output.place(
-        cfg, cfg["output"].get("state_file", "report_state.json"),
-        getattr(args, "out", None))
+    who = audience.level(cfg, args)
+    if who == "partner" and getattr(args, "publish", False):
+        sys.exit("Read a partner report before it leaves. "
+                 "Publish it with: pm publish <file>")
+    state_path = audience.state_path(cfg, who, args)
     previous = state.load_state(state_path)
     new_state = dict(previous)   # keep untouched workstreams' memory intact
 
@@ -249,7 +251,7 @@ def run(cfg, args):
             if epic.get("key") and not epic.get("url") and base:
                 epic["url"] = f"{base}/browse/{epic['key']}"
     report = report_render.render_pm(
-        cfg, groups, prepared, sections, window, scope_note)
+        cfg, groups, prepared, sections, window, scope_note, who=who)
     try:
         from commands import metrics as metrics_cmd
         groups = metrics_cmd.gather(cfg, 8)
@@ -257,7 +259,7 @@ def run(cfg, args):
     except Exception as exc:                              # noqa: BLE001
         print(f"Metrics appendix skipped: {exc}")
     out_path = output.place(
-        cfg, cfg["output"]["file"].format(date=dt.date.today().isoformat()),
+        cfg, audience.output_name(cfg, who, dt.date.today().isoformat()),
         getattr(args, "out", None))
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
