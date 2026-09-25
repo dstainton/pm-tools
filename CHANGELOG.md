@@ -8,6 +8,9 @@
 - Prompts, queries, and team conventions are configurable. Defaults stay in
   the tool, so an unconfigured install behaves as before. See
   `docs/CUSTOMISING.md`.
+- `pm update` installs the new program and then runs the config migration
+  in a new process, so the steps that shipped with that program are applied
+  on the same run.
 - `pm report`, `pm brief`, `pm release-notes`, `pm metrics`, and `pm warm`
   take `--audience pm|leadership|partner`. Each audience has its own file
   and memory. `pages.scope: space` reads every changed page in a workstream

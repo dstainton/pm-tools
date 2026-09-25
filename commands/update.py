@@ -5,6 +5,10 @@ never replaces `~/.pm-tools/config.yaml`. It walks migrations until
 `config_version` matches the installed template, and it writes only when
 that result still validates.
 
+A pip or pipx install replaces the files on disk while this process still
+has the old migrations loaded. After that install succeeds, this command
+starts `pm update --config-only` so the new code applies the new steps.
+
   pm update
   pm update --code-only
   pm update --config-only
@@ -17,6 +21,7 @@ may not pass validation until the migration has run.
 import difflib
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -154,32 +159,65 @@ def _direct_url(dist):
 
 
 def upgrade_code(dry_run=False):
-    """Run the code upgrade. Return False when the caller must stop."""
+    """Run the code upgrade.
+
+    Returns `stop` when the caller must exit, `current` when this process
+    already has the migrations to apply, `preview` when a dry run would
+    install and then migrate, and `replaced` when a new install is on disk
+    and the config step must start a new process.
+    """
     info = classify_install()
     print(info["detail"])
     command = info["command"]
     if info["kind"] == "unknown":
         print("Fix the install, then run pm update again. "
               "The config was not changed.")
-        return False
+        return "stop"
     if command is None:
-        return True
+        return "current"
     shown = " ".join(command)
     if dry_run:
         print(f"Would run: {shown}")
-        return True
+        print("Would then run: pm update --config-only")
+        print("That second step uses the migrations the install just wrote.")
+        return "preview"
     print(f"Running: {shown}")
     try:
         completed = subprocess.run(command, check=False)
     except OSError as err:
         print(f"Code upgrade failed: {err}")
         print("The config was not changed.")
-        return False
+        return "stop"
     if completed.returncode != 0:
         print(f"Code upgrade failed (exit {completed.returncode}).")
         print("The config was not changed.")
-        return False
-    return True
+        return "stop"
+    return "replaced"
+
+
+def config_only_command(args):
+    """How to start the config step once the new code is on disk."""
+    program = sys.argv[0] or "pm"
+    if not os.path.isabs(program):
+        program = shutil.which(program) or program
+    command = [program, "update", "--config-only"]
+    config = getattr(args, "config", None)
+    if config:
+        command.extend(["--config", config])
+    return command
+
+
+def continue_with_new_code(args):
+    """Migrate with the code that just got installed, not this process."""
+    command = config_only_command(args)
+    print("Applying the config upgrade with the newly installed code.")
+    print("Running: " + " ".join(command))
+    try:
+        completed = subprocess.run(command, check=False)
+    except OSError as err:
+        sys.exit("The program was upgraded, but the config step could not "
+                 f"start: {err}\nRun:  pm update --config-only")
+    sys.exit(completed.returncode)
 
 
 def redact(text):
@@ -253,8 +291,13 @@ def run(args):
         sys.exit("Choose one of --code-only or --config-only.")
 
     if not config_only:
-        if not upgrade_code(dry_run=dry_run):
+        outcome = upgrade_code(dry_run=dry_run)
+        if outcome == "stop":
             sys.exit(1)
+        if code_only or outcome == "preview":
+            return
+        if outcome == "replaced":
+            continue_with_new_code(args)
     if code_only:
         return
 

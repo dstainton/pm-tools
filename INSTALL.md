@@ -44,8 +44,9 @@ pm today
 components. It does not rewrite the file. `pm today` is the first real use.
 
 If `~/.pm-tools/config.yaml` already exists, `pm init` leaves it alone. Later
-releases are installed with `pm update`, which upgrades the program and adds
-new config keys without replacing the file.
+releases are installed with `pm update`, which upgrades the program and then
+migrates the config with that new program. It adds new keys without
+replacing the file. One run is enough.
 
 ## Local model
 

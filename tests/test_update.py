@@ -192,6 +192,46 @@ class UpdateCommandTests(unittest.TestCase):
         self.assertIn('pm-tools = "pm:main"', text)
 
 
+class RestartTests(unittest.TestCase):
+    def test_a_code_install_migrates_config_in_a_new_process(self):
+        args = Namespace(code_only=False, config_only=False, dry_run=False,
+                         config="/tmp/pm-config.yaml")
+        completed = Namespace(returncode=0)
+        with patch.object(update, "upgrade_code", return_value="replaced"), \
+                patch.object(update, "upgrade_config") as migrate, \
+                patch.object(update.subprocess, "run", return_value=completed) as run, \
+                patch.object(update.sys, "argv", ["pm", "update"]), \
+                patch.object(update.shutil, "which", return_value="/usr/bin/pm"), \
+                patch.object(update.sys, "exit", side_effect=SystemExit) as stop:
+            with self.assertRaises(SystemExit):
+                update.run(args)
+        migrate.assert_not_called()
+        command = run.call_args.args[0]
+        self.assertEqual(
+            command,
+            ["/usr/bin/pm", "update", "--config-only",
+             "--config", "/tmp/pm-config.yaml"])
+        stop.assert_called_with(0)
+
+    def test_dry_run_does_not_migrate_with_the_old_code(self):
+        args = Namespace(code_only=False, config_only=False, dry_run=True,
+                         config=None)
+        with patch.object(update, "upgrade_code", return_value="preview"), \
+                patch.object(update, "upgrade_config") as migrate:
+            update.run(args)
+        migrate.assert_not_called()
+
+    def test_config_only_uses_the_loaded_migrations(self):
+        args = Namespace(code_only=False, config_only=True, dry_run=False,
+                         config=None)
+        with patch.object(update, "upgrade_code") as code, \
+                patch.object(update, "user_config_path", return_value="/tmp/x"), \
+                patch.object(update, "upgrade_config") as migrate:
+            update.run(args)
+        code.assert_not_called()
+        migrate.assert_called_once()
+
+
 class GitUpgradeTests(unittest.TestCase):
     def test_git_spec_adds_the_git_prefix(self):
         self.assertEqual(
