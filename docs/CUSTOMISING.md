@@ -496,6 +496,16 @@ Used by: every Confluence read.
 space = {space}
 ```
 
+### `confluence.types`
+
+Only these Confluence content types.
+
+Used by: Confluence reads that name content types.
+
+```
+type IN ({types})
+```
+
 ### `confluence.labels`
 
 Pages carrying one of these labels.

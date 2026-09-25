@@ -251,7 +251,7 @@ def validate_config_scopes(cfg):
 #  Confluence — the same idea, one level simpler
 # ---------------------------------------------------------------------------
 
-def build_cql(ws, cfg=None):
+def build_cql(ws, cfg=None, scope="labelled", types=None):
     """Build Confluence CQL from `confluence_space` / `confluence_labels`.
 
     A hand-written `confluence_cql` still wins if one is present, so existing
@@ -266,6 +266,8 @@ def build_cql(ws, cfg=None):
 
     clauses = [queries.render(cfg, "confluence.space", space=space)]
     labels = _value_list("confluence_labels", ws.get("confluence_labels"))
-    if labels:
+    if scope == "labelled" and labels:
         clauses.append(queries.render(cfg, "confluence.labels", labels=labels))
+    if types:
+        clauses.append(queries.render(cfg, "confluence.types", types=list(types)))
     return " AND ".join(clauses)

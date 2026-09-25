@@ -59,13 +59,14 @@ def short(text, limit=280):
     return text if len(text) <= limit else text[:limit].rstrip() + "..."
 
 
-def strip_html(html):
+def strip_html(html, limit=400):
     """Confluence returns HTML; reduce it to readable plain text."""
     if not html:
         return ""
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"&[a-z]+;", " ", text)
-    return short(text, 400)
+    text = re.sub(r"\s+", " ", text).strip()
+    return short(text, limit)
 
 
 def adf_to_text(node):

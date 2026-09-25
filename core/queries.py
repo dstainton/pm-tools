@@ -153,6 +153,10 @@ QUERIES = {
         "cql", "every Confluence read",
         "Pages in one space.",
         "space = {space}", ("space",)),
+    "confluence.types": _entry(
+        "cql", "Confluence reads that name content types",
+        "Only these Confluence content types.",
+        "type IN ({types})", ("types",)),
     "confluence.labels": _entry(
         "cql", "labelled Confluence reads",
         "Pages carrying one of these labels.",

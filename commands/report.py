@@ -131,8 +131,13 @@ def prepare(cfg, ws, previous, window=None):
     else:
         cutoff = comments.report_cutoff(prev_snapshot, comments.settings(cfg))
         page_since = None
+    page_opts_full = page_core.page_settings(cfg)
+    scope = "labelled" if page_opts_full.get("scope") == "labelled" else "space"
+    types = page_opts_full["content_types"] + page_opts_full["title_only_types"]
+    from core import filters
+    cql = filters.build_cql(ws, cfg, scope=scope, types=types) or workstreams.confluence_cql(ws, cfg)
     got, idx = sources.fetch_confluence(cfg["confluence"],
-                                        workstreams.confluence_cql(ws, cfg),
+                                        cql,
                                         prefix, idx, since=page_since)
     got = page_core.apply_excerpt(got, page_opts, cutoff=cutoff)
     items += got
@@ -152,6 +157,8 @@ def prepare(cfg, ws, previous, window=None):
     new, changed, dropped = state.compute_changes(prev_snapshot, items)
     change_block = state.build_change_block(new, changed, dropped, first_run)
     epic_rows = epics.build(cfg, ws, items, window, (new, changed, dropped))
+    page_core.map_to_epics(
+        [it for it in items if it.get("source") == "Confluence"], epic_rows)
     return {
         "items": items,
         "change_block": change_block,

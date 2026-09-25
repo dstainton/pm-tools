@@ -458,7 +458,7 @@ workstreams:
 #    coverage.open_in_project doctor.membership_open
 #    release_notes.done release_notes.since release_notes.version
 #    today.in_sprint_open
-#    confluence.space confluence.labels confluence.window
+#    confluence.space confluence.labels confluence.types confluence.window
 #    brief.risk_pages
 #    epics.children epics.resolved
 
