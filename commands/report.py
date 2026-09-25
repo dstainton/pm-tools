@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import audience, checklist, citations, comments, epics, output, pages as page_core, registers, report_render, sources, model, state, workstreams
+from core import audience, checklist, citations, comments, epics, output, pages as page_core, progress, registers, report_render, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -104,14 +104,20 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def prepare(cfg, ws, previous, window=None, skip_ids=None):
+def prepare(cfg, ws, previous, window=None, skip_ids=None, progress_label=None):
     """Items and the change block `pm report` will send. Writes nothing."""
     prefix = ws["abbrev"]
+    label = progress_label or f"{ws.get('name') or prefix} ({prefix})"
+
+    def phase(name):
+        progress.start(f"{label} — {name}")
+
     items = []
     idx = 1
     overrides = None
     if window and window.get("sprint_id"):
         overrides = {"sprint": window["sprint_id"]}
+    phase("reading Jira")
     sprint_jql = workstreams.scope_jql(cfg, ws, "report", overrides=overrides)
     roadmap_jql = workstreams.scope_jql(cfg, ws, "roadmap")
     got, idx = sources.fetch_jira(cfg["jira"], sprint_jql, prefix, idx)
@@ -136,11 +142,15 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
         page_window["start"] = page_since
     elif cutoff is not None:
         page_window.setdefault("start", cutoff.date() if hasattr(cutoff, "date") else cutoff)
+    phase("reading Confluence")
     got = page_core.gather(cfg, ws, window=page_window, skip_ids=skip_ids)
     from core import page_summaries
     page_summaries.fill(cfg, got)
     items += got
     idx = 1
+    sharepoint = cfg.get("sharepoint") or {}
+    if sharepoint.get("enabled") and ws.get("sharepoint_query"):
+        phase("reading SharePoint")
     got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
                                         ws.get("sharepoint_query"), prefix, idx)
     items += got
@@ -150,6 +160,8 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
     docs = [it for it in items if it.get("source") != "Jira"]
     citations.assign_doc_tags(docs)
     jira_items = [it for it in items if it.get("source") == "Jira"]
+    if jira_items and comments.settings(cfg).get("enabled"):
+        phase("reading comments")
     comments.attach(
         cfg, cfg.get("jira") or {}, jira_items,
         comments.report_cutoff(prev_snapshot, comments.settings(cfg)))
@@ -159,6 +171,7 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
     page_core.map_to_epics(
         [it for it in items if it.get("source") == "Confluence"], epic_rows,
         cfg=cfg)
+    progress.finish()
     return {
         "items": items,
         "change_block": change_block,
@@ -268,6 +281,26 @@ def _product_pages(prepared, streams):
     abbrevs = {ws["abbrev"] for ws in streams}
     return [item for ws, row in prepared if ws["abbrev"] in abbrevs
             for item in row.get("items") or [] if item.get("product_only")]
+
+
+def _has_team_page(cfg):
+    from core import confluence_tree
+    return confluence_tree.has_team_page(cfg)
+
+
+def _will_read_product_pages(cfg):
+    """True when a product folder, or a product space, will be read."""
+    from core import confluence_tree
+    team = confluence_tree.has_team_page(cfg)
+    for product in cfg.get("products") or []:
+        if not isinstance(product, dict):
+            continue
+        if (product.get("confluence_space") or product.get("confluence_page")
+                or product.get("confluence_page_id")):
+            return True
+        if team and confluence_tree.can_match(product):
+            return True
+    return False
 
 
 def team_pages(cfg, prepared, window, skip_ids):
@@ -438,7 +471,8 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
                         team.append(f"{ws['abbrev']}, {name}: {chunk}")
             if team:
                 text += "\n\nFrom the team reports:\n" + "\n".join(team)
-        model.tick(cfg["model"], product.get("abbrev") or "product")
+        model.tick(cfg["model"],
+                   f"{product.get('abbrev') or 'product'} — writing the summary")
         if who == "leadership":
             body = model.infer_leadership(cfg["model"], product, text, cfg=cfg)
             base = ((cfg.get("jira") or {}).get("base_url") or "").rstrip("/")
@@ -560,11 +594,15 @@ def run(cfg, args):
     except window_core.WindowError as exc:
         sys.exit(str(exc))
 
+    if cfg.get("registers"):
+        progress.start("Reading registers")
     found_registers, skip_ids = registers.gather(cfg, window, previous)
     prepared = []
-    for ws in selected:
-        print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        row = prepare(cfg, ws, previous, window, skip_ids=skip_ids)
+    total = len(selected)
+    for index, ws in enumerate(selected, 1):
+        label = progress.numbered(index, total, f"{ws['name']} ({ws['abbrev']})")
+        row = prepare(cfg, ws, previous, window, skip_ids=skip_ids,
+                      progress_label=label)
         row["registers"] = found_registers
         stamp_register_entries(row)
         if not row["first_run"]:
@@ -578,8 +616,11 @@ def run(cfg, args):
 
     groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
     team = []
-    if len(selected) == len(cfg["workstreams"]):
+    if len(selected) == len(cfg["workstreams"]) and _has_team_page(cfg):
+        progress.start("Reading team pages")
         team = team_pages(cfg, prepared, window, skip_ids)
+    if _will_read_product_pages(cfg):
+        progress.start("Reading product pages")
     _attach_product_pages(cfg, groups, prepared, window, skip_ids)
 
     sections = []
@@ -587,8 +628,9 @@ def run(cfg, args):
     model.announce(cfg["model"], len(prepared), "pm report")
 
     for ws, row in prepared:
-        print(f"  found {len(row['items'])} items — asking the model to write it up ...")
-        model.tick(cfg["model"], ws["abbrev"])
+        model.tick(cfg["model"],
+                   f"{ws['abbrev']} — writing the section, "
+                   f"{len(row['items'])} items")
         body = model.infer_report_section(
             cfg["model"], cfg["output"]["audience"],
             ws, row["items"], row["change_block"],
@@ -626,6 +668,7 @@ def run(cfg, args):
         report = report_render.render_leadership(cfg, groups, prepared, summaries, window)
         try:
             from commands import metrics as metrics_cmd
+            progress.start("Measuring delivery")
             report = report.rstrip() + "\n\n" + metrics_cmd.render_headline(
                 metrics_cmd.gather(cfg, 8), 8)
         except Exception as exc:                              # noqa: BLE001

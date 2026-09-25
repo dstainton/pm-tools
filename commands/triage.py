@@ -170,10 +170,16 @@ def gather(cfg):
         me = sources.fetch_myself(cfg["jira"])
     except Exception:                              # noqa: BLE001
         me = {}
+    from core import progress
     streams = cfg.get("_workstreams") or []
     items = []
+    seen = 0
     for product, group in product_core.group_workstreams(cfg, streams):
         for ws in group:
+            seen += 1
+            progress.start(progress.numbered(
+                seen, len(streams),
+                f"{ws.get('name')} ({ws.get('abbrev')})"))
             jql = workstreams.scope_jql(cfg, ws, "lint")
             issues = (sources.fetch_jira_detailed(cfg["jira"], jql)
                       if jql else [])
@@ -183,6 +189,7 @@ def gather(cfg):
                 if not kind:
                     continue
                 items.append((KIND_RANK[kind], tagged, kind))
+    progress.finish()
     items.sort(key=lambda row: (row[0], row[1].get("key") or ""))
     actions = []
     for n, (_rank, issue, kind) in enumerate(items, start=1):

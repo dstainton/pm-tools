@@ -58,13 +58,19 @@ def collect(cfg, since, version):
 
     Issues no selected workstream claims land under Unassigned.
     """
+    from core import progress
     window = _window(since, version)
     overrides = {"status": "done", "sprint": "any", "extra_jql": window}
     rows = []
     claimed = set()
     streams = cfg.get("_workstreams") or []
+    seen = 0
     for product, group in product_core.group_workstreams(cfg, streams):
         for ws in group:
+            seen += 1
+            progress.start(progress.numbered(
+                seen, len(streams),
+                f"{ws.get('name')} — reading done issues"))
             jql = workstreams.scope_jql(cfg, ws, "lint", overrides=overrides)
             issues = (sources.fetch_jira_detailed(cfg["jira"], jql)
                       if jql else [])
@@ -77,6 +83,8 @@ def collect(cfg, since, version):
         project = workstreams.project_of(cfg, ws)
         if project and project not in projects:
             projects.append(project)
+    if projects:
+        progress.start("Reading issues no workstream claims")
     for project in projects:
         jql = queries.render(cfg, "release_notes.done", project=project, window=window)
         for issue in sources.fetch_jira_detailed(cfg["jira"], jql):
@@ -86,8 +94,11 @@ def collect(cfg, since, version):
                 {"name": "Unassigned", "abbrev": "UNASSIGNED"},
                 {"name": "Unclaimed", "abbrev": "—"},
                 issue))
+    if rows and comments.settings(cfg).get("enabled"):
+        progress.start("Reading comments")
     _attach_comments(cfg, rows, since)
     _walk_epics(cfg, rows)
+    progress.finish()
     return rows
 
 
@@ -231,6 +242,8 @@ def draft(cfg, bullets, level="pm"):
     system = prompts.get(cfg, "release_notes.prose")
     if level == "partner":
         system = system + "\n" + prompts.get(cfg, "release_notes.partner_rules")
+    from core import progress
+    progress.start("Writing the release notes")
     raw = model.call_model(cfg["model"], system, "\n".join(bullets))
     if _skipped(raw):
         return None

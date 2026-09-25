@@ -292,7 +292,8 @@ def run(cfg, args):
             results.append((ws, []))
             continue
 
-        print(f"Checking readiness: {ws['name']} ({ws['abbrev']}) ...")
+        from core import progress
+        progress.start(f"Checking readiness: {ws['name']} ({ws['abbrev']})")
         issues = sources.fetch_jira_detailed(cfg["jira"], jql)
         component_inherited = workstreams.uses_component_scope(cfg, ws)
 

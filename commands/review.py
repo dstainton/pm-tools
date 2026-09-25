@@ -209,7 +209,8 @@ def evaluate(cfg, aspects, batch_size=None):
                 print(f"Skipping {ws['abbrev']}: nothing in its review scope.")
                 prepared.append((ws, []))
                 continue
-            print(f"Reviewing {asp}: {ws['name']} ({ws['abbrev']}) ...")
+            from core import progress
+            progress.start(f"Reviewing {asp}: {ws['name']} ({ws['abbrev']})")
             prepared.append((ws, sources.fetch_jira_detailed(cfg["jira"], jql)))
         total = sum(call_count([asp], issues, batch_size)
                     for _ws, issues in prepared)
