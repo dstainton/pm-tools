@@ -104,6 +104,25 @@ def gather(cfg, audience, window=None):
             page_window = {"start": page_since} if page_since else (window or {})
             product_pages.extend(page_core.gather(cfg, ws, window=page_window))
         items = _as_items(product_issues)
+        from core import epics as epic_core
+        epic_rows = []
+        for ws in group:
+            ws_issues = [issue for issue in product_issues if issue.get("workstream") == ws["abbrev"]]
+            report_items = []
+            for issue in ws_issues:
+                report_items.append({
+                    "source": "Jira", "key": issue["key"], "uid": issue["key"],
+                    "summary": issue.get("summary") or "",
+                    "issuetype": issue.get("issuetype") or "",
+                    "status": issue.get("status") or "",
+                    "status_category": issue.get("status_category") or "",
+                    "parent": issue.get("epic"),
+                    "labels": list(issue.get("labels") or []),
+                    "due": issue.get("due_date") or "",
+                    "updated": str(issue.get("updated") or "")[:10],
+                    "url": issue.get("url") or "",
+                })
+            epic_rows.extend(epic_core.build(cfg, ws, report_items, window, ([], [], [])))
         key = product.get("abbrev") or "UNASSIGNED"
         prev_snap = prev.get(key) or {}
         first = key not in prev
@@ -117,6 +136,7 @@ def gather(cfg, audience, window=None):
             "first": first,
             "risks": risks[:3],
             "pages": product_pages[:5],
+            "epics": epic_rows,
             "registers": [],
             "new": len(new),
             "changed": len(changed),
@@ -129,6 +149,50 @@ def gather(cfg, audience, window=None):
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
     return sections, snapshot, last
+
+
+def _leadership_prep(section):
+    """Epic table, decisions the room must make, and counts owed per Epic."""
+    lines = [
+        "| Epic | Status | Progress | Signal | Target |",
+        "|------|--------|---------:|--------|--------|",
+    ]
+    for epic in section.get("epics") or []:
+        if not epic.get("key"):
+            continue
+        lines.append(
+            f"| {epic['key']} {epic.get('summary') or ''} | {epic.get('status') or ''} | "
+            f"{epic.get('children_done') or 0} / {epic.get('children_total') or 0} | "
+            f"{epic.get('signal') or ''} | {epic.get('due') or '—'} |"
+        )
+    lines.append("")
+    lines.append("### Decisions you need from the room")
+    lines.append("")
+    decisions = [page for page in section.get("pages") or []
+                 if (page.get("kind") or "").lower() == "decision"]
+    at_risk = [epic for epic in section.get("epics") or []
+               if epic.get("key") and epic.get("signal") == "At risk"]
+    if not decisions and not at_risk:
+        lines.append("_Nothing waiting on this room._")
+    for page in decisions:
+        lines.append(f"- {page.get('title') or 'page'}")
+    for epic in at_risk:
+        lines.append(f"- {epic['key']} {epic.get('summary') or ''} is at risk.")
+    lines.append("")
+    lines.append("### What you owe the room")
+    lines.append("")
+    owed = [(kind, issue) for kind, issue in section["needs"] if kind in ("overdue", "blocked")]
+    if not owed:
+        lines.append("_Nothing you owe this room._")
+    by_epic = {}
+    for kind, issue in owed:
+        by_epic.setdefault(issue.get("epic") or "Not under an Epic", []).append(kind)
+    for epic, kinds in by_epic.items():
+        overdue = kinds.count("overdue")
+        blocked = kinds.count("blocked")
+        lines.append(f"- {epic}: {overdue} overdue, {blocked} blocked.")
+    lines.append("")
+    return lines
 
 
 def render_prep(audience, sections, last, level="pm"):
@@ -150,6 +214,13 @@ def render_prep(audience, sections, last, level="pm"):
         if goal:
             lines.append(f"Product Goal: {goal}")
             lines.append("")
+        if level == "leadership":
+            lines.extend(_leadership_prep(section))
+            from core import report_render
+            if section.get("registers"):
+                report_render.append_registers(
+                    lines, section["registers"], level, "", lambda scope: True)
+            continue
         lines.append("### What changed")
         lines.append("")
         lines.append(section["change"])

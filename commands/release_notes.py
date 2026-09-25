@@ -130,23 +130,33 @@ def bullet_lines(rows, comment_budget=6000, level="pm"):
             lines.append("")
             used = 0
             omitted = 0
+            shown = list(stream["issues"])
+            if level == "partner":
+                shown = [issue for issue in shown if issue.get("partner_visible")]
+            buckets = []
+            for issue in shown:
+                label = issue.get("epic") or ""
+                title = issue.get("epic_summary") or label
+                if not buckets or buckets[-1][0] != label:
+                    buckets.append((label, title, []))
+                buckets[-1][2].append(issue)
             if level == "leadership":
-                by_epic = {}
-                for issue in stream["issues"]:
-                    by_epic.setdefault(issue.get("epic") or "Not under an Epic", []).append(issue)
-                for epic, issues in by_epic.items():
-                    lines.append(f"- {epic} — {len(issues)} done this window")
+                for label, title, issues in buckets:
+                    name = title or "Not under an Epic"
+                    lines.append(f"- {name} — {len(issues)} done this window")
                 lines.append("")
                 continue
-            shown = stream["issues"]
-            if level == "partner":
-                shown = [issue for issue in shown
-                         if "partner-visible" in [str(l).lower() for l in issue.get("labels") or []]
-                         or "partner-visible" in str(issue.get("epic") or "").lower()]
-            for issue in shown:
-                if issue.get("epic"):
-                    lines.append(f"**{issue['epic']}**")
-                lines.append(f"- {issue['key']}: {issue['summary']}")
+            multiple = len(buckets) > 1 or (buckets and buckets[0][0])
+            for label, title, issues in buckets:
+                if multiple and (label or len(buckets) > 1):
+                    heading = f"{label} {title}".strip() if label else "Not under an Epic"
+                    lines.append(f"**{heading}**")
+                    lines.append("")
+                for issue in issues:
+                    if level == "partner" and not issue.get("show_keys"):
+                        lines.append(f"- {issue['summary']}")
+                    else:
+                        lines.append(f"- {issue['key']}: {issue['summary']}")
                 wrote = False
                 for line in issue.get("comments") or []:
                     if used + len(line) > limit:
@@ -179,7 +189,7 @@ def draft(cfg, bullets):
     return raw.strip()
 
 
-def render(since, version, rows, prose, comment_budget=6000, level="pm"):
+def render(since, version, rows, prose, comment_budget=6000, level="pm", extras=None):
     bits = []
     if since:
         bits.append(f"since {since}")
@@ -201,7 +211,69 @@ def render(since, version, rows, prose, comment_budget=6000, level="pm"):
         lines.append("The model was skipped.")
         lines.append("")
     lines.extend(bullets)
+    lines.extend(extras or [])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _mark_partner(cfg, rows):
+    from core import audience, sources as source_core
+    opts = audience.settings(cfg)["partner"]
+    wanted = {str(label).lower() for label in opts.get("epic_labels") or []}
+    excluded = {str(label).lower() for label in opts.get("exclude_labels") or []}
+    parents = sorted({row.get("epic") for row in rows if row.get("epic")})
+    labels = {}
+    if parents:
+        for raw in source_core.fetch_issues_by_key(cfg.get("jira") or {}, parents, ["labels", "summary"]):
+            fields = raw.get("fields") or {}
+            labels[raw.get("key")] = {
+                "labels": list(fields.get("labels") or []),
+                "summary": fields.get("summary") or "",
+            }
+    show_keys = bool(opts.get("include_jira_links"))
+    for row in rows:
+        info = labels.get(row.get("epic")) or {}
+        row["epic_summary"] = info.get("summary") or ""
+        own = {str(label).lower() for label in row.get("labels") or []}
+        epic_labels = {str(label).lower() for label in info.get("labels") or []}
+        row["partner_visible"] = bool((own | epic_labels) & wanted) and not (own & excluded)
+        row["show_keys"] = show_keys
+
+
+def _extras(cfg, since, version, level):
+    lines = []
+    if version and not since:
+        lines.extend(["## Further reading", "",
+                      "_Skipped: only a fixVersion was given._", ""])
+        return lines
+    if since and level != "partner":
+        from core import registers
+        import datetime as dt
+        found, _skip = registers.gather(
+            cfg, {"start": dt.date.fromisoformat(since)}, {})
+        decisions = []
+        for record in found:
+            if record.get("type") not in ("decision", "adr"):
+                continue
+            for entry in record.get("entries") or []:
+                if str(entry.get("status") or "").lower() != "accepted":
+                    continue
+                if entry.get("change") not in ("new", "changed"):
+                    continue
+                decisions.append(f"- {entry.get('title')}")
+        if decisions:
+            lines.extend(["## Decisions made in this release", ""] + decisions + [""])
+    if since:
+        from core import pages as page_core
+        import datetime as dt
+        window = {"start": dt.date.fromisoformat(since)}
+        reading = []
+        for ws in cfg.get("_workstreams") or []:
+            for page in page_core.gather(cfg, ws, window=window):
+                if page.get("epic"):
+                    reading.append(f"- {page.get('title')}")
+        if reading:
+            lines.extend(["## Further reading", ""] + reading[:10] + [""])
+    return lines
 
 
 def run(cfg, args):
@@ -216,9 +288,11 @@ def run(cfg, args):
     budget = comments.settings(cfg)["section_chars"]
     from core import audience
     level = audience.level(cfg, args)
+    _mark_partner(cfg, rows)
     bullets = bullet_lines(rows, budget, level)
     prose = draft(cfg, bullets) if rows else None
-    text = render(since, version, rows, prose, budget, level)
+    text = render(since, version, rows, prose, budget, level,
+                  _extras(cfg, since, version, level))
     path = output.place(
         cfg, f"release_notes_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))
