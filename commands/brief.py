@@ -14,7 +14,7 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, conventions, filters, model, output, paths, prompts, queries, sources, state,
+    checklist, comments, conventions, filters, model, output, paths, prompts, queries, registers, sources, state,
     workstreams, writes,
 )
 from core import products as product_core
@@ -116,6 +116,8 @@ def gather(cfg, audience, window=None):
             "changed": len(changed),
             "dropped": len(dropped),
         })
+    found, _skip = registers.gather(cfg, window or {"start": None}, prev)
+    snapshot["_registers"] = registers.snapshot(found)
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
     return sections, snapshot, last

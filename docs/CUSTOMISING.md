@@ -546,6 +546,26 @@ Used by: pm report epics finished in the window.
 ({base}) AND {status_done} AND resolved >= "{since}"
 ```
 
+### `registers.descendants`
+
+Every page under a register summary page.
+
+Used by: decision, risk and ADR registers.
+
+```
+ancestor = {page_id} AND type = page
+```
+
+### `registers.children`
+
+Direct child pages of a register summary page.
+
+Used by: decision, risk and ADR registers.
+
+```
+parent = {page_id} AND type = page
+```
+
 ### `brief.risk_pages`
 
 Pages the workstream labelled as risks.

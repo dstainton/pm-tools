@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import checklist, citations, comments, epics, output, sources, model, state, workstreams
+from core import checklist, citations, comments, epics, output, pages as page_core, registers, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -104,7 +104,7 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def prepare(cfg, ws, previous, window=None):
+def prepare(cfg, ws, previous, window=None, skip_ids=None):
     """Items and the change block `pm report` will send. Writes nothing."""
     prefix = ws["abbrev"]
     items = []
@@ -136,7 +136,7 @@ def prepare(cfg, ws, previous, window=None):
         page_window["start"] = page_since
     elif cutoff is not None:
         page_window.setdefault("start", cutoff.date() if hasattr(cutoff, "date") else cutoff)
-    got = page_core.gather(cfg, ws, window=page_window)
+    got = page_core.gather(cfg, ws, window=page_window, skip_ids=skip_ids)
     items += got
     idx = 1
     got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
@@ -190,10 +190,12 @@ def run(cfg, args):
     except window_core.WindowError as exc:
         sys.exit(str(exc))
 
+    found_registers, skip_ids = registers.gather(cfg, window, previous)
     prepared = []
     for ws in selected:
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        row = prepare(cfg, ws, previous, window)
+        row = prepare(cfg, ws, previous, window, skip_ids=skip_ids)
+        row["registers"] = found_registers
         if not row["first_run"]:
             print(f"  changes: {len(row['new'])} new, "
                   f"{len(row['changed'])} changed, "
@@ -228,6 +230,8 @@ def run(cfg, args):
         print(f"Window: {window['label']} (this run does not move the "
               "last-report memory).")
     else:
+        # `_registers` is not a workstream abbrev; state walks abbrevs only.
+        new_state["_registers"] = registers.snapshot(found_registers)
         state.save_state(state_path, new_state)
 
     scope_note = ""

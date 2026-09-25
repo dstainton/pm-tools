@@ -186,6 +186,40 @@ def _apply_convention_prompts(cfg):
         record["values"][value_name] = list(value)
 
 
+def _validate_registers(cfg):
+    raw = cfg.get("registers")
+    if raw is None:
+        return
+    if not isinstance(raw, list):
+        sys.exit("`registers:` must be a list.")
+    products = {p.get("abbrev") for p in (cfg.get("products") or []) if isinstance(p, dict)}
+    streams = {w.get("abbrev") for w in (cfg.get("workstreams") or []) if isinstance(w, dict)}
+    for reg in raw:
+        if not isinstance(reg, dict):
+            sys.exit("`registers:` entries must be mappings.")
+        name = reg.get("name") or "register"
+        if reg.get("type") not in ("decision", "risk", "adr"):
+            sys.exit(f'Register "{name}": type must be decision, risk, or adr.')
+        if not reg.get("name"):
+            sys.exit("Each register needs a name.")
+        if not reg.get("page_id") and not (reg.get("space") and reg.get("title")):
+            sys.exit(f'Register "{name}": set page_id, or both space and title.')
+        if reg.get("product") and reg.get("workstream"):
+            sys.exit(f'Register "{name}": set product or workstream, not both.')
+        if reg.get("product") and reg["product"] not in products:
+            sys.exit(f'Register "{name}": unknown product {reg["product"]}.')
+        if reg.get("workstream") and reg["workstream"] not in streams:
+            sys.exit(f'Register "{name}": unknown workstream {reg["workstream"]}.')
+        if reg.get("type") == "risk" and reg.get("partner_visible"):
+            sys.exit(f'Register "{name}": a risk register cannot be partner_visible.')
+        highlight = reg.get("highlight")
+        if highlight is not None:
+            if not isinstance(highlight, dict) or not isinstance(highlight.get("field"), str):
+                sys.exit(f'Register "{name}": highlight needs a field and a list of values.')
+            if not isinstance(highlight.get("values"), list):
+                sys.exit(f'Register "{name}": highlight values must be a list.')
+
+
 def validate(cfg):
     """Check the whole config before a single Jira call is made.
 
@@ -200,6 +234,7 @@ def validate(cfg):
     _validate_blocked(cfg)
     _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
+    _validate_registers(cfg)
     queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)
     prompts.validate_config(cfg)

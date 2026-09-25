@@ -461,6 +461,7 @@ workstreams:
 #    confluence.space confluence.labels confluence.types confluence.window
 #    brief.risk_pages
 #    epics.children epics.resolved
+#    registers.descendants registers.children
 
 # ----------------------------------------------------------------------------
 #  7. Output (used by `pm report`)

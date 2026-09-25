@@ -173,6 +173,14 @@ QUERIES = {
         "jql", "pm report epics finished in the window",
         "Epics in the workstream that were resolved inside the window.",
         '({base}) AND {status_done} AND resolved >= "{since}"', ("base", "since")),
+    "registers.descendants": _entry(
+        "cql", "decision, risk and ADR registers",
+        "Every page under a register summary page.",
+        "ancestor = {page_id} AND type = page", ("page_id",)),
+    "registers.children": _entry(
+        "cql", "decision, risk and ADR registers",
+        "Direct child pages of a register summary page.",
+        "parent = {page_id} AND type = page", ("page_id",)),
     "brief.risk_pages": _entry(
         "cql", "pm brief",
         "Pages the workstream labelled as risks.",
