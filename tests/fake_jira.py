@@ -505,8 +505,8 @@ class _Handler(BaseHTTPRequestHandler):
     def _confluence(self):
         query = unquote(parse_qs(urlparse(self.path).query).get("cql", [""])[0])
         space = re.search(r'space\s*=\s*"?([\w-]+)"?', query)
-        labels = re.findall(r'"([\w-]+)"', query.split("label", 1)[-1]) \
-            if "label" in query else []
+        label_clause = query.split("label", 1)[-1] if re.search(r"\blabel\b", query) else ""
+        labels = re.findall(r'"([\w-]+)"', label_clause) if label_clause else []
 
         hits = []
         for page in self.pages:
