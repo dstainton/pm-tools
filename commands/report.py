@@ -174,29 +174,41 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
     }
 
 
+def _seen_page_ids(prepared):
+    seen = set()
+    for _ws, row in prepared:
+        for item in row.get("items") or []:
+            if item.get("page_id"):
+                seen.add(str(item["page_id"]))
+    return seen
+
+
+def _inside(page, folder_ids):
+    return any(str(a) in folder_ids for a in page.get("ancestor_ids") or [])
+
+
 def _attach_product_pages(cfg, groups, prepared, window, skip_ids):
     """Pages from a product space or folder, attached to the owning workstream.
 
-    A product folder is read once. Pages already gathered for a workstream
-    folder are left where they are. A product that only sets `confluence_space`
-    still contributes the whole space.
+    A product folder is read once. Pages already gathered for a workstream,
+    or kept inside a workstream folder, are left to that workstream. A
+    product that only sets `confluence_space` still contributes the whole
+    space. A page that no in-scope Epic owns is marked `product_only`; it is
+    material for the first workstream and is listed under the product.
     """
     from core import confluence_tree, page_summaries
     from core import pages as page_core
     by_abbrev = {ws["abbrev"]: row for ws, row in prepared}
-    seen = set()
-    for row in by_abbrev.values():
-        for item in row.get("items") or []:
-            if item.get("page_id"):
-                seen.add(str(item["page_id"]))
+    seen = _seen_page_ids(prepared)
+    stream_folders = set(confluence_tree.folder_ids(cfg, "workstream"))
     for product, streams in groups:
         if not streams:
             continue
         located = confluence_tree.locate_product(cfg, product)
         has_page = product.get("confluence_page") or product.get("confluence_page_id")
-        if has_page:
-            if located.get("missing") or not located.get("ancestor_id") or not located.get("space"):
-                continue
+        if has_page and (located.get("missing") or not located.get("ancestor_id")):
+            continue
+        if located.get("ancestor_id") and located.get("space"):
             fake_ws = {
                 "abbrev": product.get("abbrev") or "",
                 "confluence_space": located["space"],
@@ -223,6 +235,8 @@ def _attach_product_pages(cfg, groups, prepared, window, skip_ids):
                     owner[epic["key"]] = ws["abbrev"]
         found = page_core.gather(
             cfg, fake_ws, product=product, epics=epics, window=window, skip_ids=skip_ids)
+        found = [page for page in found if not _inside(page, stream_folders)
+                 and str(page.get("page_id") or "") not in seen]
         page_summaries.fill(cfg, found)
         page_core.map_to_epics(found, epics, cfg=cfg)
         for page in found:
@@ -248,6 +262,56 @@ def _attach_product_pages(cfg, groups, prepared, window, skip_ids):
             loose = [it for it in docs if it.get("source") == "Confluence"
                      and not it.get("epic") and not it.get("product_only")]
             row["loose_pages"] = loose
+
+
+def _product_pages(prepared, streams):
+    abbrevs = {ws["abbrev"] for ws in streams}
+    return [item for ws, row in prepared if ws["abbrev"] in abbrevs
+            for item in row.get("items") or [] if item.get("product_only")]
+
+
+def team_pages(cfg, prepared, window, skip_ids):
+    """Changed pages under the team page that sit in no product or workstream folder.
+
+    A page an in-scope Epic owns joins that workstream instead. The rest are
+    marked `team_only` and listed once, near the top of the report.
+    """
+    from core import confluence_tree, page_summaries
+    from core import pages as page_core
+    if not confluence_tree.has_team_page(cfg):
+        return []
+    root = confluence_tree.team_root_id(cfg)
+    space = confluence_tree.team_space(cfg)
+    if not root or not space:
+        return []
+    folders = set(confluence_tree.folder_ids(cfg))
+    folders.discard(root)
+    seen = _seen_page_ids(prepared)
+    by_abbrev = {ws["abbrev"]: row for ws, row in prepared}
+    epics, owner = [], {}
+    for ws, row in prepared:
+        for epic in row.get("epics") or []:
+            epics.append(epic)
+            if epic.get("key"):
+                owner[epic["key"]] = ws["abbrev"]
+    fake_ws = {"abbrev": "TEAM", "confluence_space": space,
+               "confluence_page_id": root, "confluence_labels": []}
+    found = page_core.gather(cfg, fake_ws, epics=None, window=window, skip_ids=skip_ids)
+    found = [page for page in found if not _inside(page, folders)
+             and str(page.get("page_id") or "") not in seen
+             and str(page.get("page_id") or "") != root]
+    page_summaries.fill(cfg, found)
+    page_core.map_to_epics(found, epics, cfg=cfg)
+    team = []
+    for page in found:
+        target = owner.get(page.get("epic"))
+        if target:
+            row = by_abbrev[target]
+            row["items"].append(page)
+            continue
+        page["team_only"] = True
+        team.append(page)
+    return team
 
 
 def section_material(cfg, row):
@@ -513,6 +577,9 @@ def run(cfg, args):
         new_state[ws["abbrev"]] = snapshot
 
     groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
+    team = []
+    if len(selected) == len(cfg["workstreams"]):
+        team = team_pages(cfg, prepared, window, skip_ids)
     _attach_product_pages(cfg, groups, prepared, window, skip_ids)
 
     sections = []
@@ -589,7 +656,8 @@ def run(cfg, args):
             print(f"{removed} line{'s' if removed != 1 else ''} removed")
     else:
         report = report_render.render_pm(
-            cfg, groups, prepared, sections, window, scope_note, who=who)
+            cfg, groups, prepared, sections, window, scope_note, who=who,
+            team_pages=team)
     if who == "pm":
         try:
             from commands import metrics as metrics_cmd
@@ -604,16 +672,19 @@ def run(cfg, args):
 
     if getattr(args, "json", False):
         import json
-        payload = {"audience": who, "window": window, "products": []}
+        payload = {"audience": who, "window": window, "products": [],
+                   "team_pages": team}
         for product, streams in groups:
-            block = {"abbrev": product.get("abbrev") or "", "workstreams": []}
+            block = {"abbrev": product.get("abbrev") or "", "workstreams": [],
+                     "pages": _product_pages(prepared, streams)}
             for ws in streams:
                 row = next(r for w, r in prepared if w["abbrev"] == ws["abbrev"])
                 section = next((body for w, body in sections if w["abbrev"] == ws["abbrev"]), "")
                 block["workstreams"].append({
                     "abbrev": ws["abbrev"],
                     "epics": row.get("epics") or [],
-                    "pages": [it for it in row["items"] if it.get("source") != "Jira"],
+                    "pages": [it for it in row["items"] if it.get("source") != "Jira"
+                              and not it.get("product_only")],
                     "section": section,
                 })
             payload["products"].append(block)
