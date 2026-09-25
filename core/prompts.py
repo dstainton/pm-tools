@@ -32,8 +32,8 @@ Rules:
 {empty_section}
 2. If CHANGE SUMMARY says this is the first run, the first section is \
 exactly: {first_run_line}
-3. After a fact, cite its tag like [SDX-J3]. Use only tags that appear in \
-the Material.
+3. After a fact, cite its tag like [APS-10] or [D1]. Use only tags that \
+appear in the Material.
 4. Do not add a title, a workstream heading, or a reference list.
 5. A dated line under an item is a comment from this window. Use it for \
 what changed, decisions, blockers, and risks, and cite that item's tag. \
@@ -41,8 +41,8 @@ A comment is not a status change.
 
 Example of one filled section:
 ### {heading_progress}
-- Status endpoint is in review. [SDX-J1]
-- Certificate rotation is past its due date. [SDX-J4]
+- Status endpoint is in review. [APS-10]
+- Certificate rotation cadence is decided. [D1]
 """
 
 REPORT_SECTION_TAIL = "Write the seven sections now."
@@ -197,6 +197,7 @@ PROMPTS = {
         ),
         required=("headings", "empty_section", "first_run_line"),
         append_at="Example of one filled section:",
+        version=2,
     ),
     "report.section_tail": _entry(
         "pm report, pm warm --report",

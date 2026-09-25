@@ -95,6 +95,7 @@ def gather(cfg, audience, window=None):
                 cfg, cfg.get("jira") or {}, issues,
                 comments.audience_cutoff(last, comments.settings(cfg)))
             for issue in issues:
+                issue["workstream"] = ws["abbrev"]
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
             page_since = window["start"] if window and window.get("explicit") else None
             risks.extend(_risks(cfg, ws, since=page_since))

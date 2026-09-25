@@ -563,17 +563,26 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
         meta = f"Status: {status} | Assignee: {assignee} | Due: {due}"
         if priority:
             meta += f" | Priority: {priority}"
-        ref = f"{tag_prefix}-J{idx}"
+        summary = f.get("summary") or ""
+        category = ((f.get("status") or {}).get("statusCategory") or {}).get("key", "")
         item = make_item(
-            ref=ref,
+            ref=iss["key"],
             source="Jira",
-            title=f"{iss['key']}: {short(f.get('summary'), 140)}",
+            title=f"{iss['key']}: {short(summary, 140)}",
             detail=meta,
             url=f"{cfg['base_url'].rstrip('/')}/browse/{iss['key']}",
             meta=meta,
-            uid=iss["key"],       # e.g. SDX-101 — stable across weeks
-            watch=status,          # we flag a change when status moves
+            uid=iss["key"],
+            watch=status,
         )
+        item["key"] = iss["key"]
+        item["summary"] = summary
+        item["status"] = status
+        item["status_category"] = category
+        item["assignee"] = assignee
+        item["issuetype"] = (f.get("issuetype") or {}).get("name") or ""
+        item["labels"] = list(f.get("labels") or [])
+        item["due"] = f.get("duedate") or ""
         item["updated"] = f.get("updated")
         items.append(item)
         idx += 1
@@ -890,9 +899,8 @@ def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None):
         body = (page.get("body", {}).get("view", {}) or {}).get("value", "")
         when = (page.get("version", {}) or {}).get("when", "")[:10]
         link = cfg["base_url"].rstrip("/") + page.get("_links", {}).get("webui", "")
-        ref = f"{tag_prefix}-C{idx}"
         items.append(make_item(
-            ref=ref,
+            ref="",
             source="Confluence",
             title=short(page.get("title"), 140),
             detail=strip_html(body),
@@ -954,9 +962,8 @@ def fetch_sharepoint(cfg, query, tag_prefix, start_index):
                 continue
         except ValueError:
             pass
-        ref = f"{tag_prefix}-S{idx}"
         items.append(make_item(
-            ref=ref,
+            ref="",
             source="SharePoint",
             title=short(f.get("name"), 140),
             detail=f"Modified {modified[:10]}",

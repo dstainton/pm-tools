@@ -23,14 +23,14 @@ Output exactly these seven headings, in this order, and nothing else:
 Rules:
 1. Each section is 2 to 4 short bullets, or this exact sentence: {empty_section}
 2. If CHANGE SUMMARY says this is the first run, the first section is exactly: {first_run_line}
-3. After a fact, cite its tag like [SDX-J3]. Use only tags that appear in the Material.
+3. After a fact, cite its tag like [APS-10] or [D1]. Use only tags that appear in the Material.
 4. Do not add a title, a workstream heading, or a reference list.
 5. A dated line under an item is a comment from this window. Use it for what changed, decisions, blockers, and risks, and cite that item's tag. A comment is not a status change.
 
 Example of one filled section:
 ### {heading_progress}
-- Status endpoint is in review. [SDX-J1]
-- Certificate rotation is past its due date. [SDX-J4]
+- Status endpoint is in review. [APS-10]
+- Certificate rotation cadence is decided. [D1]
 ```
 
 ### `report.section_tail`

@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import checklist, comments, output, sources, model, state, workstreams
+from core import checklist, citations, comments, output, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -40,7 +40,7 @@ def build_report(cfg, sections, all_items, scope_note):
         items_by_ws = {}
         for it in all_items:
             # ref looks like SDX-J1; fall back to counting per section order
-            prefix = (it.get("ref") or "").split("-")[0]
+            prefix = it.get("workstream") or ""
             items_by_ws[prefix] = items_by_ws.get(prefix, 0) + 1
         for product, streams in groups:
             abbrevs = ", ".join(ws["abbrev"] for ws in streams)
@@ -141,6 +141,10 @@ def prepare(cfg, ws, previous, window=None):
                                         ws.get("sharepoint_query"), prefix, idx)
     items += got
     first_run = prefix not in previous
+    for item in items:
+        item["workstream"] = prefix
+    docs = [it for it in items if it.get("source") != "Jira"]
+    citations.assign_doc_tags(docs)
     jira_items = [it for it in items if it.get("source") == "Jira"]
     comments.attach(
         cfg, cfg.get("jira") or {}, jira_items,
@@ -205,6 +209,12 @@ def run(cfg, args):
             ws, row["items"], row["change_block"],
             comment_budget=comments.settings(cfg)["section_chars"],
             cfg=cfg)
+        body, removed = citations.resolve(body, citations.citation_map(row["items"]))
+        if removed:
+            print(f"  ({ws['abbrev']}: {removed} citation removed — not in the material)")
+            noun = "citation" if removed == 1 else "citations"
+            verb = "it was" if removed == 1 else "they were"
+            body = body.rstrip() + f"\n\n_{removed} {noun} removed: {verb} not in the material._\n"
         sections.append((ws, body))
         all_items += row["items"]
 
