@@ -82,9 +82,10 @@ You also need a local OpenAI-compatible model server for `pm report`,
 when the model is up. `pm warm` only calls the model for the commands you
 ask it to prepare.
 
-A later upgrade is `pm update`. It upgrades the program and adds new config
-keys. It does not replace `~/.pm-tools/config.yaml`. `pm init --force` is the only
-command that replaces that file.
+A later upgrade is `pm update`. It upgrades the program and then starts
+again so the new code adds new config keys. It does not replace
+`~/.pm-tools/config.yaml`. `pm init --force` is the only command that
+replaces that file.
 
 Developing pm-tools itself is a separate path: `pip install -e .` inside a
 clone. An editable install does not get `pm update`'s code upgrade; pull
