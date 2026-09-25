@@ -148,6 +148,37 @@ Do not add keys that are not in the list. Do not write any text outside the \
 JSON array.
 """
 
+PAGE_SUMMARY = """\
+Summarise one Confluence page for a product report.
+
+Use ONLY the page text. Do not invent decisions, dates, or people.
+
+Return a JSON array with exactly one object and nothing else:
+[{"summary": "...", "kind": "..."}]
+
+Rules:
+1. summary is one sentence of at most 30 words.
+2. If the page records a decision, the summary states the decision itself.
+3. kind is one of: {kinds}.
+
+Example:
+[{"summary": "Certificates rotate every 90 days, automated from October.", "kind": "decision"}]
+"""
+
+PAGE_EPIC = """\
+Match one Confluence page to the Epic it is about.
+
+Return a JSON array with exactly one object and nothing else:
+[{"epic": "KEY"}]
+
+Rules:
+1. KEY must be one of the Epic keys listed.
+2. If the page is not clearly about one listed Epic, return [{"epic": ""}].
+3. Do not match on a single shared word.
+"""
+
+PAGE_TAIL = "Return the JSON array now."
+
 RELEASE_NOTES_PROSE = """\
 Draft short release notes from the issue list below.
 
@@ -266,6 +297,27 @@ PROMPTS = {
         "pm release-notes",
         "Turns the done list into prose.",
         RELEASE_NOTES_PROSE,
+    ),
+    "pages.summary": _entry(
+        "pm warm --pages, pm report",
+        "One sentence and a kind for a changed Confluence page. The page "
+        "version is cached, so this is not asked again until the page changes.",
+        PAGE_SUMMARY,
+        values={"kinds": ["decision", "risk", "dependency", "requirement",
+                          "design", "meeting", "status", "other"]},
+        contract=("JSON array", '"summary"', '"kind"'),
+    ),
+    "pages.epic_match": _entry(
+        "pm report, when a page names no single Epic",
+        "Picks one Epic key for a page, or none. The answer must be one of "
+        "the keys in the user message.",
+        PAGE_EPIC,
+        contract=("JSON array", '"epic"'),
+    ),
+    "pages.tail": _entry(
+        "pm warm --pages, pm report",
+        "Last line of a page summary or Epic match.",
+        PAGE_TAIL,
     ),
 }
 

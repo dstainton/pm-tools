@@ -348,4 +348,15 @@ def map_to_epics(pages, epics, parent_of=None, cfg=None):
                 page["epic_match"] = "ancestor"
                 by_key[parent["epic"]].setdefault("pages", []).append(page)
                 break
+    opts = page_settings(cfg or {})
+    if opts.get("match_epics_with_model"):
+        from core import page_summaries
+        for page in pages:
+            if page.get("epic") or not page.get("summary"):
+                continue
+            chosen = page_summaries.pick_epic(cfg or {}, page, list(by_key.values()))
+            if chosen in by_key:
+                page["epic"] = chosen
+                page["epic_match"] = "model"
+                by_key[chosen].setdefault("pages", []).append(page)
     return pages

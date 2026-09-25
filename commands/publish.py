@@ -33,18 +33,25 @@ def settings(cfg):
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+
+
 def _inline(text):
-    """Escape text and keep Markdown links as anchors."""
+    """Escape text, then keep Markdown links and bold."""
     parts = []
     pos = 0
     for match in _LINK.finditer(text or ""):
-        parts.append(html.escape(text[pos:match.start()]))
+        parts.append(_bold(html.escape(text[pos:match.start()])))
         label = html.escape(match.group(1))
         url = html.escape(match.group(2), quote=True)
         parts.append(f'<a href="{url}">{label}</a>')
         pos = match.end()
-    parts.append(html.escape((text or "")[pos:]))
+    parts.append(_bold(html.escape((text or "")[pos:])))
     return "".join(parts)
+
+
+def _bold(text):
+    return _BOLD.sub(r"<strong>\1</strong>", text)
 
 
 def markdown_to_storage(text):
@@ -83,6 +90,16 @@ def markdown_to_storage(text):
                 chunks.append("</ul>")
                 in_list = False
             chunks.append(f"<h3>{_inline(raw[4:].strip())}</h3>")
+        elif raw.startswith("##### "):
+            if in_list:
+                chunks.append("</ul>")
+                in_list = False
+            chunks.append(f"<h5>{_inline(raw[6:].strip())}</h5>")
+        elif raw.startswith("#### "):
+            if in_list:
+                chunks.append("</ul>")
+                in_list = False
+            chunks.append(f"<h4>{_inline(raw[5:].strip())}</h4>")
         elif raw.startswith("|") and "|" in raw[1:]:
             if in_list:
                 chunks.append("</ul>")

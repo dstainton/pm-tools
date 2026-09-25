@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import checklist, citations, comments, epics, output, pages as page_core, registers, sources, model, state, workstreams
+from core import checklist, citations, comments, epics, output, pages as page_core, registers, report_render, sources, model, state, workstreams
 from core import products as product_core
 
 
@@ -137,6 +137,8 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
     elif cutoff is not None:
         page_window.setdefault("start", cutoff.date() if hasattr(cutoff, "date") else cutoff)
     got = page_core.gather(cfg, ws, window=page_window, skip_ids=skip_ids)
+    from core import page_summaries
+    page_summaries.fill(cfg, got)
     items += got
     idx = 1
     got, idx = sources.fetch_sharepoint(cfg["sharepoint"],
@@ -155,7 +157,8 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
     change_block = state.build_change_block(new, changed, dropped, first_run)
     epic_rows = epics.build(cfg, ws, items, window, (new, changed, dropped))
     page_core.map_to_epics(
-        [it for it in items if it.get("source") == "Confluence"], epic_rows)
+        [it for it in items if it.get("source") == "Confluence"], epic_rows,
+        cfg=cfg)
     return {
         "items": items,
         "change_block": change_block,
@@ -239,7 +242,14 @@ def run(cfg, args):
         scope_note = (" Scope: "
                       + ", ".join(w["abbrev"] for w in selected) + ".")
 
-    report = build_report(cfg, sections, all_items, scope_note)
+    groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
+    base = ((cfg.get("jira") or {}).get("base_url") or "").rstrip("/")
+    for _ws, row in prepared:
+        for epic in row.get("epics") or []:
+            if epic.get("key") and not epic.get("url") and base:
+                epic["url"] = f"{base}/browse/{epic['key']}"
+    report = report_render.render_pm(
+        cfg, groups, prepared, sections, window, scope_note)
     try:
         from commands import metrics as metrics_cmd
         groups = metrics_cmd.gather(cfg, 8)
@@ -252,6 +262,26 @@ def run(cfg, args):
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
 
+    if getattr(args, "json", False):
+        import json
+        payload = {"audience": "pm", "window": window, "products": []}
+        for product, streams in groups:
+            block = {"abbrev": product.get("abbrev") or "", "workstreams": []}
+            for ws in streams:
+                row = next(r for w, r in prepared if w["abbrev"] == ws["abbrev"])
+                section = next((body for w, body in sections if w["abbrev"] == ws["abbrev"]), "")
+                block["workstreams"].append({
+                    "abbrev": ws["abbrev"],
+                    "epics": row.get("epics") or [],
+                    "pages": [it for it in row["items"] if it.get("source") != "Jira"],
+                    "section": section,
+                })
+            payload["products"].append(block)
+        json_path = out_path.replace(".md", ".json")
+        if json_path == out_path:
+            json_path = out_path + ".json"
+        with open(json_path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, default=str, indent=2)
     print(f"\nDone. Report written to: {out_path}")
     preview = "\n".join(report.splitlines()[:24])
     print("\n" + preview)

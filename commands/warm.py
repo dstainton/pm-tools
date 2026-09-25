@@ -16,10 +16,21 @@ from core import comments, model, output, state
 def _wanted(args):
     review_on = bool(getattr(args, "review", False) or getattr(args, "deep", False))
     report_on = bool(getattr(args, "report", False))
+    pages_on = bool(getattr(args, "pages", False))
     inbox_on = bool(getattr(args, "inbox", False))
-    if not (review_on or report_on or inbox_on):
-        return {"review": True, "report": True, "inbox": True}
-    return {"review": review_on, "report": report_on, "inbox": inbox_on}
+    if not (review_on or report_on or inbox_on or pages_on):
+        return {"review": True, "pages": True, "report": True, "inbox": True}
+    return {"review": review_on, "pages": pages_on, "report": report_on, "inbox": inbox_on}
+
+
+def _warm_pages(cfg):
+    from core import page_summaries, pages, window as window_core
+    window = window_core.resolve(cfg, None, default_start=None, projects=[])
+    collected = []
+    for ws in cfg.get("_workstreams") or []:
+        collected.extend(pages.gather(cfg, ws, window=window))
+    print(f"Summarising {len(collected)} page(s) ...")
+    page_summaries.fill(cfg, collected)
 
 
 def _warm_report(cfg):
@@ -60,6 +71,9 @@ def run(cfg, args):
     if wanted["review"]:
         print("Warming review (this also covers pm ready --deep) ...")
         review.evaluate(cfg, ["titles", "criteria"])
+    if wanted.get("pages"):
+        print("Warming page summaries ...")
+        _warm_pages(cfg)
     if wanted["report"]:
         print("Warming report ...")
         _warm_report(cfg)

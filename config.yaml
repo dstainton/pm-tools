@@ -447,6 +447,9 @@ workstreams:
 #    review.titles_tail — last line of the titles user message
 #    review.criteria_tail — last line of the criteria user message
 #    release_notes.prose — done work turned into prose
+#    pages.summary — one sentence for a changed page
+#    pages.epic_match — which Epic a page belongs to
+#    pages.tail — last line of a page prompt
 #  Query ids:
 #    status.open status.done status.in-progress status.todo
 #    sprint.open sprint.future sprint.none sprint.by_id

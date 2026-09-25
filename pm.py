@@ -446,6 +446,8 @@ def build_parser():
                         help="Warm pm report")
     p_warm.add_argument("--deep", action="store_true",
                         help="Same model work as --review")
+    p_warm.add_argument("--pages", action="store_true",
+                        help="Summarise Confluence pages changed in the report window")
     p_warm.add_argument("--inbox", action="store_true",
                         help="Warm suggestions for notes already in the inbox")
     p_warm.set_defaults(func=warm.run, needs_config=True)

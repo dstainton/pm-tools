@@ -740,6 +740,13 @@ class _Handler(BaseHTTPRequestHandler):
             reply = '[{"key":"APS-11","title":"Fix retry handling in the exchange client"}]'
         elif "Draft acceptance criteria" in system:
             reply = '[{"key":"APS-20","criteria":"Given a tenant over the limit, requests are rejected with 429."}]'
+        elif "Summarise one Confluence page" in system:
+            text = user.split("Text:", 1)[-1].strip().split("\n", 1)[0]
+            sentence = text.split(".")[0].strip() or "A page."
+            reply = json.dumps([{"summary": sentence, "kind": "decision"}])
+        elif "Match one Confluence page" in system:
+            keys = re.findall(r"\b[A-Z][A-Z0-9]+-\d+\b", user)
+            reply = json.dumps([{"epic": keys[0] if keys else ""}])
         elif "JSON array" in system:
             reply = "[]"
         else:

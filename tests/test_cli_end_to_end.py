@@ -560,10 +560,12 @@ class ReportTests(CliTestCase):
 
         report = self.read_output(r"weekly_report_.*\.md")
         self.assertIn("Fake model reply for the end-to-end test", report)
-        self.assertIn("## References", report)
+        self.assertIn("## Sources", report)
+        self.assertNotIn("## References", report)
+        self.assertIn("**[APS-1](", report)
         self.assertIn(f"{self.jira.url}/browse/APS-10", report)
         # The roadmap half of the gather is the workstream's epic.
-        self.assertIn("APS-1:", report)
+        self.assertIn("APS-1 Secure exchange platform", report)
         self.assertTrue(os.path.exists(os.path.join(self.dir,
                                                     "report_state.json")))
 
@@ -687,7 +689,7 @@ class ProductTests(CliTestCase):
     def test_weekly_report_has_a_portfolio_section(self):
         self.run_pm("report", "--product", "IP")
         report = self.read_output(r"weekly_report_.*\.md")
-        self.assertIn("## Portfolio", report)
+        self.assertIn("## At a glance", report)
         self.assertIn("Integration Platform (IP)", report)
 
 
