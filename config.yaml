@@ -182,14 +182,20 @@ confluence:
   max_results: 50
   content_types: [page, blogpost]
   title_only_types: [database, embed]
-  # One space for the whole team. Leave these unset when each workstream has
-  # its own confluence_space (the example below). space is the default for
-  # page titles and for registers that omit space. root_title or root_page_id
-  # is the page the team lives under. It is not applied to a workstream that
-  # does not name a page.
-  # space: "APS"
-  # root_title: "API Program Services"
-  # root_page_id: "123456"
+  # One space shared by several teams. Leave these unset when each workstream
+  # has its own confluence_space (the example below).
+  #   space      the space key, or its name as shown in Confluence.
+  #   team_page  the title of your team's top page in that space. Everything
+  #              your team keeps is under it. team_page_id works too.
+  # Under the team page, a page or folder whose title names a product or
+  # workstream is used for it by itself: "Secure Data Exchange (SDX)" is
+  # found for a product named "Secure Data Exchange" or abbreviated SDX.
+  # A workstream folder may sit inside its product folder or directly under
+  # the team page. Pages under the team page that belong to no product or
+  # workstream folder are listed once as team pages.
+  # space: "POSM Chapter"
+  # team_page: "API Program Services (APS) Team"
+  # team_page_id: "123456"
 
 # ----------------------------------------------------------------------------
 #  4. SharePoint (via Microsoft Graph) — set enabled: false to skip
@@ -442,12 +448,15 @@ products:
 #    components         exact Jira Component name(s) — must match Jira
 #    project            only if this stream lives outside the team project
 #    confluence_space   space key. On its own, every changed page in that space
-#    confluence_page    folder or page title under one shared space
+#    confluence_page    folder or page title, when its title does not name
+#                       the workstream. false: use no folder.
 #    confluence_page_id that folder's id, when the title is not unique
 #  A product may set the same three keys. confluence_space alone still means
-#  the whole space. A page is read under that folder: the workstream space,
-#  or the product space, or confluence.space. Pages in the product folder
-#  that are not under a workstream folder are filed on the product.
+#  the whole space. With confluence.team_page set and none of these keys, a
+#  folder under the team page whose title names the product or workstream is
+#  used. A workstream folder is looked for inside its product folder first.
+#  Pages in the product folder that are not under a workstream folder are
+#  listed under the product.
 #    confluence_labels  which labels to gather from that space or folder
 #    sharepoint_query   search term for its documents
 #    scopes             per-workstream overrides of the section above
@@ -495,7 +504,10 @@ workstreams:
 #  Each entry is a summary page or folder whose child pages are the records.
 #  page_id, or space plus title, names it. space may be omitted when
 #  confluence.space is set. under (or under_id) picks the summary when the
-#  same title exists in more than one folder.
+#  same title exists in more than one folder. With confluence.team_page set
+#  and no under, the title is looked for in the register's workstream folder,
+#  then its product folder, then directly under the team page, so another
+#  team's "Risks" page is never picked.
 #
 #  Two layouts can both be set. A page that appears in more than one is
 #  listed once, on a workstream, then a product, then the portfolio.

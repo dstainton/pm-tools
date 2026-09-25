@@ -35,6 +35,20 @@
   when they are blank. `pm doctor` checks those folders. `pm products add`
   and `pm workstreams add` take `--confluence-page`. `pm update` does not
   insert these keys.
+- Several teams can share one Confluence space. `confluence.team_page` (or
+  `team_page_id`) names your team's top page, and `confluence.space` takes
+  the space name as well as its key. Under the team page, a page or folder
+  whose title names a product or workstream is used without any setting,
+  for example "Secure Data Exchange (SDX)"; `confluence_page: false` turns
+  that off for one entry. A workstream folder is looked for inside its
+  product folder first. `pm report` lists product-folder pages under the
+  product and pages in no folder once, as team pages. A register with no
+  `under` looks in its own folder, then the product folder, then directly
+  under the team page. `pm setup` writes `team_page`
+  (`--confluence-team-page`; `--confluence-root` still works) and shows the
+  folders it found. `pm doctor` shows the space key, the team page, and how
+  each folder was found, and warns when a workstream reads the whole shared
+  space.
 - `pm setup` probes the local servers in `local_models.endpoints`, lists
   the models each one is serving, and recommends one that fits installed
   RAM (`config_version` 7). When none answer, it can install Ollama or
