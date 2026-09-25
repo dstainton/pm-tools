@@ -1,7 +1,10 @@
 # Tranche 5 — reports by Epic, Confluence as a source, and three audiences
 
 A plan for making every narrative report more useful to the person reading
-it: a product manager, leadership, or a partner outside the company.
+it: a product manager, leadership, or a partner outside the company. It
+also moves the prompts, the Jira and Confluence queries, and one team's
+Jira habits out of the code into documented, overridable defaults
+(Part 7b), so the tool fits a team whose Jira is set up differently.
 
 Nothing here is built. This is a plan. It is written to be implemented step
 by step by someone (or some model) who has not read the rest of the code, so
@@ -26,7 +29,8 @@ Jira's word (Epic, Story, Component, assignee); prose uses Scrum's word
 - Part 5 — Audiences: pm, leadership, partner
 - Part 6 — Every report, per audience
 - Part 7 — What the model is asked, and what it costs
-- Part 8 — Implementation steps, in order
+- Part 7b — Prompts, queries and team conventions in config
+- Part 8 — Implementation steps, in order (Steps 0a–0d first)
 - Part 9 — Config and migration (`config_version` 6)
 - Part 10 — Tests and fixtures
 - Part 11 — Not in this plan, and choices worth revisiting
@@ -336,8 +340,9 @@ report drops that type for the run instead of failing.
 ### 4.3 Which window
 
 The report window from Step 1 (`core/window.py`), never
-`confluence.lookback_days`. The CQL clause is
-`lastmodified >= "<window start as YYYY-MM-DD>"` and results are ordered
+`confluence.lookback_days`. The CQL clause is the
+`confluence.window` query, `lastmodified >= '<window start as YYYY-MM-DD>'`
+(single quotes, as today), and results are ordered
 `order by lastmodified desc`. `confluence.lookback_days` is kept only for
 `pm brief`'s first run with an audience when there is no other window, and
 documented as such.
@@ -550,14 +555,15 @@ def resolve_root(cfg, reg):
     `_Decision log: summary page not found (space IP, title "Decision log")._`"""
 
 def list_entries(cfg, reg, root_id):
-    """Every entry id, title and version, no body. CQL
-    `ancestor = <root_id> AND type = page` (or `parent = <root_id>` when
+    """Every entry id, title and version, no body. CQL from the
+    `registers.descendants` query, `ancestor = <root_id> AND type = page`
+    (or `registers.children`, `parent = <root_id> AND type = page`, when
     depth is children), expand=version, paged with start/limit until
     `_links.next` is absent. Used for the count and for removals."""
 
 def changed_entries(cfg, reg, root_id, since):
-    """Entries edited on or after `since`, full records: same CQL plus
-    `AND lastmodified >= "<since>"`, expand as Part 4.5 plus body.storage.
+    """Entries edited on or after `since`, full records: same CQL wrapped
+    by `confluence.window` (`(<cql>) AND lastmodified >= '<since>'`), expand as Part 4.5 plus body.storage.
     Capped at pages.max_pages per register, newest first."""
 
 def properties(storage_html, wanted):
@@ -960,11 +966,731 @@ the estimate line stays honest.
 
 ---
 
+## Part 7b — Prompts, queries and team conventions in config
+
+Today the words sent to the model and the JQL and CQL sent to Jira and
+Confluence are written into the code, and so are several habits of one
+team's Jira: an Epic carries the Component, `parentEpic` reaches the
+children, "Done" is the Done status category, a new bug is type `Bug`, and a
+risk page is labelled `risk`. That works for the team it was written for.
+This part moves every one of them to a named, documented default that the
+config file can override, without changing what an unconfigured install
+does.
+
+### 7b.1 Rules
+
+1. **Defaults stay in code; the config holds overrides only.** A user who
+   has not overridden a prompt gets the improved built-in one on upgrade. The
+   template therefore lists every id with its explanation as a comment and
+   shows commented examples; it never copies the default text in.
+2. **Rendered defaults are byte-identical to today's strings.** Step 0 is a
+   pure refactor. Byte-identical prompts keep the model cache warm and keep
+   the stand-in model's routing (it matches phrases such as "Extract
+   decisions and actions" and "JSON array"). Byte-identical JQL keeps the
+   existing tests meaningful. Snapshots enforce this (7b.8).
+3. **Wording is configurable; shape is not.** The user may change what a
+   prompt says, but not the structure the code parses back: the JSON keys,
+   the number and order of the report headings, the citation format. Each
+   prompt declares a contract that its effective text is checked against at
+   load.
+4. **Leaves are configurable; composition is not.** A query override
+   replaces one clause (how a workstream is recognised, what "open" means,
+   how a child inherits its Epic). How the clauses are joined with `AND`,
+   `OR` and parentheses stays in code, so an override cannot produce JQL
+   that silently widens a query.
+5. **Every mistake fails at load, with the fix in the message.** Unknown
+   ids, unknown placeholders, missing required placeholders and broken
+   contracts are caught in `config.validate`, before any Jira call, the way
+   scope typos are today.
+6. **No new verbs.** Inspection is `pm doctor --prompts [ID]` and
+   `pm doctor --queries [ID]`.
+7. **Every prompt and query that later steps add is registered, never
+   inlined.** Step 0 runs before Step 1 so the registries exist; the
+   "registered by later steps" tables in 7b.3 and 7b.6 list what each later
+   step adds.
+
+What stays in code, and why:
+
+- `model.ping`'s prompt. `pm doctor` uses it to measure the model and the
+  server; a user edit would make that measurement mean nothing.
+- The material and user-content builders (`build_material`,
+  `build_grouped_material`, the inbox catalogue, the review item lines).
+  They are data, not instructions.
+- Jira's status category keys `new`, `indeterminate` and `done`. Jira
+  defines them, not the team.
+- `key = {key}` in `pm show`, and `key IN (…)` fetches by key.
+- Deterministic labels in rendered output (the Sources heading, At a
+  glance, the brief's `### Risks`). See Part 11.
+
+### 7b.2 The prompt registry — new `core/prompts.py`
+
+`core/prompts.py` imports nothing from `core` or `commands` (so any module
+can import it). It holds one dict, `PROMPTS`, keyed by prompt id. The
+codebase does not use dataclasses; each entry is a plain dict with these
+keys:
+
+```python
+PROMPTS = {
+    "report.section": {
+        "used_by": "pm report, pm warm --report (one call per workstream)",
+        "explain": ("Writes one workstream's section of the weekly report "
+                    "from its Material. Change the wording or add team "
+                    "rules; keep {headings} so the report keeps its "
+                    "seven sections."),
+        "text": REPORT_SECTION,       # module constant, the default template
+        "runtime": ("audience",),     # filled by the caller on every call
+        "values": {                   # tunable in config under `values:`
+            "empty_section": "No update this week.",
+            "first_run_line": "First report — no prior week to compare against.",
+        },
+        "headings": (                 # (role, default text); order is fixed
+            ("changed", "What changed since last week"),
+            ("progress", "Progress this sprint"),
+            ("roadmap", "Roadmap status"),
+            ("decisions", "Decisions since last report"),
+            ("dependencies", "Open dependencies"),
+            ("waiting", "Decisions we are waiting on"),
+            ("risks", "Risks"),
+        ),
+        "required": ("headings", "empty_section", "first_run_line"),
+        "contract": (),               # literal strings the rendered text must contain
+        "append_at": "Example of one filled section:",
+        "version": 1,
+    },
+    ...
+}
+```
+
+Keys, exactly:
+
+| Key | Meaning |
+|---|---|
+| `used_by` | Commands that send it, for `pm doctor --prompts` and the docs. |
+| `explain` | One to three sentences: what the prompt does and what an override must keep. Shown by doctor and copied into the template comment. |
+| `text` | The default template. Placeholders are `{name}`. |
+| `runtime` | Placeholders the calling code fills on each call (`audience`, `product`). Not settable in config. |
+| `values` | Placeholders the user may set under `values:`, with their defaults. |
+| `headings` | Optional. Ordered `(role, text)` pairs. Renders `{headings}` (one `### text` line each, joined with `\n`) and `{heading_<role>}` (the text alone). Config may change the text of a role, not add, drop or reorder roles. |
+| `required` | Placeholders an override's text must still contain. |
+| `contract` | Literal strings the **rendered** text must contain (for example `JSON array`, `"key"`). |
+| `append_at` | `append:` text is inserted on the line before the first line that starts with this string; `""` means at the end. |
+| `version` | Bumped whenever the default `text`, `values` or `headings` change. |
+
+Public functions, exactly:
+
+```python
+def get(cfg, prompt_id, **runtime):
+    """The effective prompt text, rendered. cfg may be None (built-in)."""
+
+def headings(cfg, prompt_id="report.section"):
+    """Tuple of heading texts in role order, after config overrides."""
+
+def heading(cfg, prompt_id, role):
+    """One heading's text by role (used by extract_sections in Step 8)."""
+
+def values_of(cfg, prompt_id):
+    """The effective `values` dict (defaults, then config)."""
+
+def source(cfg, prompt_id):
+    """'built-in', 'config', or 'file <path>' — for doctor."""
+
+def validate_config(cfg):
+    """Called from core/config.validate. Resolves overrides, reads files,
+    checks ids, placeholders, required, contract. Stores the result in
+    cfg['_prompts'] = {id: {'text', 'values', 'headings', 'source'}}.
+    Exits with a message naming the fix on the first problem."""
+
+def render(template, values):
+    """Replace {name} for names in `values`; turn {{ into { and }} into }.
+    Leaves every other brace alone."""
+```
+
+`render` uses the regex `\{([a-z_][a-z0-9_]*)\}` and replaces only names
+present in `values`. It must **not** use `str.format`: the JSON prompts
+contain literal `{"text": string, …}`, which `str.format` would reject.
+`{{` and `}}` become single braces so a user can write a literal
+`{something}`; no built-in default contains `{{`.
+
+Placeholder checks in `validate_config` (the template is scanned with the
+same regex):
+
+- A name that is not in `runtime`, `values`, `headings` (`headings` or
+  `heading_<role>`) → `prompts.<id>: unknown placeholder {name}. Known:
+  … Write {{name}} for a literal brace.`
+- A name in `required` missing from an override's text →
+  `prompts.<id>: the text must keep {name} — <why, from explain>.`
+- After rendering with defaults for `runtime` (use `"stakeholders"` for
+  `audience`, `"Product"` for `product`), a `contract` string missing →
+  `prompts.<id>: the text must contain "<string>"; the code reads it back.`
+
+### 7b.3 Every prompt, with its id
+
+All moved **byte-identical** in Step 0a. Row order is the order of
+`PROMPTS`.
+
+| Id | Today | Used by | Runtime / values / headings | Contract | What it does |
+|---|---|---|---|---|---|
+| `report.section` | `core/model.py::REPORT_SYSTEM_PROMPT` | `pm report`, `pm warm` | runtime `audience`; values `empty_section`, `first_run_line`; the seven headings | required `headings`, `empty_section`, `first_run_line` | Writes one workstream's section. |
+| `report.section_tail` | `model.REPORT_USER_TAIL` | same | — | — | Last line of the user message: "Write the seven sections now." |
+| `brief.debrief` | `commands/brief.py::DEBRIEF_PROMPT` | `pm brief --notes` | values `action_types` (renders `"Story" or "Task"`) | `JSON object`, `"decisions"`, `"actions"`, `"title"`, `"owner"` | Pulls decisions and actions out of meeting notes. |
+| `inbox.file_note` | `commands/inbox.py::INBOX_PROMPT` | `pm inbox` | values `note_types` (renders `Story, Task, or Bug`) | `JSON object`, `"product"`, `"workstream"`, `"issuetype"`, `"title"`, `"criteria"` | Suggests where a captured note belongs. |
+| `refine.titles` | `commands/refine.py::TITLE_DRAFT_PROMPT` | `pm refine` | — | `JSON array`, `"key"`, `"title"` | Drafts clearer titles. |
+| `refine.criteria` | `refine.CRITERIA_DRAFT_PROMPT` | `pm refine` | — | `JSON array`, `"key"`, `"criteria"` | Drafts acceptance criteria. |
+| `refine.tail` | the literal `"\n\nReturn the JSON array now."` in `refine.py` (the prompt is the text without the two leading newlines; the caller keeps them) | `pm refine` | — | — | Last line of the user message. |
+| `review.titles` | `commands/review.py::TITLES_PROMPT` | `pm review` | — | `JSON array`, `"key"`, `"problem"`, `"suggestion"` | Says why a title is unclear and suggests one. |
+| `review.criteria` | `review.CRITERIA_PROMPT` | `pm review` | — | `JSON array`, `"key"`, `"problem"`, `"missing"` | Says what acceptance criteria are missing. |
+| `review.titles_tail`, `review.criteria_tail` | `TITLES_USER_TAIL`, `CRITERIA_USER_TAIL` | `pm review` | — | — | Last line of the user message. |
+| `release_notes.prose` | `commands/release_notes.py::PROMPT` | `pm release-notes` | — | — | Turns the done list into prose. |
+
+Before moving each JSON prompt, read its parser and copy the exact keys it
+reads into `contract`; the table above lists them as of this plan
+(`brief._parse_debrief` reads `decisions` and `actions`, then each item's
+`text`, `title` and `owner`).
+
+`values` that render lists:
+
+- `action_types` is a list, default `[Story, Task]`, rendered as
+  `" or ".join(f'"{t}"' for t in types)` → `"Story" or "Task"`.
+- `note_types` is a list, default `[Story, Task, Bug]`, rendered as `A` (1),
+  `A or B` (2), or `A, B, or C` (3+) → `Story, Task, or Bug`.
+- Both default from `conventions.action_issuetypes` and
+  `conventions.note_issuetypes` (7b.6), so a team that uses `Defect` changes
+  one list and both the prompt and the code agree.
+
+`report.section`'s default template is today's `REPORT_SYSTEM_PROMPT` with
+the heading lines replaced by `{headings}`, `No update this week.` by
+`{empty_section}`, `First report — no prior week to compare against.` by
+`{first_run_line}`, and the example's `### Progress this sprint` by
+`### {heading_progress}` (so a renamed heading is not contradicted by the
+example). This was checked against the current code: rendered with the
+defaults, the template equals `REPORT_SYSTEM_PROMPT.format(audience=…)`
+character for character, and none of the other six prompts contains a
+`{name}` match or a `{{`. The Step 0a snapshot test proves the rendered default
+equals today's constant. `model.REPORT_HEADINGS`, `EMPTY_SECTION` and
+`FIRST_RUN_LINE` stay as names (tests import them) and become
+`tuple(text for _role, text in PROMPTS["report.section"]["headings"])` and
+the two `values` defaults.
+
+Registered by later steps (Appendix B has their text; each gets an entry
+with the same keys):
+
+| Id | Step | Headings / values | Contract |
+|---|---|---|---|
+| `pages.summary` | 5 | values `kinds` (from `PAGE_KINDS`, rendered `a, b, c`) | `JSON array`, `"summary"`, `"kind"` |
+| `pages.epic_match` | 5 | — | `JSON array`, `"epic"` |
+| `pages.tail` | 5 | — | — ("Return the JSON array now.") |
+| `report.leadership` | 8 | headings `headline`, `decisions`, `risks`; values `empty_section` ("Nothing this period.") | required `headings`, `empty_section` |
+| `report.leadership_tail` | 8 | — | — ("Write the three sections now.") |
+| `report.partner` | 9 | headings `new`, `next`; values `empty_section` ("Nothing to share this period.") | required `headings`, `empty_section` |
+| `release_notes.partner_rules` | 11 | — | — (appended to `release_notes.prose` by the code) |
+
+Leadership rule 4 names its heading through `{heading_risks}`. When
+`pages.kinds` is overridden, `PAGE_KINDS` in code reads the effective list
+(`prompts.values_of(cfg, "pages.summary")["kinds"]`) so a returned kind is
+validated against what the prompt offered.
+
+Step 2 and Step 4b change `report.section`'s default (the citation rule and
+rules 6 and 7). Each bumps its `version` and updates its snapshot. Rule 7
+must name the headings through `{heading_decisions}` and `{heading_risks}`,
+not the literal words, so a renamed heading stays consistent.
+
+### 7b.4 The prompt config
+
+```yaml
+prompts:
+  report.section:
+    # Add rules; the safest change. The text goes in before the example.
+    append: |
+      8. Name a Jira Component only if the Material names it.
+    # Or rename the seven headings. Roles are fixed; words are yours.
+    values:
+      headings:
+        progress: "Progress this Sprint"
+        risks: "Risks and issues"
+  refine.titles:
+    # Replace the whole prompt. Keep the JSON keys the contract lists.
+    file: prompts/refine-titles.txt    # relative to the config file
+    based_on: 1                        # the built-in version you started from
+  brief.debrief:
+    text: |
+      …
+    based_on: 1
+```
+
+Per id, exactly one of `text` or `file` may be set; `append` may be used
+alone or with either. `values:` may set any name in the entry's `values`,
+plus `headings:` as a role → text map. `based_on` is an integer. Anything
+else under an id → `prompts.<id>: unknown key <k>. Use text, file, append,
+values, based_on.`
+
+Resolution, in `validate_config`:
+
+1. Start from the registry's `text`, `values` and `headings`.
+2. `file:` → read it as UTF-8 relative to the directory of the loaded config
+   file. `load_config` does not record that path today; add
+   `cfg["_config_path"] = os.path.abspath(path)` there. Missing file →
+   `prompts.<id>: cannot read <path>.`
+3. `text:` or file content replaces the template. Strip one trailing
+   newline and add exactly one, so YAML `|` blocks and files agree.
+4. `append:` is inserted before the `append_at` line (with one blank line
+   after it), or at the end when `append_at` is `""` or not found.
+5. `values:` and `headings:` overrides are applied.
+6. Run the checks in 7b.2.
+
+Because the model cache keys on the whole prompt, an override misses the
+cache by itself; nothing needs invalidating. `pm warm` after changing a
+prompt refills it.
+
+### 7b.5 The query registry — new `core/queries.py`
+
+`core/queries.py` also imports nothing from `core`. `filters.quote` moves
+here as `queries.quote`; `filters` keeps `quote = queries.quote` so existing
+imports keep working. `filters` imports `queries`, never the reverse.
+
+```python
+QUERIES = {
+    "status.open": {
+        "lang": "jql",
+        "used_by": "scopes (status: open), pm coverage, pm doctor, pm today",
+        "explain": "What 'open' means: not in the Done status category.",
+        "text": "statusCategory != Done",
+        "required": (),
+    },
+    "coverage.open_in_project": {
+        "lang": "jql",
+        "used_by": "pm coverage, pm doctor (unclaimed work)",
+        "explain": "Open work in a project, before workstreams are applied.",
+        "text": "project = {project} AND {status_open}",
+        "required": ("project",),
+    },
+    ...
+}
+```
+
+```python
+def render(cfg, query_id, **values):
+    """Effective template, rendered by placeholder type. cfg may be None."""
+
+def vocabulary(cfg, option):
+    """{value: fragment} for status, sprint or assignee, after overrides.
+    'any' is always None and cannot be overridden."""
+
+def source(cfg, query_id):
+    """'built-in' or 'config'."""
+
+def validate_config(cfg):
+    """Unknown ids, unknown or missing placeholders, a vocabulary entry that
+    uses a vocabulary placeholder (a cycle). Stores cfg['_queries']."""
+```
+
+`render` uses the same brace regex as prompts. Every placeholder name has
+**one** type, in one table, so the same name always renders the same way and
+a caller cannot inject unquoted text:
+
+| Placeholder | Type | Renders as | Checked |
+|---|---|---|---|
+| `project`, `space`, `version`, `label`, `field_name` | string | `quote(value)` | non-empty |
+| `values`, `components`, `labels`, `epic_types`, `types` | list | `quote(a), quote(b)` | non-empty list |
+| `keys`, `epic_keys`, `tagged_keys` | issue keys | `APS-1, APS-2` | each matches `^[A-Z][A-Z0-9_]*-\d+$` |
+| `sprint_id`, `days` | int | `str(int(v))` | int |
+| `page_id` | Confluence id | digits | `^\d+$` |
+| `since` | date | ISO `YYYY-MM-DD`, no quotes (the template has them) | `date.fromisoformat` |
+| `field` | JQL field | `cf[10050]` as is; otherwise `quote(v)` | non-empty |
+| `base`, `anchor`, `cql`, `window` | clause | inserted as is (built by code) | — |
+| `status_open`, `status_done`, `sprint_open` | vocabulary | `vocabulary(cfg, …)[…]` | — |
+
+A check failure is a programming error: raise `ValueError` naming the id and
+placeholder. Config text can only use placeholders the id's default uses
+(its "known" set is the names in the default text); anything else fails at
+load like prompts.
+
+### 7b.6 Every query and convention, with its id
+
+**Vocabulary** (`core/filters.py` `STATUS_VALUES`, `SPRINT_VALUES`,
+`ASSIGNEE_VALUES`). The tables move to `queries.QUERIES` as ids
+`status.open`, `status.done`, `status.in-progress`, `status.todo`,
+`sprint.open`, `sprint.future`, `sprint.none`, `assignee.me`,
+`assignee.unassigned`, `assignee.assigned`, with today's fragments. Config
+may **add** a value: `status.review: 'status = "In Review"'` makes
+`scopes: {report: {status: review}}` valid. `filters._choice` reads
+`queries.vocabulary(cfg, option)` instead of the constant, so the accepted
+values in its error message include the additions. `filters.compile_scope`
+gains a `cfg` parameter (default `None`) to pass through; `scope_options`
+already has `cfg`. `sprint.by_id` (`sprint = {sprint_id}`) replaces the
+f-string in `compile_scope`.
+
+**Membership** (`core/workstreams.py`). Today a workstream is recognised
+only by Component. Add one setting and keep Component the default:
+
+```yaml
+membership:
+  by: component       # component | label | field
+  field: ""           # with by: field — a field name or cf[NNNNN]
+```
+
+| `by` | Workstream key holding the values | Anchor id and default |
+|---|---|---|
+| `component` | `components` (unchanged; `epic_components` still read) | `membership.anchor.component`: `component IN ({values})` |
+| `label` | `labels` | `membership.anchor.label`: `labels IN ({values})` |
+| `field` | `field_values` | `membership.anchor.field`: `{field} IN ({values})` |
+
+and the leaf clauses:
+
+| Id | Default | Required | What it decides |
+|---|---|---|---|
+| `membership.epics` | `project = {project} AND issuetype IN ({epic_types}) AND {anchor}` | `project`, `epic_types`, `anchor` | Which Epics anchor the workstream. |
+| `membership.tagged` | `project = {project} AND issuetype NOT IN ({epic_types}) AND {anchor}` | same | Non-Epic issues that carry the anchor themselves. |
+| `membership.inherit.epic` | `parentEpic IN ({epic_keys})` | `epic_keys` | How a child finds its Epic. A company-managed project on the old Epic Link may use `"Epic Link" IN ({epic_keys})`. |
+| `membership.inherit.parent` | `parent IN ({tagged_keys})` | `tagged_keys` | How a Sub-task inherits from a tagged parent. |
+| `membership.own_empty.component` | `component IS EMPTY` | — | With `child_component_wins`: a child with no anchor of its own. |
+| `membership.own_empty.field` | `{field} IS EMPTY` | `field` | Same, field mode. |
+
+`child_component_wins: true` with `by: label` fails at load: a child always
+carries other labels, so "has none of its own" cannot be expressed. The
+`AND`/`OR` composition in `membership_jql` does not change.
+
+Changes in `core/workstreams.py`: `components_of(ws)` becomes
+`anchor_values(cfg, ws)` (keep `components_of` as a thin wrapper for
+callers that mean Components). `uses_component_scope(cfg, ws)` keeps its
+name and returns `bool(project_of(cfg, ws) and anchor_values(cfg, ws))`.
+`_component_clause` becomes `_anchor_clause(cfg, ws)`. `config.
+_validate_workstreams` accepts `labels` or `field_values` in place of
+`components` in the matching mode and names the key the mode needs.
+`pm workstreams check` skips its "Component exists in Jira" check when
+`by` is not `component`. `pm workstreams add` keeps `--components` only
+(Part 11).
+
+**Named command queries:**
+
+| Id | Default (exactly today's) | Today | Used by |
+|---|---|---|---|
+| `coverage.open_in_project` | `project = {project} AND {status_open}` | `coverage._open_issues`, `doctor` unclaimed check | `pm coverage`, `pm doctor` |
+| `doctor.membership_open` | `({base}) AND ({status_open})` | `doctor._membership_jql` | `pm doctor` |
+| `release_notes.done` | `project = {project} AND {status_done} AND ({window})` | `release_notes` line 87 | `pm release-notes` |
+| `release_notes.since` | `resolved >= "{since}"` | `release_notes._window` | same |
+| `release_notes.version` | `fixVersion = {version}` | same | same |
+| `today.in_sprint_open` | `project = {project} AND {sprint_open} AND {status_open}` | `today.gather` | `pm today` |
+| `confluence.space` | `space = {space}` | `filters.build_cql` | every Confluence read |
+| `confluence.labels` | `label IN ({labels})` | same | same |
+| `confluence.window` | `({cql}) AND lastmodified >= '{since}'` | `sources.fetch_confluence` | same |
+| `brief.risk_pages` | `space = {space} AND label = {label}` | `brief._risk_cql` | `pm brief` |
+
+The renders must reproduce today's spacing exactly: for example
+`today.gather` builds `project = "APS" AND sprint in openSprints() AND
+statusCategory != Done` from three f-strings with trailing spaces. Check
+each against its snapshot (7b.8).
+
+**Registered by later steps:**
+
+| Id | Step | Default |
+|---|---|---|
+| `confluence.types` | 4 | `type IN ({types})` |
+| `epics.children` | 3 | `parent IN ({keys})` |
+| `epics.resolved` | 3 | `({base}) AND {status_done} AND resolved >= "{since}"` |
+| `registers.descendants` | 4b | `ancestor = {page_id} AND type = page` |
+| `registers.children` | 4b | `parent = {page_id} AND type = page` |
+
+`order by lastmodified desc` (Step 4) is appended by the code after
+rendering, never put in a template: CQL requires it last, and a user's
+clause after it would be a syntax error.
+
+**Scopes.** `DEFAULT_SCOPES` is already configurable (`scopes:` in the
+template). One hard-coded scope joins it: `refine._closed_points` uses
+`scope_jql(cfg, ws, "lint", overrides={"status": "done", "types":
+["Story"]})`. Add `refine_history: {status: done, types: [Story]}` to
+`DEFAULT_SCOPES`, `refine_history: everything` to `SCOPE_INCLUDES`, and a
+line to the template's `scopes:` block with the comment `# closed work pm
+refine takes the median estimate from`. `refine` calls
+`scope_jql(cfg, ws, "refine_history")`. `ready`'s `overrides={"status":
+"done"}` stays: it asks for "the ready scope, but done", which is not a
+team convention.
+
+**Conventions.** Where a key already exists, the code that hard-codes the
+same thing starts reading it; nothing moves:
+
+| Hard-coded today | Reads instead |
+|---|---|
+| `issuetype == "epic"` in `commands/today.py` (2×), `commands/triage.py`, `commands/lint.py`, `core/metrics.py` (3×) | `membership.epic_types`, through a new `workstreams.is_epic(cfg, issue)` (case-insensitive). `core/metrics.py` functions without `cfg` take `epic_types=("Epic",)`. |
+| `("story", "bug")` in `commands/review.py::candidates_for` | `lint.story_types` |
+| `itype == "story"` for estimates in `commands/lint.py` | new `lint.estimate_types: [story]` |
+
+New top-level block, every key optional, defaults in
+`core/conventions.py::DEFAULTS` (read with `conventions.get(cfg, key)`):
+
+```yaml
+conventions:
+  bug_types: [Bug]                       # pm triage "new bugs"
+  blocked_by_links: ["is blocked by", "blocked by"]   # link descriptions, read inward
+  blocks_links: [blocks]                 # the same link named from the other side
+  note_issuetypes: [Story, Task, Bug]    # what pm inbox may suggest
+  note_issuetype: Story                  # pm inbox when the model suggests none
+  action_issuetypes: [Story, Task]       # what pm brief --notes may create
+  action_issuetype: Task                 # pm brief when an action names none
+  risk_label: risk                       # Confluence label that marks a risk page
+```
+
+| Key | Today |
+|---|---|
+| `bug_types` | `triage._is_new_bug`: `!= "bug"` |
+| `blocked_by_links`, `blocks_links` | `triage._is_blocked_by` literals |
+| `note_issuetypes`, `note_issuetype` | `inbox` prompt text and `or "Story"` |
+| `action_issuetypes`, `action_issuetype` | `brief` prompt text and `or "Task"` |
+| `risk_label` | `brief._risk_cql`: `label.lower() == "risk"` |
+
+Matching stays case-insensitive where it is today. `_validate_conventions`
+in `core/config.py` checks each is a non-empty string or list of strings.
+
+### 7b.7 Inspection: `pm doctor --prompts` and `--queries`
+
+Two options on `pm doctor` in `pm.py`, each `nargs="?"`, `const="all"`,
+`metavar="ID"`.
+
+`pm doctor --prompts` — no Jira, no model; prints one line per id and
+exits (1 if `validate_config` found a problem, which it already reported):
+
+```
+Prompts (built-in unless marked)
+  report.section        config (append, headings)    pm report, pm warm
+  refine.titles         file prompts/refine-titles.txt  pm refine
+                        ! the built-in prompt changed (version 2) since this
+                          override (based_on 1). Compare: pm doctor --prompts refine.titles
+  brief.debrief         built-in                      pm brief --notes
+  …
+```
+
+A `text`/`file` override with no `based_on`, or with `based_on` lower than
+the entry's `version`, gets the `!` line. `append` and `values` overrides
+never do: they ride on the current default.
+
+`pm doctor --prompts ID` prints the effective template (placeholders not
+filled) to stdout, and everything else — source, explanation, placeholder
+list, and when overridden the built-in template under `Built-in:` — to
+stderr. So `pm doctor --prompts refine.titles > prompts/refine-titles.txt`
+writes exactly a starting file. Unknown id → the list of ids, exit 1.
+
+`pm doctor --queries` checks Jira credentials as `run` does today, then for
+each workstream renders `scope_jql` for every scope and each named query
+that applies (with the workstream's project, space and a `since` of seven
+days ago), and runs it with `sources.approximate_count` (JQL) or a `limit=1`
+search (CQL):
+
+```
+Queries (built-in unless marked)
+  status.open           built-in  statusCategory != Done
+  status.review         config    status = "In Review"
+  membership.inherit.epic  config  "Epic Link" IN ({epic_keys})
+SDX
+  report scope          ok   14 issues
+  roadmap scope         ok    3 issues
+  confluence.window     ok    6 pages
+  brief.risk_pages      FAIL  Jira says: Field 'labell' does not exist
+```
+
+`pm doctor --queries ID` prints the template and, per workstream, the
+rendered text. Plain `pm doctor` adds one line: `Prompts: 11 built-in,
+1 overridden · Queries: 2 overridden` and the `!` warnings, so a stale
+override is visible without the flag.
+
+### 7b.8 Documentation and drift checks
+
+- `config.yaml` gets section `5m. Prompts, queries and conventions`, after
+  `publish`: a paragraph on the rules in 7b.1, then a comment line per id
+  (`#   report.section — <explain, first sentence>`), then the commented
+  examples from 7b.4, a vocabulary addition, a `membership.inherit.epic`
+  example, and the `conventions:` block **commented out** with its defaults.
+- New `docs/CUSTOMISING.md`, generated from the registries by
+  `python3 -m core.registry_docs > docs/CUSTOMISING.md`: per id, `used_by`,
+  `explain`, placeholders, contract, and the default text in a code block.
+- `tests/test_registry_docs.py` fails when (a) the generated doc differs
+  from the file (message: the command to regenerate), or (b) an id in
+  `PROMPTS` or `QUERIES` is missing from the `config.yaml` template.
+- Snapshots: `tests/snapshots/prompts/<id>.txt` and
+  `tests/snapshots/queries/<id>.txt` hold each rendered default.
+  **Write them from the old constants before moving anything** (Step 0a.1),
+  so the snapshot records today's text, not the refactor's.
+  `tests/test_prompts.py` compares the rendered default to the snapshot and
+  fails with "the default changed: bump `version` and update the snapshot".
+  (Queries have no `version`; a changed default just updates the snapshot.)
+
+---
+
 ## Part 8 — Implementation steps, in order
 
 Each step is one commit, leaves `python3 -m unittest discover -s tests`
 green, and adds the tests listed. Do them in order: later steps use the data
 shapes earlier steps create.
+
+Steps 0a–0d come first and change no output: every existing test must
+pass unmodified after each of them. Later steps add their prompts and
+queries to the registries (tables in 7b.3 and 7b.6) instead of writing
+constants or f-strings.
+
+### Step 0a — Prompt registry
+
+**Files:** new `core/prompts.py`, `core/model.py`, `core/config.py`,
+`commands/brief.py`, `commands/inbox.py`, `commands/refine.py`,
+`commands/review.py`, `commands/release_notes.py`, `commands/report.py`,
+`commands/warm.py`, new `tests/test_prompts.py`, new
+`tests/snapshots/prompts/`.
+
+1. **Before editing anything**, write each prompt's current text to
+   `tests/snapshots/prompts/<id>.txt` (ids in 7b.3) with a throwaway script
+   that imports the old constants; render `REPORT_SYSTEM_PROMPT` with
+   `.format(audience="stakeholders")` and save it as
+   `report.section.txt`. Do not commit the script.
+2. Create `core/prompts.py` per 7b.2: the default templates as module
+   constants, `PROMPTS`, and `render`, `get`, `headings`, `heading`,
+   `values_of`, `source`, `validate_config`. Only `report.section` has
+   `runtime` names in this step.
+3. Replace each old constant's use with `prompts.get(cfg, id, …)`:
+   - `model.infer_report_section` gains a keyword `cfg=None` and uses
+     `prompts.get(cfg, "report.section", audience=audience)` and
+     `prompts.get(cfg, "report.section_tail")`. `commands/report.py` and
+     `commands/warm.py` pass `cfg`; both must pass the same one (Appendix A
+     pitfall 9).
+   - `brief`, `inbox`, `refine`, `review`, `release_notes` already have
+     `cfg`; call `prompts.get(cfg, …)` at the call site.
+   - Delete the old constants except `model.REPORT_HEADINGS`,
+     `EMPTY_SECTION`, `FIRST_RUN_LINE`, `REPORT_SYSTEM_PROMPT` and
+     `REPORT_USER_TAIL`, which become names derived from the registry
+     (`REPORT_SYSTEM_PROMPT = prompts.get(None, "report.section",
+     audience="{audience}")` keeps the old `.format` users working until
+     they are gone; grep for them and switch any caller you find).
+   - The `action_types` and `note_types` values read
+     `conventions.get(cfg, …)` in Step 0c; in this step they are the
+     literal lists `[Story, Task]` and `[Story, Task, Bug]`.
+4. `config.validate` calls `prompts.validate_config(cfg)` last.
+5. `load_config` records `cfg["_config_path"]`.
+
+**Tests** (`tests/test_prompts.py`):
+- Each rendered default (`prompts.get(None, id, audience="stakeholders")`)
+  equals its snapshot. Failure message per 7b.8.
+- `render` leaves `{"text": string}` alone, replaces a known `{name}`, and
+  turns `{{x}}` into `{x}`.
+- `append` goes on the line before `Example of one filled section:`.
+- `text` replaces; `file` reads relative to the config's folder; a missing
+  file, an unknown id, an unknown key, an unknown placeholder, a missing
+  required placeholder, and a missing contract string each exit with the
+  message in 7b.2 (use `assertRaises(SystemExit)` and check the text).
+- `values: {headings: {risks: "Risks and issues"}}` changes the rendered
+  prompt and `prompts.headings(cfg)`; an unknown role fails.
+- End to end (`test_cli_end_to_end.py`): with
+  `prompts: {report.section: {append: "8. Say hello."}}` the POST body to
+  `/v1/chat/completions` contains `8. Say hello.` and a second run with the
+  same config hits the model cache (no second POST).
+
+**Done when** the full suite passes with no test edited except the new
+file.
+
+### Step 0b — Query registry and membership modes
+
+**Files:** new `core/queries.py`, `core/filters.py`, `core/workstreams.py`,
+`core/sources.py`, `core/config.py`, `commands/coverage.py`,
+`commands/doctor.py`, `commands/release_notes.py`, `commands/today.py`,
+`commands/brief.py`, `commands/refine.py`, `commands/workstreams.py`, new
+`tests/test_queries.py`, new `tests/snapshots/queries/`.
+
+1. Snapshots first, as in 0a.1: for the fixture config in
+   `tests/test_cli_end_to_end.py`, record each query's rendered text by
+   calling today's code paths (for example `coverage._open_issues`' JQL
+   string, `workstreams.membership_jql(cfg, ws, "children")` for SDX).
+   Where a function builds and sends in one go, copy the f-string with the
+   fixture values filled in by hand.
+2. Create `core/queries.py` per 7b.5 with every id in 7b.6 except the
+   "later steps" rows. Move `quote` there and re-export it from `filters`.
+3. `filters`: vocabulary lookups through `queries.vocabulary(cfg, …)`;
+   `compile_scope(options, cfg=None)`; `sprint.by_id`; `build_cql` through
+   `confluence.space` and `confluence.labels` (`build_cql(ws, cfg=None)`).
+4. `workstreams`: `membership.by`, `anchor_values`, `_anchor_clause`,
+   the four `membership.*` leaf ids, and the `child_component_wins` rule in
+   7b.6. `DEFAULT_MEMBERSHIP` gains `"by": "component"` and `"field": ""`.
+   `_validate_membership` checks `by` is one of the three and that
+   `field` is set when `by: field`.
+5. Each named command query in 7b.6 replaces its f-string. Add the
+   `refine_history` scope.
+6. `config.validate` calls `queries.validate_config(cfg)` after
+   `filters.validate_config_scopes`, and `validate_config_scopes` runs after
+   it can see vocabulary additions (pass `cfg`).
+
+**Tests** (`tests/test_queries.py`):
+- Every rendered default equals its snapshot.
+- `status.review` in config makes `scopes: {report: {status: review}}`
+  valid and puts `status = "In Review"` in the report JQL; an unknown
+  status value's error lists `review`.
+- `status.any` in config fails; a vocabulary entry containing
+  `{status_open}` fails.
+- `membership.by: label` with `labels: [sdx]` builds `labels IN ("sdx")`
+  in the Epic selector and the children query; with
+  `child_component_wins: true` it fails at load.
+- `membership.by: field`, `field: "cf[10050]"`, `field_values: [SDX]` builds
+  `cf[10050] IN ("SDX")`.
+- `membership.inherit.epic: '"Epic Link" IN ({epic_keys})'` replaces
+  `parentEpic IN (…)`; an override without `{epic_keys}` fails.
+- `render` rejects a bad issue key and a non-date `since` with `ValueError`.
+- The fake Jira's JQL reader (`tests/fake_jira.py`, `tokenize` and the
+  field lookup near `LIST_FIELDS`) already handles `labels IN`. Add two
+  small things: a `cf[NNNNN]` field token that reads `issue["fields_extra"]
+  ["cf[NNNNN]"]` (new optional fixture key), and `"Epic Link"` as another
+  name for `parentepic`.
+
+**Done when** the suite passes unmodified plus the new file.
+
+### Step 0c — Conventions
+
+**Files:** new `core/conventions.py`, `core/config.py`,
+`core/workstreams.py`, `commands/triage.py`, `commands/today.py`,
+`commands/lint.py`, `commands/review.py`, `commands/inbox.py`,
+`commands/brief.py`, `core/metrics.py`, `core/prompts.py`, new
+`tests/test_conventions.py`.
+
+1. `core/conventions.py`: `DEFAULTS` (7b.6) and `get(cfg, key)`.
+2. `workstreams.is_epic(cfg, issue)`; replace the seven `== "epic"`
+   checks listed in 7b.6.
+3. `triage._is_new_bug` and `_is_blocked_by` read `bug_types`,
+   `blocked_by_links`, `blocks_links` (pass `cfg`; `classify` already
+   has it).
+4. `review.candidates_for(aspect, issues, cfg=None)` uses `lint.story_types`.
+   `lint` uses `lint.estimate_types` (default `["story"]`, added to
+   `config.SECTION_DEFAULTS["lint"]`).
+5. `inbox`/`brief` fallbacks read `note_issuetype`/`action_issuetype`; the
+   `note_types`/`action_types` prompt values default from
+   `note_issuetypes`/`action_issuetypes`.
+6. `brief._risk_cql` reads `risk_label`.
+7. `_validate_conventions` in `config.validate`.
+
+**Tests** (`tests/test_conventions.py`): `bug_types: [Defect]` makes a
+Defect a new bug in triage and a Bug not; `membership.epic_types:
+[Initiative]` makes today and triage skip an Initiative; a custom
+`blocked_by_links` entry is honoured; `lint.estimate_types: [story, task]`
+flags an unestimated Task; `note_issuetypes: [Story, Defect]` renders
+`Story or Defect` in the inbox prompt; `risk_label: risks` changes the
+brief's CQL.
+
+### Step 0d — Doctor, template and docs for the registries
+
+**Files:** `pm.py`, `commands/doctor.py`, new `core/registry_docs.py`,
+`config.yaml`, new `docs/CUSTOMISING.md`, `README.md`, new
+`tests/test_registry_docs.py`, `tests/test_cli_end_to_end.py` (doctor
+tests live there).
+
+1. `--prompts [ID]` and `--queries [ID]` on `pm doctor` (7b.7). In
+   `doctor.run`, handle `--prompts` before the Jira check and return;
+   handle `--queries` after the Jira check and return.
+2. The one-line summary and `!` warnings in plain `pm doctor`.
+3. `core/registry_docs.py` with `main()` printing the doc; generate
+   `docs/CUSTOMISING.md`.
+4. Template section `5m` (7b.8). README: a short "Make it fit your Jira"
+   section pointing at `docs/CUSTOMISING.md` and `pm doctor --prompts`.
+
+**Tests:** `pm doctor --prompts` exits 0 and lists every id;
+`pm doctor --prompts refine.titles` writes the snapshot text to stdout
+exactly; an override with `based_on: 0` prints the `!` line;
+`pm doctor --queries` against the fake prints `ok` per scope and `FAIL`
+with Jira's message for a query the fake rejects (make the fake return 400
+for the field `labell`); `test_registry_docs.py` per 7b.8.
+
+**Done when** the suite passes and `docs/CUSTOMISING.md` is generated, not
+hand-edited.
 
 ### Step 1 — Make the window drive the fetch (bug fix, no new behaviour)
 
@@ -1037,9 +1763,10 @@ shapes earlier steps create.
    Parse a bracket by taking its inner text, splitting on commas, and
    resolving each part; do not rely on the regex's repeated groups (Python
    keeps only the last).
-5. `core/model.py`: in `REPORT_SYSTEM_PROMPT`, rule 3 becomes `After a fact,
-   cite its tag like [APS-10] or [D1]. Use only tags that appear in the
-   Material.` The example bullets cite `[APS-10]` and `[D1]`.
+5. `core/prompts.py`: in the `report.section` default, rule 3 becomes
+   `After a fact, cite its tag like [APS-10] or [D1]. Use only tags that
+   appear in the Material.` The example bullets cite `[APS-10]` and `[D1]`.
+   Bump its `version` to 2 and regenerate `report.section.txt` (7b.8).
 6. `commands/report.py::run`: after each `infer_report_section`, call
    `citations.resolve(body, citation_map(row["items"]))`; when `removed > 0`
    print `  (SDX: 1 citation removed — not in the material)` and append the
@@ -1087,7 +1814,7 @@ new `tests/test_epics.py`.
        """Set item['epic'] on every Jira item (None when not under an Epic)."""
 
    def child_counts(cfg, epic_keys, blocked_cfg):
-       """One `parent IN (...)` query (chunks of 100), max_items=0.
+       """One `epics.children` query (chunks of 100), max_items=0.
        {epic_key: {"total", "done", "in_progress", "blocked"}}."""
 
    def signal(epic, counts, window_start, today, at_risk_due_days, updated_in_window):
@@ -1104,8 +1831,8 @@ new `tests/test_epics.py`.
 4. Which Epics appear for a workstream: (a) the `roadmap` scope Epics
    already fetched; (b) every Epic reached from an in-window item; (c) the
    workstream's Epics resolved inside the window — `workstreams.membership_jql(cfg,
-   ws, "epics")` plus `AND statusCategory = Done AND resolved >= "<window
-   start>"`. The fake Jira reads `resolved` from the issue dict, so give a
+   ws, "epics")` wrapped by the `epics.resolved` query (7b.6), which renders
+   `(<base>) AND statusCategory = Done AND resolved >= "<window start>"`. The fake Jira reads `resolved` from the issue dict, so give a
    done fixture Epic a `resolved` stamp when a test needs (c). Mark (b)
    Epics not in `workstreams.get_epic_keys` as
    `in_scope: False` and name the workstream that owns them if any.
@@ -1130,9 +1857,11 @@ new `tests/test_epics.py`.
 
 1. `sources.strip_html(html, limit=400)`: keep the default for other
    callers; `fetch_confluence` passes `limit=pages.summary_chars`.
-2. `filters.build_cql(ws, scope="space", types=None)`: `space = X`, plus
-   `label IN (…)` only when `scope == "labelled"`, plus `type IN (…)` when
-   `types` is given. A hand-written `confluence_cql` still wins.
+2. `filters.build_cql(ws, scope="space", types=None, cfg=None)`:
+   `confluence.space`, plus `confluence.labels` only when
+   `scope == "labelled"`, plus the new `confluence.types` query
+   (`type IN (…)`, 7b.6) when `types` is given, joined with ` AND `. A
+   hand-written `confluence_cql` still wins.
 3. `sources.fetch_confluence(cfg, cql, since=None, limit=None)` → list of raw
    results. Expand as in 4.5. Add `order by lastmodified desc`. Route through
    `pages.cache_fetch(cfg, "confluence", (cql, since, limit), fetch)`.
@@ -1271,12 +2000,13 @@ de-duplication with the general reader):
 
 ### Step 5 — Page summaries and `pm warm --pages`
 
-**Files:** new `core/page_summaries.py`, `core/model.py` (prompts),
+**Files:** new `core/page_summaries.py`, `core/prompts.py`,
 `core/pages.py`, `commands/warm.py`, `pm.py`, `tests/fake_jira.py`, new
 `tests/test_page_summaries.py`.
 
-1. Add `PAGE_SUMMARY_PROMPT`, `PAGE_EPIC_PROMPT` and `PAGE_KINDS` to
-   `core/model.py` (Appendix B).
+1. Register `pages.summary`, `pages.epic_match` and `pages.tail` in
+   `core/prompts.py` (texts in Appendix B, keys in 7b.3). `PAGE_KINDS` lives
+   in `core/page_summaries.py` as the default of the `kinds` value.
 2. `core/page_summaries.py` per 4.7: `store_path(cfg)`, `load(cfg, page)`,
    `save(cfg, page, record)`, `summarise(cfg, page)`, `pick_epic(cfg, page,
    candidates)`, and `fill(cfg, pages, budget)` which summarises in newest
@@ -1391,13 +2121,16 @@ publish and partner schedule are refused.
 
 ### Step 8 — Leadership report
 
-**Files:** `core/model.py`, `commands/report.py`, `core/report_render.py`,
-`commands/metrics.py`.
+**Files:** `core/prompts.py`, `core/model.py`, `commands/report.py`,
+`core/report_render.py`, `commands/metrics.py`.
 
-1. `LEADERSHIP_PROMPT` (Appendix B). `model.infer_leadership(model_cfg,
-   product, facts)`.
+1. Register `report.leadership` and `report.leadership_tail` (Appendix B,
+   7b.3). `model.infer_leadership(model_cfg, product, facts, cfg=None)`.
 2. `report_render.extract_sections(markdown, names)` returns the body under
-   the named `####`/`###` headings from a pm section.
+   the named `####`/`###` headings from a pm section. Build `names` with
+   `prompts.heading(cfg, "report.section", role)` for the roles `waiting`,
+   `risks` and `dependencies`, never the literal words, so renamed
+   headings are still found.
 3. `commands/report.py::run_leadership`: gather exactly as pm (Steps 1–5),
    compute pm sections (cache hits after warm), then per product build the
    facts text (Appendix B, Leadership facts) and call the model; resolve
@@ -1418,11 +2151,11 @@ model's reply citing `[APS-10]` has that citation removed.
 
 ### Step 9 — Partner report
 
-**Files:** `core/model.py`, `commands/report.py`, `core/report_render.py`,
-`core/audience.py`.
+**Files:** `core/prompts.py`, `core/model.py`, `commands/report.py`,
+`core/report_render.py`, `core/audience.py`.
 
-1. `PARTNER_PROMPT` (Appendix B). `model.infer_partner(model_cfg, product,
-   facts)`.
+1. Register `report.partner` (Appendix B, 7b.3).
+   `model.infer_partner(model_cfg, product, facts, cfg=None)`.
 2. `commands/report.py::run_partner`: gather; filter Epics with
    `partner_visible_epic`, children with `exclude_labels`, pages with
    `partner_visible_page`; exit 1 with the Part 5.4 sentence when no Epic is
@@ -1462,8 +2195,12 @@ visible Epics; a second brief without `--audience` reuses the saved level.
 
 ### Step 11 — Release notes by Epic and level
 
-**Files:** `commands/release_notes.py`.
+**Files:** `commands/release_notes.py`, `core/prompts.py`.
 
+0. Register `release_notes.partner_rules` (the rules 2–4 of Appendix B's
+   partner prompt); the partner level sends
+   `prompts.get(cfg, "release_notes.prose") + "\n" +
+   prompts.get(cfg, "release_notes.partner_rules")`.
 1. `collect` also returns each row's Epic (use `core/epics.py` with the
    `parent` field `fetch_jira_detailed` already returns in `"epic"` — note
    that for a Sub-task this is its parent Story, so walk up with
@@ -1523,10 +2260,17 @@ in the fake).
    three levels; add `--audience` to `pm brief`, `pm release-notes`,
    `pm metrics`, `pm warm`. `docs/AUTOMATION.md`: the warm order and
    `pm schedule add warm --at 06:30` before `pm schedule add report`.
-5. CHANGELOG `0.12.0`, pyproject `version = "0.12.0"`.
+5. CHANGELOG `0.12.0`, pyproject `version = "0.12.0"`. The CHANGELOG
+   says prompts, queries and conventions are now configurable, points at
+   `docs/CUSTOMISING.md`, and says an unconfigured install behaves as
+   before.
+6. Regenerate `docs/CUSTOMISING.md` (Step 0d) so it includes every id the
+   later steps registered.
 
-**Tests:** migration from a version 5 file inserts `audiences:` and the new
-`pages` and `confluence` keys, leaves set values alone, and is idempotent;
+**Tests:** migration from a version 5 file inserts `audiences:`, the new
+`pages` and `confluence` keys and `scopes.refine_history`, does **not**
+insert `prompts:`, `queries:` or `conventions:`, leaves set values alone,
+and is idempotent;
 the test config in `tests/test_cli_end_to_end.py` moves to version 6.
 
 ---
@@ -1581,6 +2325,17 @@ the template carries a commented example, and `pm doctor` says when the
 list is empty and the spaces contain a page titled "Decision log",
 "Risk register" or "Architecture decisions".
 
+Optional top-level `prompts:`, `queries:` and `conventions:` blocks, and
+the keys `membership.by`, `membership.field` and `lint.estimate_types`
+(Part 7b). None is inserted by the migration: absent means the built-in
+default, and inserting the defaults would freeze them in the user's file
+so later improvements never reach them. The template carries section 5m
+with the ids and commented examples; `pm doctor` prints the
+`Prompts: … · Queries: …` line so a user learns they exist. The new
+`refine_history` scope is inserted under `scopes:` by the migration when
+that block exists (it mirrors the block's other lines, which list pm's
+defaults).
+
 `output.audience` stays and keeps meaning the words in the pm prompt
 ("stakeholders"). The header uses `audiences.pm.name`.
 
@@ -1602,6 +2357,8 @@ Follow `to_version_5`:
   under `pages`, keeping existing values.
 - Insert `content_types` and `title_only_types` under `confluence` when the
   block exists and the keys are missing.
+- Insert `refine_history:  {status: done, types: [Story]}` under `scopes`
+  when the block exists and the key is missing.
 - `set_version(text, 6)`.
 
 Note for the CHANGELOG: `scope: space` widens what the report reads for an
@@ -1615,7 +2372,10 @@ existing user. Say so, and say how to keep the old behaviour
 Run: `python3 -m unittest discover -s tests` (the CI command in
 `.github/workflows/tests.yml`). Baseline before this tranche: 315 tests, OK.
 
-New test files: `test_reporting_window.py`, `test_epics.py`,
+New test files: `test_prompts.py`, `test_queries.py`,
+`test_conventions.py`, `test_registry_docs.py` (Steps 0a–0d, with the
+snapshot folders `tests/snapshots/prompts/` and `tests/snapshots/queries/`),
+`test_reporting_window.py`, `test_epics.py`,
 `test_pages_v2.py`, `test_page_summaries.py`, `test_audience.py` (level,
 file names, state paths, redaction, partner visibility), plus new classes in
 `test_cli_end_to_end.py` for leadership, partner, brief levels and release
@@ -1630,7 +2390,11 @@ Fixture additions, in one place so every step shares them:
 - Pages: the list in Step 4, plus one `partner-visible` page in SDX, plus
   the register pages in Step 4b.
 - Fake model: branches keyed on the first words of each new system prompt
-  (Appendix B). The leadership branch returns the three headings and one
+  (Appendix B). Keep routing on phrases from the **default** texts; a test
+  that overrides a prompt must either keep the routing phrase or assert
+  only on the POST body.
+- Fake Jira: `cf[NNNNN]` field tokens and `"Epic Link"` (Step 0b); a 400
+  reply for an unknown field name (Step 0d). The leadership branch returns the three headings and one
   bullet citing `[APS-10]` (to prove the removal). The partner branch
   returns one bullet containing `A. Lee` (to prove redaction).
 
@@ -1659,6 +2423,19 @@ Not in this plan:
   parsed; the entries are read directly, which gives the same fields.
 - The v2 Confluence REST API. The v1 search still works; the record shape
   isolates the switch.
+- Configurable wording for deterministic output (the Sources heading, At a
+  glance, table columns, the brief's own headings). They are not sent to a
+  model; a later wording or translation pass can take them.
+- Adding, dropping or reordering report sections. Only heading text is
+  configurable; the seven roles are what the change block, leadership
+  extraction and registers rely on.
+- A "done" that is not the Done status category in Python checks. Queries
+  can redefine it (`status.done`); the in-memory checks in `today`, `lint`
+  and `metrics` still use Jira's `done` category key.
+- `pm workstreams add --labels` / `--field-values`. Label and field modes
+  are set in the file; the CLI flag stays `--components`.
+- Per-product or per-workstream prompt overrides. Overrides are global;
+  the `append` text can refer to product names if a rule is specific.
 
 Choices made here that the user may want to change:
 
@@ -1668,6 +2445,11 @@ Choices made here that the user may want to change:
 - Partner links off by default.
 - The At risk thresholds (14 days, half done).
 - Epics ordered At risk first, then by key.
+- Overrides only in config, never the defaults copied in (7b.1 rule 1).
+- `pm doctor --prompts` / `--queries` rather than a new `pm prompts`
+  command.
+- `membership.by` offers component, label and field. A workstream defined
+  by arbitrary JQL keeps using the legacy `*_jql` fields.
 
 ---
 
@@ -1710,11 +2492,34 @@ Choices made here that the user may want to change:
 17. Read status only from pages fetched with `body.storage`. Unchanged
     entries keep their stored status; do not fetch every entry's body to
     refresh it.
+18. Write the snapshots from the **old** constants before moving a prompt
+    or query (Steps 0a.1, 0b.1). A snapshot written after the move only
+    proves the refactor agrees with itself.
+19. Do not render prompts with `str.format`. JSON prompts contain literal
+    braces; use `prompts.render` (7b.2).
+20. `REPORT_SYSTEM_PROMPT` ends in a backslash-continued string today. The
+    registry text must render to the same characters, including where the
+    continuations joined lines; compare against the snapshot, not by eye.
+21. A new prompt or query in a later step goes in the registry with an
+    `explain`, a snapshot, and a line in the template's section 5m, or
+    `test_registry_docs.py` fails. That is intended.
+22. Pass the full `cfg` to `prompts.get` and `queries.render` wherever it
+    exists. `None` means built-in defaults and silently ignores the user's
+    overrides; use it only in tests and module-level default names.
+23. `order by` is added by code after rendering, never inside a query
+    template.
+24. `filters` imports `queries`; `queries` and `prompts` import nothing
+    from `core`. A cycle here fails at import in every command.
 
 ## Appendix B — Exact prompts
 
-Keep the style of `core/model.py`: short, numbered, format last, one
-example. Each prompt below is a module-level constant in `core/model.py`.
+Keep the style of the existing prompts: short, numbered, format last, one
+example. Each prompt below is the default `text` of a `core/prompts.py`
+registry entry (ids in 7b.3), stored as a module constant there. The
+headings and the "exact sentence" for an empty section are written here as
+they render; in the template they are `{headings}`, `{heading_<role>}` and
+`{empty_section}`. The constant names below are the module constants'
+names in `core/prompts.py`.
 
 ### `REPORT_SYSTEM_PROMPT` (changed lines only)
 
