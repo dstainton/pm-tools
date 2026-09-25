@@ -224,6 +224,18 @@ of keys. Do not invent dates, people, or outcomes that the list does not
 state.
 ```
 
+### `release_notes.partner_rules`
+
+Appended to release_notes.prose for a partner audience.
+
+Used by: pm release-notes --audience partner.
+
+```
+2. Name features by their Epic name. Do not use ticket keys, people's names, or team names.
+3. Do not mention risks, blockers, estimates, or effort.
+4. Do not promise delivery. Say "in progress" or "planned". Give a date only if the list gives one.
+```
+
 ### `pages.summary`
 
 One sentence and a kind for a changed Confluence page. The page version is cached, so this is not asked again until the page changes.

@@ -42,9 +42,15 @@ def _warm_report(cfg, levels):
     prepared = []
     from core import window as window_core
     window = window_core.resolve(cfg, None, default_start=None, projects=[])
+    from core import registers
+    found_registers, skip_ids = registers.gather(cfg, window, previous)
     for ws in cfg["_workstreams"]:
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
-        prepared.append((ws, report_cmd.prepare(cfg, ws, previous, window)))
+        row = report_cmd.prepare(cfg, ws, previous, window, skip_ids=skip_ids)
+        row["registers"] = found_registers
+        prepared.append((ws, row))
+    groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
+    report_cmd._attach_product_pages(cfg, groups, prepared, window, skip_ids)
     sections = []
     if "pm" in levels or "leadership" in levels:
         model.announce(cfg["model"], len(prepared), "pm warm report")
@@ -54,9 +60,8 @@ def _warm_report(cfg, levels):
                 cfg["model"], cfg["output"]["audience"],
                 ws, row["items"], row["change_block"],
                 comment_budget=comments.settings(cfg)["section_chars"],
-                cfg=cfg)
+                cfg=cfg, material=report_cmd.section_material(cfg, row))
             sections.append((ws, body))
-    groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
     if "leadership" in levels and sections:
         report_cmd._audience_summaries(cfg, groups, prepared, sections, "leadership")
     if "partner" in levels:

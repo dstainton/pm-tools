@@ -168,18 +168,126 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
         "changed": changed,
         "dropped": dropped,
         "epics": epic_rows,
+        "loose_pages": [it for it in items
+                        if it.get("source") == "Confluence" and not it.get("epic")
+                        and not it.get("product_only")],
     }
+
+
+def _attach_product_pages(cfg, groups, prepared, window, skip_ids):
+    """Pages from a product Confluence space, attached to the owning workstream."""
+    from core import page_summaries
+    from core import pages as page_core
+    by_abbrev = {ws["abbrev"]: row for ws, row in prepared}
+    seen = set()
+    for row in by_abbrev.values():
+        for item in row.get("items") or []:
+            if item.get("page_id"):
+                seen.add(str(item["page_id"]))
+    for product, streams in groups:
+        space = product.get("confluence_space")
+        if not space or not streams:
+            continue
+        fake_ws = {
+            "abbrev": product.get("abbrev") or "",
+            "confluence_space": space,
+            "confluence_labels": [],
+            "product": product.get("abbrev") or "",
+        }
+        epics = []
+        owner = {}
+        for ws in streams:
+            for epic in (by_abbrev[ws["abbrev"]].get("epics") or []):
+                epics.append(epic)
+                if epic.get("key"):
+                    owner[epic["key"]] = ws["abbrev"]
+        found = page_core.gather(
+            cfg, fake_ws, product=product, epics=epics, window=window, skip_ids=skip_ids)
+        page_summaries.fill(cfg, found)
+        page_core.map_to_epics(found, epics, cfg=cfg)
+        for page in found:
+            if str(page.get("page_id") or "") in seen:
+                continue
+            seen.add(str(page.get("page_id") or ""))
+            target = owner.get(page.get("epic"))
+            if not target:
+                page["product_only"] = True
+                target = streams[0]["abbrev"]
+            row = by_abbrev[target]
+            row["items"].append(page)
+            if page.get("product_only"):
+                row.setdefault("product_pages", []).append(page)
+            elif page.get("epic"):
+                pass
+            else:
+                row.setdefault("loose_pages", []).append(page)
+        for ws in streams:
+            row = by_abbrev[ws["abbrev"]]
+            docs = [it for it in row["items"] if it.get("source") != "Jira"]
+            citations.assign_doc_tags(docs)
+            loose = [it for it in docs if it.get("source") == "Confluence"
+                     and not it.get("epic") and not it.get("product_only")]
+            row["loose_pages"] = loose
+
+
+def section_material(cfg, row):
+    """The exact text `pm report` and `pm warm` send for one workstream."""
+    from core import pages as page_core
+    opts = page_core.settings(cfg)
+    entries = []
+    abbrev = None
+    for epic in row.get("epics") or []:
+        for item in epic.get("items") or []:
+            if item.get("workstream"):
+                abbrev = item["workstream"]
+                break
+    epic_keys = {epic.get("key") for epic in row.get("epics") or [] if epic.get("key")}
+    for record in row.get("registers") or []:
+        scope = record.get("scope") or {}
+        if scope.get("workstream") and scope.get("workstream") != abbrev:
+            continue
+        if scope.get("product"):
+            # Product and portfolio entries join this section only when an
+            # Epic in this workstream owns them.
+            pass
+        elif scope.get("workstream") and scope.get("workstream") != abbrev:
+            continue
+        for entry in record.get("entries") or []:
+            matched = entry.get("epic") if entry.get("epic") in epic_keys else ""
+            if not matched:
+                for key in entry.get("keys") or []:
+                    if key in epic_keys:
+                        matched = key
+                        break
+            if scope.get("product") or not scope:
+                if not matched:
+                    continue
+            copied = dict(entry)
+            copied["epic"] = matched
+            entries.append(copied)
+    return model.build_grouped_material(
+        row.get("epics") or [],
+        row.get("loose_pages") or [],
+        comment_budget=comments.settings(cfg)["section_chars"],
+        page_budget=opts["section_chars"],
+        register_entries=entries,
+    )
 
 
 def _audience_summaries(cfg, groups, prepared, sections, who):
     """One model call per product. Leadership may cite Epics, not child keys."""
+    from core import prompts
     by_ws = {ws["abbrev"]: (ws, row, body) for (ws, row), (_w, body) in zip(prepared, sections)}
     summaries = []
+    roles = ("waiting", "risks", "dependencies")
+    role_names = [prompts.heading(cfg, "report.section", role) for role in roles]
     for product, streams in groups:
         facts = []
         allowed = []
+        docs = []
         for ws in streams:
             row = by_ws.get(ws["abbrev"], (None, {}, ""))[1]
+            body = by_ws.get(ws["abbrev"], (None, {}, ""))[2]
             for epic in row.get("epics") or []:
                 if not epic.get("key"):
                     continue
@@ -187,18 +295,70 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
                         epic, ws, audience.settings(cfg)["partner"]):
                     continue
                 allowed.append(epic["key"])
+                done = epic.get("children_done") or 0
+                total = epic.get("children_total") or 0
+                due = f" | due {epic['due']}" if epic.get("due") else ""
+                signal = epic.get("signal") or ""
+                reason = epic.get("signal_reason") or ""
+                if signal == "At risk" and reason:
+                    signal = f"{signal}: {reason}"
                 facts.append(
                     f"- [{epic['key']}] {epic.get('summary')} | {ws['abbrev']} | "
-                    f"{epic.get('status')} | {epic.get('signal') or ''}"
+                    f"{epic.get('status')} | {done} of {total} done{due} | {signal}"
                 )
+            for item in row.get("items") or []:
+                if item.get("source") == "Jira":
+                    continue
+                kind = (item.get("kind") or "").lower()
+                if kind in ("decision", "risk", "dependency") or item.get("is_new"):
+                    docs.append(item)
         if who == "partner" and not facts:
             continue
-        text = "Epics:\n" + ("\n".join(facts) or "- none")
+        from core import checklist
+        goal = checklist.product_goal(product) or "none"
+        text = f"Product Goal: {goal}\n\nEpics:\n" + ("\n".join(facts) or "- none")
+        if who == "leadership":
+            if docs:
+                lines = []
+                for page in docs[:5]:
+                    summary = f" {page['summary']}" if page.get("summary") else ""
+                    lines.append(
+                        f"- [{page.get('ref') or 'D?'}] {page.get('kind') or page.get('type')}: "
+                        f"{page.get('title')}.{summary}"
+                    )
+                text += "\n\nDocuments:\n" + "\n".join(lines)
+            reg_lines = []
+            for record in _register_records_from(prepared):
+                for entry in record.get("entries") or []:
+                    if entry.get("change") not in ("new", "changed"):
+                        continue
+                    reg_lines.append(
+                        f"- [{entry.get('ref') or 'D?'}] {record.get('type')}, "
+                        f"{entry.get('change')}, {entry.get('status') or ''}: "
+                        f"{entry.get('title')}. {entry.get('summary') or ''}".rstrip()
+                    )
+                    if entry.get("ref"):
+                        allowed.append(entry["ref"])
+            if reg_lines:
+                text += "\n\nRegisters:\n" + "\n".join(reg_lines)
+            team = []
+            for ws in streams:
+                body = by_ws.get(ws["abbrev"], (None, {}, ""))[2]
+                pulled = report_render.extract_sections(body, role_names)
+                for name in role_names:
+                    chunk = report_render.strip_links(pulled.get(name) or "")
+                    if chunk:
+                        team.append(f"{ws['abbrev']}, {name}: {chunk}")
+            if team:
+                text += "\n\nFrom the team reports:\n" + "\n".join(team)
         model.tick(cfg["model"], product.get("abbrev") or "product")
         if who == "leadership":
             body = model.infer_leadership(cfg["model"], product, text, cfg=cfg)
             base = ((cfg.get("jira") or {}).get("base_url") or "").rstrip("/")
-            cite = {key: (key, f"{base}/browse/{key}") for key in allowed}
+            cite = {key: (key, f"{base}/browse/{key}") for key in allowed if "-" in str(key) and not str(key).startswith("D")}
+            for page in docs:
+                if page.get("ref"):
+                    cite[page["ref"]] = (page.get("title") or page["ref"], page.get("url") or "")
             body, removed = citations.resolve(body, cite)
             if removed:
                 print(f"  ({product.get('abbrev')}: {removed} citation removed — not in the material)")
@@ -206,6 +366,13 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
             body = model.infer_partner(cfg["model"], product, text, cfg=cfg)
         summaries.append(body)
     return summaries
+
+
+def _register_records_from(prepared):
+    for _ws, row in prepared:
+        if row.get("registers"):
+            return row["registers"]
+    return []
 
 
 def run(cfg, args):
@@ -247,6 +414,9 @@ def run(cfg, args):
         snapshot["_ran_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
         new_state[ws["abbrev"]] = snapshot
 
+    groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
+    _attach_product_pages(cfg, groups, prepared, window, skip_ids)
+
     sections = []
     all_items = []
     model.announce(cfg["model"], len(prepared), "pm report")
@@ -258,7 +428,7 @@ def run(cfg, args):
             cfg["model"], cfg["output"]["audience"],
             ws, row["items"], row["change_block"],
             comment_budget=comments.settings(cfg)["section_chars"],
-            cfg=cfg)
+            cfg=cfg, material=section_material(cfg, row))
         body, removed = citations.resolve(body, citations.citation_map(row["items"]))
         if removed:
             print(f"  ({ws['abbrev']}: {removed} citation removed — not in the material)")
@@ -281,7 +451,6 @@ def run(cfg, args):
         scope_note = (" Scope: "
                       + ", ".join(w["abbrev"] for w in selected) + ".")
 
-    groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
     base = ((cfg.get("jira") or {}).get("base_url") or "").rstrip("/")
     for _ws, row in prepared:
         for epic in row.get("epics") or []:
@@ -337,7 +506,7 @@ def run(cfg, args):
 
     if getattr(args, "json", False):
         import json
-        payload = {"audience": "pm", "window": window, "products": []}
+        payload = {"audience": who, "window": window, "products": []}
         for product, streams in groups:
             block = {"abbrev": product.get("abbrev") or "", "workstreams": []}
             for ws in streams:
@@ -360,4 +529,5 @@ def run(cfg, args):
     print("\n" + preview)
     if getattr(args, "publish", False):
         from commands import publish as pub
-        pub.publish_file(cfg, args, out_path)
+        pub.publish_file(cfg, args, out_path,
+                         labels=["pm-report", f"pm-audience-{who}"])

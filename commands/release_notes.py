@@ -46,6 +46,8 @@ def _row(product, ws, issue):
         "updated": issue.get("updated"),
         "comments": [],
         "epic": issue.get("epic") or "",
+        "parent": issue.get("epic") or "",
+        "issuetype": issue.get("issuetype") or "",
         "labels": list(issue.get("labels") or []),
     }
 
@@ -84,7 +86,35 @@ def collect(cfg, since, version):
                 {"name": "Unclaimed", "abbrev": "—"},
                 issue))
     _attach_comments(cfg, rows, since)
+    _walk_epics(cfg, rows)
     return rows
+
+
+def _walk_epics(cfg, rows):
+    """A Sub-task's parent is its Story. Walk up to the Epic."""
+    from core import epics
+    if not rows:
+        return
+    epic_types = workstreams.membership_settings(cfg)["epic_types"]
+    items = []
+    for row in rows:
+        items.append({
+            "key": row.get("key"),
+            "parent": row.get("parent") or None,
+            "issuetype": row.get("issuetype") or "",
+            "source": "Jira",
+            "summary": row.get("summary") or "",
+            "status": "",
+        })
+    parents, fields = epics.parent_map(cfg, items, epic_types)
+    types = {key: (info.get("issuetype") or "") for key, info in fields.items()}
+    for row in rows:
+        found = epics.epic_of(row.get("key"), parents, types, epic_types)
+        if found:
+            row["epic"] = found
+            info = fields.get(found) or {}
+            if info.get("summary"):
+                row["epic_summary"] = info["summary"]
 
 
 def _attach_comments(cfg, rows, since):
@@ -100,7 +130,7 @@ def _attach_comments(cfg, rows, since):
         comments.attach(cfg, jira, group, cutoff)
 
 
-def bullet_lines(rows, comment_budget=6000, level="pm"):
+def bullet_lines(rows, comment_budget=6000, level="pm", cfg=None):
     """Markdown bullets grouped by product, then workstream."""
     if not rows:
         return ["_No done issues in that window._", ""]
@@ -141,9 +171,24 @@ def bullet_lines(rows, comment_budget=6000, level="pm"):
                     buckets.append((label, title, []))
                 buckets[-1][2].append(issue)
             if level == "leadership":
+                from core import epics
+                keys = [label for label, _title, _issues in buckets if label]
+                counts = epics.child_counts(cfg, keys, cfg) if cfg is not None and keys else {}
                 for label, title, issues in buckets:
                     name = title or "Not under an Epic"
-                    lines.append(f"- {name} — {len(issues)} done this window")
+                    extra = ""
+                    bucket = counts.get(label) or {}
+                    if bucket.get("total"):
+                        extra = f" ({bucket.get('done') or 0} of {bucket['total']})"
+                    if label:
+                        url = ""
+                        sample = issues[0].get("url") or ""
+                        if "/browse/" in sample:
+                            url = sample.split("/browse/")[0] + "/browse/" + label
+                        shown = f"[{label}]({url}) {name}" if url else f"{label} {name}"
+                    else:
+                        shown = name
+                    lines.append(f"- {shown} — {len(issues)} done this window{extra}")
                 lines.append("")
                 continue
             multiple = len(buckets) > 1 or (buckets and buckets[0][0])
@@ -180,16 +225,18 @@ def _skipped(text):
     return text.startswith("_Could not reach") or text.startswith("_The model")
 
 
-def draft(cfg, bullets):
+def draft(cfg, bullets, level="pm"):
     """Model prose, or None when the model was skipped."""
-    raw = model.call_model(cfg["model"], prompts.get(cfg, "release_notes.prose"),
-                           "\n".join(bullets))
+    system = prompts.get(cfg, "release_notes.prose")
+    if level == "partner":
+        system = system + "\n" + prompts.get(cfg, "release_notes.partner_rules")
+    raw = model.call_model(cfg["model"], system, "\n".join(bullets))
     if _skipped(raw):
         return None
     return raw.strip()
 
 
-def render(since, version, rows, prose, comment_budget=6000, level="pm", extras=None):
+def render(since, version, rows, prose, comment_budget=6000, level="pm", extras=None, cfg=None):
     bits = []
     if since:
         bits.append(f"since {since}")
@@ -201,7 +248,7 @@ def render(since, version, rows, prose, comment_budget=6000, level="pm", extras=
         f"_{window}. The model does not choose which issues are included._",
         "",
     ]
-    bullets = bullet_lines(rows, comment_budget, level)
+    bullets = bullet_lines(rows, comment_budget, level, cfg=cfg)
     if prose:
         lines.append(prose)
         lines.append("")
@@ -239,7 +286,7 @@ def _mark_partner(cfg, rows):
         row["show_keys"] = show_keys
 
 
-def _extras(cfg, since, version, level):
+def _extras(cfg, since, version, level, rows=None):
     lines = []
     if version and not since:
         lines.extend(["## Further reading", "",
@@ -266,13 +313,34 @@ def _extras(cfg, since, version, level):
         from core import pages as page_core
         import datetime as dt
         window = {"start": dt.date.fromisoformat(since)}
-        reading = []
+        collected = []
         for ws in cfg.get("_workstreams") or []:
-            for page in page_core.gather(cfg, ws, window=window):
-                if page.get("epic"):
-                    reading.append(f"- {page.get('title')}")
+            collected.extend(page_core.gather(cfg, ws, window=window))
+        stubs = []
+        seen = set()
+        for row in rows or []:
+            key = row.get("epic")
+            if key and key not in seen:
+                seen.add(key)
+                stubs.append({"key": key, "summary": row.get("epic_summary") or key,
+                              "pages": [], "in_scope": True})
+        if stubs:
+            page_core.map_to_epics(collected, stubs, cfg=cfg)
+        by_epic = {}
+        for page in collected:
+            by_epic.setdefault(page.get("epic") or "", []).append(page)
+        reading = []
+        for key, pages in by_epic.items():
+            stub = next((row for row in stubs if row.get("key") == key), None)
+            title = (stub or {}).get("summary") or key or "Not under an Epic"
+            heading = f"**{key} {title}**".strip() if key else "**Not under an Epic**"
+            reading.append(heading)
+            reading.append("")
+            for page in pages:
+                reading.append(f"- {page.get('title')}")
+            reading.append("")
         if reading:
-            lines.extend(["## Further reading", ""] + reading[:10] + [""])
+            lines.extend(["## Further reading", ""] + reading)
     return lines
 
 
@@ -289,10 +357,10 @@ def run(cfg, args):
     from core import audience
     level = audience.level(cfg, args)
     _mark_partner(cfg, rows)
-    bullets = bullet_lines(rows, budget, level)
-    prose = draft(cfg, bullets) if rows else None
+    bullets = bullet_lines(rows, budget, level, cfg=cfg)
+    prose = draft(cfg, bullets, level) if rows else None
     text = render(since, version, rows, prose, budget, level,
-                  _extras(cfg, since, version, level))
+                  _extras(cfg, since, version, level, rows), cfg=cfg)
     path = output.place(
         cfg, f"release_notes_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

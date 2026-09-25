@@ -386,8 +386,20 @@ def _check_confluence(cfg):
         try:
             opts = pages.page_settings(cfg)
             types = list(opts["content_types"]) + list(opts["title_only_types"])
-            cql = filters.build_cql(ws, cfg, scope="space", types=types)
             since = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+            accepted = []
+            for content_type in types:
+                one = filters.build_cql(ws, cfg, scope="space", types=[content_type])
+                try:
+                    sources.fetch_confluence_results(cfg, one, since=since, limit=1)
+                    accepted.append(content_type)
+                except Exception as err:  # noqa: BLE001
+                    if "400" in str(err):
+                        print(f"  confluence      {abbrev} type {content_type} was rejected — "
+                              f"edit confluence.content_types          warn")
+                    else:
+                        print(f"  confluence      {abbrev} type {content_type}: {err}          warn")
+            cql = filters.build_cql(ws, cfg, scope="space", types=accepted or types)
             found = sources.fetch_confluence_results(cfg, cql, since=since, limit=5) if cql else []
             print(f"  confluence      {abbrev} {space}: {len(found)} page(s) in 7 days  ok")
         except Exception as err:  # noqa: BLE001
@@ -405,8 +417,21 @@ def _check_registers(cfg):
         name = reg.get("name") or reg.get("type")
         if root is None:
             print(f"  registers       {name}: summary page not found — set page_id  warn")
-        else:
-            print(f"  registers       {name}: {root.get('title')}                     ok")
+            continue
+        try:
+            listed = registers.list_entries(cfg, reg, root["page_id"])
+        except Exception as err:  # noqa: BLE001
+            print(f"  registers       {name}: {root.get('title')} ({err})          warn")
+            continue
+        field = reg.get("status_field") or "Status"
+        with_status = 0
+        cql = registers._entry_cql(reg, root["page_id"])
+        for raw in sources.fetch_confluence_results(cfg, cql, since="1970-01-01", limit=200):
+            storage = ((raw.get("body") or {}).get("storage") or {}).get("value") or ""
+            if registers.properties(storage, [field]).get(field):
+                with_status += 1
+        print(f"  registers       {name}: {root.get('title')} — {len(listed)} entries, "
+              f"{with_status} with {field}          ok")
 
 
 def run(cfg, args):

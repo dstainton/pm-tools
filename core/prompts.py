@@ -226,6 +226,12 @@ of keys. Do not invent dates, people, or outcomes that the list does not
 state.
 """
 
+RELEASE_NOTES_PARTNER_RULES = """\
+2. Name features by their Epic name. Do not use ticket keys, people's names, or team names.
+3. Do not mention risks, blockers, estimates, or effort.
+4. Do not promise delivery. Say "in progress" or "planned". Give a date only if the list gives one.
+"""
+
 
 def _entry(used_by, explain, text, runtime=(), values=None, headings=None,
            required=(), contract=(), append_at="", version=1):
@@ -335,6 +341,11 @@ PROMPTS = {
         "pm release-notes",
         "Turns the done list into prose.",
         RELEASE_NOTES_PROSE,
+    ),
+    "release_notes.partner_rules": _entry(
+        "pm release-notes --audience partner",
+        "Appended to release_notes.prose for a partner audience.",
+        RELEASE_NOTES_PARTNER_RULES,
     ),
     "pages.summary": _entry(
         "pm warm --pages, pm report",

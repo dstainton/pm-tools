@@ -1,0 +1,3 @@
+2. Name features by their Epic name. Do not use ticket keys, people's names, or team names.
+3. Do not mention risks, blockers, estimates, or effort.
+4. Do not promise delivery. Say "in progress" or "planned". Give a date only if the list gives one.

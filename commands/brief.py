@@ -160,10 +160,14 @@ def _leadership_prep(section):
     for epic in section.get("epics") or []:
         if not epic.get("key"):
             continue
+        signal = epic.get("signal") or ""
+        reason = epic.get("signal_reason") or ""
+        if signal == "At risk" and reason:
+            signal = f"{signal} — {reason}"
         lines.append(
             f"| {epic['key']} {epic.get('summary') or ''} | {epic.get('status') or ''} | "
             f"{epic.get('children_done') or 0} / {epic.get('children_total') or 0} | "
-            f"{epic.get('signal') or ''} | {epic.get('due') or '—'} |"
+            f"{signal} | {epic.get('due') or '—'} |"
         )
     lines.append("")
     lines.append("### Decisions you need from the room")
@@ -191,6 +195,9 @@ def _leadership_prep(section):
         overdue = kinds.count("overdue")
         blocked = kinds.count("blocked")
         lines.append(f"- {epic}: {overdue} overdue, {blocked} blocked.")
+    lines.append("")
+    from core.report_render import SIGNAL_FOOTER
+    lines.append(SIGNAL_FOOTER)
     lines.append("")
     return lines
 
@@ -320,7 +327,8 @@ def run_prep(cfg, args):
     print(f"\nDone. Brief written to: {path}")
     if getattr(args, "publish", False):
         from commands import publish as pub
-        pub.publish_file(cfg, args, path, title=f"{audience} — {dt.date.today().isoformat()}")
+        pub.publish_file(cfg, args, path, title=f"{audience} — {dt.date.today().isoformat()}",
+                         labels=["pm-report", "pm-brief"])
     return path
 
 

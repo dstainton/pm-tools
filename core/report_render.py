@@ -1,9 +1,40 @@
 """Deterministic Markdown for the weekly report."""
 
 import datetime as dt
+import re
 
 from core import checklist
 from core import products as product_core
+
+
+_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_HEADING = re.compile(r"^#{2,5}\s+(.+?)\s*$")
+
+SIGNAL_FOOTER = (
+    "_Signal is a rule, not a judgement: At risk means a blocked item, a "
+    "passed due date, or under half done within 14 days of the due date._"
+)
+
+
+def strip_links(text):
+    """Markdown links become their labels, so a later model cannot cite them."""
+    return _LINK.sub(r"\1", text or "")
+
+
+def extract_sections(markdown, names):
+    """Body under each named heading. `names` come from prompts.heading."""
+    wanted = list(names or [])
+    found = {name: [] for name in wanted}
+    current = None
+    for line in (markdown or "").splitlines():
+        match = _HEADING.match(line)
+        if match:
+            title = match.group(1).strip()
+            current = title if title in found else None
+            continue
+        if current is not None:
+            found[current].append(line)
+    return {name: "\n".join(found[name]).strip() for name in wanted}
 
 
 def demote(text, levels):
@@ -39,23 +70,91 @@ def _md_link(label, url, links=True):
     return label
 
 
+_REGISTER_COLUMNS = (
+    ("decision", "New decisions"),
+    ("risk", "New risks"),
+    ("adr", "New ADRs"),
+)
+
+
+def _configured_register_types(rows):
+    found = []
+    for record in _register_records(rows):
+        kind = record.get("type")
+        if kind in {name for name, _label in _REGISTER_COLUMNS} and kind not in found:
+            found.append(kind)
+    return [pair for pair in _REGISTER_COLUMNS if pair[0] in found]
+
+
+def _new_register_counts(records, product, ws, epics, claimed):
+    """New entries for this row. Each entry is counted on one row only."""
+    counts = {kind: 0 for kind, _label in _REGISTER_COLUMNS}
+    epic_keys = {epic.get("key") for epic in epics if epic.get("key")}
+    for record in records or []:
+        kind = record.get("type")
+        if kind not in counts:
+            continue
+        scope = record.get("scope") or {}
+        for entry in record.get("entries") or []:
+            if entry.get("change") != "new":
+                continue
+            marker = entry.get("page_id") or id(entry)
+            if marker in claimed:
+                continue
+            matched = ""
+            for key in entry.get("keys") or []:
+                if key in epic_keys:
+                    matched = key
+                    break
+            owns = False
+            if scope.get("workstream"):
+                owns = scope.get("workstream") == ws.get("abbrev")
+            elif matched:
+                owns = True
+            elif not claimed_scope_elsewhere(scope, product, ws):
+                owns = True
+            if owns:
+                counts[kind] += 1
+                claimed.add(marker)
+    return counts
+
+
+def claimed_scope_elsewhere(scope, product, ws):
+    """True when a later row should not absorb an unmatched portfolio entry."""
+    return False
+
+
 def at_a_glance(groups, rows):
     by_ws = {ws["abbrev"]: row for ws, row in rows}
-    lines = [
-        "| Product | Workstream | Epics active | Items in window | Moved | Blocked | Docs changed |",
-        "|---------|------------|-------------:|----------------:|------:|--------:|-------------:|",
-    ]
+    extra = _configured_register_types(rows)
+    head = ["Product", "Workstream", "Epics active", "Items in window",
+            "Moved", "Blocked", "Docs changed"]
+    head.extend(label for _kind, label in extra)
+    align = ["---------", "------------", "-------------:", "----------------:",
+             "------:", "--------:", "-------------:"]
+    align.extend("-------------:" for _pair in extra)
+    lines = ["| " + " | ".join(head) + " |", "|" + "|".join(align) + "|"]
+    records = _register_records(rows)
+    claimed = set()
+    first_of_product = {}
     for product, streams in groups:
+        abbrev = product.get("abbrev") or ""
+        first_of_product[abbrev] = streams[0]["abbrev"] if streams else ""
         for ws in streams:
             row = by_ws.get(ws["abbrev"]) or {}
             epics = [e for e in row.get("epics") or [] if e.get("key")]
             items = [it for it in row.get("items") or [] if it.get("source") == "Jira"]
             docs = [it for it in row.get("items") or [] if it.get("source") != "Jira"]
             blocked = sum(int(e.get("blocked") or 0) for e in epics)
-            lines.append(
-                f"| {product.get('abbrev') or '—'} | {ws['abbrev']} | {len(epics)} | "
-                f"{len(items)} | {len(row.get('changed') or [])} | {blocked} | {len(docs)} |"
-            )
+            cells = [
+                product.get("abbrev") or "—", ws["abbrev"], str(len(epics)),
+                str(len(items)), str(len(row.get("changed") or [])),
+                str(blocked), str(len(docs)),
+            ]
+            if extra:
+                counts = _new_register_counts(records, product, ws, epics, claimed)
+                cells.extend(str(counts[kind]) for kind, _label in extra)
+            lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
@@ -204,7 +303,33 @@ def sources_appendix(groups, rows):
                         f"{str(item.get('updated') or '')[:10]} |"
                     )
             lines.append("")
+    records = _register_records(rows)
+    for record in records:
+        lines.extend(_register_source_table(record))
+        lines.append("")
     return "\n".join(lines)
+
+
+def _register_source_table(record):
+    """Summary page first, then every new and changed entry."""
+    root = record.get("root") or {}
+    lines = [
+        f"### {record.get('name') or 'Register'}",
+        "",
+        "| Entry | Change | Status | Updated |",
+        "|-------|--------|--------|---------|",
+        f"| {_md_link(record.get('name') or 'summary', root.get('url'))} | summary |  | "
+        f"{str(root.get('updated') or '')[:10]} |",
+    ]
+    for entry in record.get("entries") or []:
+        if entry.get("change") not in ("new", "changed"):
+            continue
+        title = (entry.get("title") or "entry").replace("|", "\\|")
+        lines.append(
+            f"| {_md_link(title, entry.get('url'))} | {entry.get('change') or ''} | "
+            f"{entry.get('status') or ''} | {str(entry.get('updated') or '')[:10]} |"
+        )
+    return lines
 
 
 def _increment_lines(cfg, product):
@@ -295,10 +420,7 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
                 lambda scope, abbrev=abbrev: scope.get("workstream") == abbrev)
     lines.append(sources_appendix(groups, rows))
     lines.append("")
-    lines.append(
-        "_Signal is a rule, not a judgement: At risk means a blocked item, a "
-        "passed due date, or under half done within 14 days of the due date._"
-    )
+    lines.append(SIGNAL_FOOTER)
     lines.append("")
     return "\n".join(lines)
 

@@ -196,6 +196,7 @@ def build(cfg, ws, items, window, prev_changes):
     changed_keys = {it.get("key") for it, _old in (prev_changes or ([], []))[1]} if False else set()
     _new, changed, _dropped = prev_changes or ([], [], [])
     changed_keys = {it.get("key") for it, _old in changed}
+    new_keys = {it.get("key") for it in _new}
 
     rows = []
     for key in keys:
@@ -225,6 +226,7 @@ def build(cfg, ws, items, window, prev_changes):
             "labels": list(own.get("labels") or []),
             "items": [it for it in jira_items if it.get("epic") == key],
             "moved": [it for it in jira_items if it.get("epic") == key and it.get("key") in changed_keys],
+            "new": [it for it in jira_items if it.get("epic") == key and it.get("key") in new_keys],
             "pages": [],
         }
         word, reason = signal(

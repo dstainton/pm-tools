@@ -594,16 +594,34 @@ class _Handler(BaseHTTPRequestHandler):
 
         if self.path.rstrip("/") == "/wiki/rest/api/content":
             fields = body if isinstance(body, dict) else {}
+            labels = []
+            for label in ((fields.get("metadata") or {}).get("labels") or []):
+                name = label.get("name") if isinstance(label, dict) else str(label)
+                if name:
+                    labels.append(name)
             page = {
                 "id": str(3000 + len(self.pages)),
                 "title": fields.get("title") or "Untitled",
                 "space": (fields.get("space") or {}).get("key") or "APS",
                 "body": ((fields.get("body") or {}).get("storage") or {}).get("value") or "",
                 "version": 1,
-                "labels": [],
+                "labels": labels,
             }
             self.pages.append(page)
             return self._send({"id": page["id"], "title": page["title"]}, status=200)
+
+        label_match = re.match(r"/wiki/rest/api/content/([^/]+)/label/?$", self.path)
+        if label_match:
+            page_id = label_match.group(1)
+            page = next((row for row in self.pages if str(row.get("id")) == page_id), None)
+            names = []
+            rows = body if isinstance(body, list) else [body]
+            for row in rows:
+                if isinstance(row, dict) and row.get("name"):
+                    names.append(row["name"])
+            if page is not None:
+                page.setdefault("labels", []).extend(names)
+            return self._send({"results": names}, status=200)
 
         match = re.match(r"/rest/api/3/issue/([^/]+)/comment", self.path)
         if match:

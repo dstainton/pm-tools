@@ -2,6 +2,17 @@
 
 `pm` stays a program you run. It does not listen on a port.
 
+## Overnight warm
+
+`pm warm` fills the model cache in this order: review, page summaries, the report, then the inbox. Schedule it before the report so the morning run is a cache hit:
+
+```
+pm schedule add warm --at 06:30
+pm schedule add report --at 07:30
+```
+
+`pm warm --audience pm,leadership` also drafts the leadership product summaries. `audiences.warm` in config is the list used when `--audience` is omitted.
+
 ## Scripts
 
 Read commands accept `--json` where a script needs structure (`pm lint --json`, `pm metrics --json`, `pm today --json`, `pm show KEY --json`). `pm schedule` registers read-only commands and refuses anything that writes.
