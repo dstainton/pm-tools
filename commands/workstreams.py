@@ -91,6 +91,12 @@ def _entry_lines(entry, indent="  "):
     if entry.get("confluence_space"):
         body.append(f'{indent}  confluence_space: '
                     f'{quoted(entry["confluence_space"])}')
+    if entry.get("confluence_page"):
+        body.append(f'{indent}  confluence_page: '
+                    f'{quoted(entry["confluence_page"])}')
+    if entry.get("confluence_page_id"):
+        body.append(f'{indent}  confluence_page_id: '
+                    f'{quoted(entry["confluence_page_id"])}')
     if entry.get("confluence_labels"):
         labels = ", ".join(quoted(l) for l in entry["confluence_labels"])
         body.append(f'{indent}  confluence_labels: [{labels}]')
@@ -148,6 +154,8 @@ def _add(cfg, args):
         "components": [c.strip() for c in args.components.split(",")
                        if c.strip()],
         "confluence_space": args.confluence_space,
+        "confluence_page": getattr(args, "confluence_page", None),
+        "confluence_page_id": getattr(args, "confluence_page_id", None),
         "confluence_labels": [l.strip() for l in
                               (args.confluence_labels or "").split(",")
                               if l.strip()],

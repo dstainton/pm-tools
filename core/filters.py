@@ -252,19 +252,32 @@ def validate_config_scopes(cfg):
 # ---------------------------------------------------------------------------
 
 def build_cql(ws, cfg=None, scope="labelled", types=None):
-    """Build Confluence CQL from `confluence_space` / `confluence_labels`.
+    """Build Confluence CQL from space, an optional folder, and labels.
 
-    A hand-written `confluence_cql` still wins if one is present, so existing
-    configs keep working.
+    A hand-written `confluence_cql` still wins. A workstream that only sets
+    `confluence_space` still searches that whole space. `confluence_page` or
+    `confluence_page_id` narrows the search to descendants of that page, in
+    the workstream space or the space inherited from the product or from
+    `confluence.space`. The team root is not applied on its own.
     """
     if ws.get("confluence_cql"):
         return ws["confluence_cql"]
 
-    space = ws.get("confluence_space")
-    if not space:
-        return None
+    if ws.get("confluence_page") or ws.get("confluence_page_id"):
+        from core import confluence_tree
+        located = confluence_tree.locate_workstream(cfg, ws)
+        if located.get("missing") or not located.get("ancestor_id") or not located.get("space"):
+            return None
+        clauses = [
+            queries.render(cfg, "confluence.space", space=located["space"]),
+            queries.render(cfg, "confluence.ancestor", page_id=located["ancestor_id"]),
+        ]
+    else:
+        space = ws.get("confluence_space")
+        if not space:
+            return None
+        clauses = [queries.render(cfg, "confluence.space", space=space)]
 
-    clauses = [queries.render(cfg, "confluence.space", space=space)]
     labels = _value_list("confluence_labels", ws.get("confluence_labels"))
     if scope == "labelled" and labels:
         clauses.append(queries.render(cfg, "confluence.labels", labels=labels))

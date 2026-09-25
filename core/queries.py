@@ -14,7 +14,7 @@ _ISSUE_KEY = re.compile(r"^[A-Z][A-Z0-9_]*-\d+$")
 # name -> (kind). Vocabulary names are filled from vocabulary().
 _KINDS = {
     "project": "string", "space": "string", "version": "string",
-    "label": "string", "field_name": "string",
+    "label": "string", "field_name": "string", "title": "string",
     "values": "list", "components": "list", "labels": "list",
     "epic_types": "list", "types": "list",
     "keys": "keys", "epic_keys": "keys", "tagged_keys": "keys",
@@ -153,6 +153,18 @@ QUERIES = {
         "cql", "every Confluence read",
         "Pages in one space.",
         "space = {space}", ("space",)),
+    "confluence.ancestor": _entry(
+        "cql", "page reads under a folder, and registers nested under one page",
+        "Pages under one ancestor page or folder.",
+        "ancestor = {page_id}", ("page_id",)),
+    "confluence.parent": _entry(
+        "cql", "a register summary page directly under another page",
+        "Direct child of one page or folder.",
+        "parent = {page_id}", ("page_id",)),
+    "confluence.title": _entry(
+        "cql", "finding a page or folder by title",
+        "A page or folder with this exact title.",
+        "title = {title}", ("title",)),
     "confluence.types": _entry(
         "cql", "Confluence reads that name content types",
         "Only these Confluence content types.",

@@ -182,6 +182,14 @@ confluence:
   max_results: 50
   content_types: [page, blogpost]
   title_only_types: [database, embed]
+  # One space for the whole team. Leave these unset when each workstream has
+  # its own confluence_space (the example below). space is the default for
+  # page titles and for registers that omit space. root_title or root_page_id
+  # is the page the team lives under. It is not applied to a workstream that
+  # does not name a page.
+  # space: "APS"
+  # root_title: "API Program Services"
+  # root_page_id: "123456"
 
 # ----------------------------------------------------------------------------
 #  4. SharePoint (via Microsoft Graph) — set enabled: false to skip
@@ -433,10 +441,14 @@ products:
 #    product            the product abbrev it belongs to (optional)
 #    components         exact Jira Component name(s) — must match Jira
 #    project            only if this stream lives outside the team project
-#    confluence_space   space key holding its decisions / risks
-#  A product may also set confluence_space. Those pages are matched to the
-#  product's Epics and filed under the workstream that owns the Epic.
-#    confluence_labels  which labels to gather from that space
+#    confluence_space   space key. On its own, every changed page in that space
+#    confluence_page    folder or page title under one shared space
+#    confluence_page_id that folder's id, when the title is not unique
+#  A product may set the same three keys. confluence_space alone still means
+#  the whole space. A page is read under that folder: the workstream space,
+#  or the product space, or confluence.space. Pages in the product folder
+#  that are not under a workstream folder are filed on the product.
+#    confluence_labels  which labels to gather from that space or folder
 #    sharepoint_query   search term for its documents
 #    scopes             per-workstream overrides of the section above
 #
@@ -476,6 +488,39 @@ workstreams:
     confluence_space: "ITK"
     confluence_labels: [decision, risk, dependency]
     sharepoint_query: "Integration Toolkit"
+
+# ----------------------------------------------------------------------------
+#  6c. Decision logs, risk registers, and ADRs (optional)
+# ----------------------------------------------------------------------------
+#  Each entry is a summary page or folder whose child pages are the records.
+#  page_id, or space plus title, names it. space may be omitted when
+#  confluence.space is set. under (or under_id) picks the summary when the
+#  same title exists in more than one folder.
+#
+#  Two layouts can both be set. A page that appears in more than one is
+#  listed once, on a workstream, then a product, then the portfolio.
+#
+#  split: label files each entry by a label equal to a workstream or product
+#  abbreviation (SDX wins over IP when both match). With product set, a
+#  workstream label files the entry on that workstream and other entries stay
+#  on the product. With neither set, no matching label stays in the portfolio
+#  section.
+#
+#  registers:
+#    - type: risk
+#      name: "IP risks"
+#      title: "Risks"
+#      under: "Integration Platform"
+#      product: IP
+#    - type: decision
+#      name: "All decisions"
+#      title: "Decisions"
+#      under: "API Program Services"
+#      split: label
+#    - type: adr
+#      name: "ADRs"
+#      page_id: "234567"
+#      workstream: SDX
 
 # ----------------------------------------------------------------------------
 #  5m. Prompts, queries and conventions
@@ -535,7 +580,8 @@ workstreams:
 #    coverage.open_in_project doctor.membership_open
 #    release_notes.done release_notes.since release_notes.version
 #    today.in_sprint_open
-#    confluence.space confluence.labels confluence.types confluence.window
+#    confluence.space confluence.ancestor confluence.parent confluence.title
+#    confluence.labels confluence.types confluence.window
 #    brief.risk_pages
 #    epics.children epics.resolved
 #    registers.descendants registers.children

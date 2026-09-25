@@ -63,9 +63,17 @@ def _risk_cql(ws, cfg=None):
     labels = [str(label).strip() for label in (ws.get("confluence_labels") or [])]
     wanted = str(conventions.get(cfg, "risk_label") or "risk").lower()
     risk = next((label for label in labels if label.lower() == wanted), None)
-    space = ws.get("confluence_space")
-    if risk and space:
-        return queries.render(cfg, "brief.risk_pages", space=space, label=risk)
+    from core import confluence_tree
+    located = confluence_tree.locate_workstream(cfg, ws)
+    space = located.get("space") or ws.get("confluence_space")
+    if risk and space and not located.get("missing"):
+        cql = queries.render(cfg, "brief.risk_pages", space=space, label=risk)
+        if located.get("ancestor_id"):
+            cql += " AND " + queries.render(
+                cfg, "confluence.ancestor", page_id=located["ancestor_id"])
+        return cql
+    if located.get("missing"):
+        return None
     return workstreams.confluence_cql(ws, cfg)
 
 
@@ -150,7 +158,7 @@ def gather(cfg, audience, window=None):
         else:
             section["risks"] = [page for page in section.get("pages") or []
                                 if (page.get("kind") or "").lower() == "risk"][:3]
-    snapshot["_registers"] = registers.snapshot(found)
+    snapshot["_registers"] = registers.saved_memory(cfg, found)
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
     return sections, snapshot, last

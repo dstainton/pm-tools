@@ -612,6 +612,36 @@ Used by: every Confluence read.
 space = {space}
 ```
 
+### `confluence.ancestor`
+
+Pages under one ancestor page or folder.
+
+Used by: page reads under a folder, and registers nested under one page.
+
+```
+ancestor = {page_id}
+```
+
+### `confluence.parent`
+
+Direct child of one page or folder.
+
+Used by: a register summary page directly under another page.
+
+```
+parent = {page_id}
+```
+
+### `confluence.title`
+
+A page or folder with this exact title.
+
+Used by: finding a page or folder by title.
+
+```
+title = {title}
+```
+
 ### `confluence.types`
 
 Only these Confluence content types.

@@ -207,6 +207,12 @@ def build_parser():
                         help="Jira project this product lives in")
     p_prod.add_argument("--goal",
                         help="Product Goal sentence, for `add`")
+    p_prod.add_argument("--confluence-space",
+                        help="Confluence space key. On its own, the whole space")
+    p_prod.add_argument("--confluence-page",
+                        help="Folder or page title in one shared space, for `add`")
+    p_prod.add_argument("--confluence-page-id",
+                        help="That folder's id, when the title is not unique")
     p_prod.add_argument("--show-jql", action="store_true",
                         help="With `check`, print the JQL pm generates")
     p_prod.set_defaults(func=products.run, needs_config=True)
@@ -226,7 +232,12 @@ def build_parser():
     p_ws.add_argument("--project",
                       help="Jira project, if it differs from jira.project")
     p_ws.add_argument("--confluence-space",
-                      help="Confluence space key for its decisions/risks")
+                      help="Confluence space key. With no page, every changed "
+                           "page in that space")
+    p_ws.add_argument("--confluence-page",
+                      help="Folder or page title in one shared space, for `add`")
+    p_ws.add_argument("--confluence-page-id",
+                      help="That folder's id, when the title is not unique")
     p_ws.add_argument("--confluence-labels", metavar="LABELS",
                       help="Confluence labels to gather, comma-separated")
     p_ws.add_argument("--sharepoint-query",
@@ -269,7 +280,8 @@ def build_parser():
         help="Fill in the config one step at a time",
         description="Fill in the config one step at a time. "
                     "--section model lists local servers and can install "
-                    "Ollama or Lemonade.")
+                    "Ollama or Lemonade. --section confluence records one "
+                    "shared space and the team page.")
     p_setup.add_argument("--path", default=None, help="Config file to edit")
     p_setup.add_argument("--section", default=None,
                          choices=["jira", "model", "workstreams", "confluence"],
@@ -294,6 +306,10 @@ def build_parser():
     p_setup.add_argument(
         "--model-api-key-env", default=None,
         help="Write the model API key as ${ENV:NAME}")
+    p_setup.add_argument("--confluence-space", default=None,
+                         help="Shared Confluence space key, written when blank")
+    p_setup.add_argument("--confluence-root", default=None,
+                         help="Team page title in that space, written when blank")
     p_setup.add_argument("--yes", action="store_true",
                          help="Write the flags and do not prompt or install")
     p_setup.set_defaults(func=setup.run, needs_config=False)
