@@ -171,6 +171,43 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None):
     }
 
 
+def _audience_summaries(cfg, groups, prepared, sections, who):
+    """One model call per product. Leadership may cite Epics, not child keys."""
+    by_ws = {ws["abbrev"]: (ws, row, body) for (ws, row), (_w, body) in zip(prepared, sections)}
+    summaries = []
+    for product, streams in groups:
+        facts = []
+        allowed = []
+        for ws in streams:
+            row = by_ws.get(ws["abbrev"], (None, {}, ""))[1]
+            for epic in row.get("epics") or []:
+                if not epic.get("key"):
+                    continue
+                if who == "partner" and not audience.partner_visible_epic(
+                        epic, ws, audience.settings(cfg)["partner"]):
+                    continue
+                allowed.append(epic["key"])
+                facts.append(
+                    f"- [{epic['key']}] {epic.get('summary')} | {ws['abbrev']} | "
+                    f"{epic.get('status')} | {epic.get('signal') or ''}"
+                )
+        if who == "partner" and not facts:
+            continue
+        text = "Epics:\n" + ("\n".join(facts) or "- none")
+        model.tick(cfg["model"], product.get("abbrev") or "product")
+        if who == "leadership":
+            body = model.infer_leadership(cfg["model"], product, text, cfg=cfg)
+            base = ((cfg.get("jira") or {}).get("base_url") or "").rstrip("/")
+            cite = {key: (key, f"{base}/browse/{key}") for key in allowed}
+            body, removed = citations.resolve(body, cite)
+            if removed:
+                print(f"  ({product.get('abbrev')}: {removed} citation removed — not in the material)")
+        else:
+            body = model.infer_partner(cfg["model"], product, text, cfg=cfg)
+        summaries.append(body)
+    return summaries
+
+
 def run(cfg, args):
     """Entry point called by pm.py."""
     selected = cfg["_workstreams"]
@@ -250,14 +287,42 @@ def run(cfg, args):
         for epic in row.get("epics") or []:
             if epic.get("key") and not epic.get("url") and base:
                 epic["url"] = f"{base}/browse/{epic['key']}"
-    report = report_render.render_pm(
-        cfg, groups, prepared, sections, window, scope_note, who=who)
-    try:
-        from commands import metrics as metrics_cmd
-        groups = metrics_cmd.gather(cfg, 8)
-        report = report.rstrip() + "\n\n" + metrics_cmd.render(groups, 8)
-    except Exception as exc:                              # noqa: BLE001
-        print(f"Metrics appendix skipped: {exc}")
+    if who == "leadership":
+        summaries = _audience_summaries(cfg, groups, prepared, sections, who)
+        report = report_render.render_leadership(cfg, groups, prepared, summaries, window)
+    elif who == "partner":
+        opts = audience.settings(cfg)["partner"]
+        visible = []
+        for ws, row in prepared:
+            for epic in row.get("epics") or []:
+                if epic.get("key") and audience.partner_visible_epic(epic, ws, opts):
+                    visible.append(epic)
+        if not visible:
+            sys.exit("No Epic is marked for partners. Add the label "
+                     "partner-visible to an Epic, or set partner_visible: true "
+                     "on a workstream.")
+        summaries = _audience_summaries(cfg, groups, prepared, sections, who)
+        report = report_render.render_partner(cfg, groups, prepared, summaries, window)
+        names = set()
+        for _ws, row in prepared:
+            for item in row["items"]:
+                if item.get("assignee"):
+                    names.add(item["assignee"])
+                if item.get("updated_by"):
+                    names.add(item["updated_by"])
+        allowed = {epic["key"] for epic in visible} if opts.get("include_jira_links") else set()
+        report, removed = audience.redact(report, names, allowed, drop_all_keys=not opts.get("include_jira_links"))
+        if removed:
+            print(f"{removed} line{'s' if removed != 1 else ''} removed")
+    else:
+        report = report_render.render_pm(
+            cfg, groups, prepared, sections, window, scope_note, who=who)
+    if who == "pm":
+        try:
+            from commands import metrics as metrics_cmd
+            report = report.rstrip() + "\n\n" + metrics_cmd.render(metrics_cmd.gather(cfg, 8), 8)
+        except Exception as exc:                              # noqa: BLE001
+            print(f"Metrics appendix skipped: {exc}")
     out_path = output.place(
         cfg, audience.output_name(cfg, who, dt.date.today().isoformat()),
         getattr(args, "out", None))

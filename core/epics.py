@@ -202,6 +202,7 @@ def build(cfg, ws, items, window, prev_changes):
         if not key:
             continue
         facts = fields_by_key.get(key) or {}
+        own = next((it for it in jira_items if it.get("key") == key), {})
         updated = _parse_day(facts.get("updated"))
         child_updated = False
         for item in jira_items:
@@ -221,6 +222,7 @@ def build(cfg, ws, items, window, prev_changes):
             "children_in_progress": bucket["in_progress"],
             "blocked": bucket["blocked"],
             "in_scope": key in owned,
+            "labels": list(own.get("labels") or []),
             "items": [it for it in jira_items if it.get("epic") == key],
             "moved": [it for it in jira_items if it.get("epic") == key and it.get("key") in changed_keys],
             "pages": [],

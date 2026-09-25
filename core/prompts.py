@@ -179,6 +179,44 @@ Rules:
 
 PAGE_TAIL = "Return the JSON array now."
 
+LEADERSHIP = """\
+Write a portfolio summary for leadership.
+
+Use ONLY the Facts. Do not invent people, dates, status, or work.
+
+Output exactly these three headings, in this order, and nothing else:
+### Headline
+### Decisions needed
+### Risks to watch
+
+Rules:
+1. Each section is 1 to 3 short bullets, or this exact sentence: Nothing this period.
+2. Talk about Epics and outcomes, not tickets or people.
+3. After a fact, cite its tag like [APS-1] or [D2]. Use only tags in the Facts.
+4. Every Epic marked At risk appears under Risks to watch.
+5. Do not add a title or a reference list.
+
+Example of one filled section:
+### Risks to watch
+- Public API foundations is at risk: one item is blocked and it is due in 5 days. [APS-2]
+"""
+
+PARTNER = """\
+Write a short progress update for partners outside the company.
+
+Use ONLY the Facts. Do not invent dates, features, or commitments.
+
+Output exactly these two headings, in this order, and nothing else:
+### What's new
+### Coming next
+
+Rules:
+1. Each section is 1 to 4 short bullets, or this exact sentence: Nothing to share this period.
+2. Name features by their Epic name. Do not use ticket keys, people's names, or team names.
+3. Do not mention risks, blockers, estimates, or effort.
+4. Do not promise delivery. Say "in progress" or "planned". Give a date only if the Facts give one.
+"""
+
 RELEASE_NOTES_PROSE = """\
 Draft short release notes from the issue list below.
 
@@ -318,6 +356,17 @@ PROMPTS = {
         "pm warm --pages, pm report",
         "Last line of a page summary or Epic match.",
         PAGE_TAIL,
+    ),
+    "report.leadership": _entry(
+        "pm report --audience leadership",
+        "One portfolio summary per product, from Epic facts. Cite Epic keys "
+        "and document tags only.",
+        LEADERSHIP,
+    ),
+    "report.partner": _entry(
+        "pm report --audience partner",
+        "A short external update. Epic names only; no keys, names, or risks.",
+        PARTNER,
     ),
 }
 

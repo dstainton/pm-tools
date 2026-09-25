@@ -1,0 +1,13 @@
+Write a short progress update for partners outside the company.
+
+Use ONLY the Facts. Do not invent dates, features, or commitments.
+
+Output exactly these two headings, in this order, and nothing else:
+### What's new
+### Coming next
+
+Rules:
+1. Each section is 1 to 4 short bullets, or this exact sentence: Nothing to share this period.
+2. Name features by their Epic name. Do not use ticket keys, people's names, or team names.
+3. Do not mention risks, blockers, estimates, or effort.
+4. Do not promise delivery. Say "in progress" or "planned". Give a date only if the Facts give one.

@@ -395,6 +395,16 @@ def ping(model_cfg):
     return True, f"answered in {elapsed:.1f}s, {thinking}"
 
 
+def infer_leadership(model_cfg, product, facts, cfg=None):
+    return call_model(model_cfg, prompts.get(cfg, "report.leadership"),
+                      f"Product: {product.get('name')} ({product.get('abbrev')})\n\n{facts}\n")
+
+
+def infer_partner(model_cfg, product, facts, cfg=None):
+    return call_model(model_cfg, prompts.get(cfg, "report.partner"),
+                      f"Product: {product.get('name')}\n\n{facts}\n")
+
+
 def infer_report_section(model_cfg, audience, workstream, items, change_block,
                          comment_budget=6000, cfg=None):
     """Ask the local model to write the report section for one workstream."""

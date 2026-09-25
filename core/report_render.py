@@ -266,3 +266,80 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
     )
     lines.append("")
     return "\n".join(lines)
+
+
+def render_leadership(cfg, groups, rows, summaries, window):
+    from core import audience
+    today = dt.date.today().isoformat()
+    name = audience.display_name(cfg, "leadership")
+    label = (window or {}).get("label") or "since last report"
+    lines = [
+        f"# Weekly State-of-Product Report — {name}",
+        f"_Audience: {name} · Window: {label} · Generated {today}_",
+        "",
+        "## Summary",
+        "",
+        "\n\n".join(summaries) if summaries else "Nothing this period.",
+        "",
+    ]
+    by_ws = {ws["abbrev"]: row for ws, row in rows}
+    for product, streams in groups:
+        lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
+        lines.append("")
+        lines.append("| Epic | Workstream | Status | Progress | Signal | Target |")
+        lines.append("|------|------------|--------|---------:|--------|--------|")
+        for ws in streams:
+            for epic in (by_ws.get(ws["abbrev"]) or {}).get("epics") or []:
+                if not epic.get("key"):
+                    continue
+                lines.append(
+                    f"| {_md_link(epic['key'], epic.get('url'))} {epic.get('summary') or ''} | "
+                    f"{ws['abbrev']} | {epic.get('status') or ''} | "
+                    f"{epic.get('children_done') or 0} / {epic.get('children_total') or 0} | "
+                    f"{epic.get('signal') or ''} | {epic.get('due') or '—'} |"
+                )
+        lines.append("")
+    lines.append("## Delivery")
+    lines.append("")
+    lines.append("| Workstream | Done / week | Cycle (median) | Open | Landing |")
+    lines.append("|------------|------------:|---------------:|-----:|---------|")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_partner(cfg, groups, rows, summaries, window):
+    from core import audience
+    today = dt.date.today().isoformat()
+    name = audience.display_name(cfg, "partner")
+    opts = audience.settings(cfg)["partner"]
+    label = (window or {}).get("label") or "since last report"
+    lines = [
+        f"# Weekly State-of-Product Report — {name}",
+        f"_Audience: {name} · Window: {label} · Generated {today}_",
+        "",
+        "\n\n".join(summaries),
+        "",
+    ]
+    by_ws = {ws["abbrev"]: row for ws, row in rows}
+    for product, streams in groups:
+        lines.append(f"## {product.get('name')}")
+        lines.append("")
+        lines.append("| Feature | Status | Progress |")
+        lines.append("|---------|--------|---------:|")
+        for ws in streams:
+            for epic in (by_ws.get(ws["abbrev"]) or {}).get("epics") or []:
+                if not epic.get("key"):
+                    continue
+                if not audience.partner_visible_epic(epic, ws, opts):
+                    continue
+                total = epic.get("children_total") or 0
+                done = epic.get("children_done") or 0
+                pct = f"{int(100 * done / total)}%" if total else "0%"
+                phrase = {"new": "Planned", "done": "Delivered"}.get(
+                    (epic.get("status_category") or "").lower(), "In progress")
+                feature = epic.get("summary") or epic["key"]
+                if opts.get("include_jira_links"):
+                    feature = _md_link(feature, epic.get("url"))
+                lines.append(f"| {feature} | {phrase} | {pct} |")
+        lines.append("")
+    return "\n".join(lines)

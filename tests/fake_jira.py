@@ -747,6 +747,13 @@ class _Handler(BaseHTTPRequestHandler):
         elif "Match one Confluence page" in system:
             keys = re.findall(r"\b[A-Z][A-Z0-9]+-\d+\b", user)
             reply = json.dumps([{"epic": keys[0] if keys else ""}])
+        elif "Write a portfolio summary for leadership" in system:
+            reply = ("### Headline\n- Secure exchange is on track. [APS-1]\n"
+                     "### Decisions needed\n- Nothing this period.\n"
+                     "### Risks to watch\n- A ticket is blocked. [APS-10]\n")
+        elif "Write a short progress update for partners" in system:
+            reply = ("### What's new\n- Secure exchange platform is in progress.\n"
+                     "### Coming next\n- A. Lee will share more.\n")
         elif "JSON array" in system:
             reply = "[]"
         else:

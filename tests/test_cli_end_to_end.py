@@ -53,6 +53,7 @@ def backlog():
         # --- Epics: these carry the Component that names the workstream -----
         {"key": "APS-1", "project": "APS", "issuetype": "Epic",
          "summary": "Secure exchange platform", "components": ["Secure Data Exchange"],
+         "labels": ["partner-visible"],
          "status_name": "In Progress", "status_category": "In Progress",
          "updated": stamp(2), "sprint": None},
         {"key": "APS-2", "project": "APS", "issuetype": "Epic",
@@ -576,6 +577,27 @@ class ReportTests(CliTestCase):
         self.assertIn("Risk: HSM capacity during rotation", report)
         # The other workstream's space stays out of it.
         self.assertNotIn("Decision: rate limit defaults", report)
+
+    def test_leadership_hides_child_keys_and_names(self):
+        self.run_pm("report", "--audience", "leadership", "--product", "IP")
+        report = self.read_output(r"weekly_report_leadership_.*\.md")
+        self.assertIn("## Summary", report)
+        self.assertIn("### Headline", report)
+        self.assertIn("Signal", report)
+        self.assertNotIn("A. Lee", report)
+        self.assertNotIn("APS-10", report)
+        self.assertNotIn("Aging in", report)
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "report_state.json")))
+        self.assertTrue(os.path.exists(os.path.join(
+            self.dir, "report_state_leadership.json")))
+
+    def test_partner_report_names_only_visible_epics(self):
+        self.run_pm("report", "--audience", "partner", "--product", "IP")
+        report = self.read_output(r"weekly_report_partner_.*\.md")
+        self.assertIn("Secure exchange platform", report)
+        self.assertNotIn("Public API foundations", report)
+        self.assertNotIn("A. Lee", report)
+        self.assertNotIn("http", report)
 
     def test_second_run_reports_what_changed(self):
         self.run_pm("report", "-w", "SDX")
