@@ -249,6 +249,27 @@ def _window_start(window):
     return str(start)[:10] if start else None
 
 
+def _fetch_dropping_rejected_types(cfg, ws, scope, types, since, limit):
+    """A 400 names the type. Drop it for this run and keep the rest."""
+    from core import filters
+    kept = []
+    dropped = cfg.setdefault("_dropped_content_types", set())
+    for content_type in types:
+        if content_type in dropped:
+            continue
+        one = filters.build_cql(ws, cfg, scope=scope, types=[content_type])
+        try:
+            kept.extend(sources.fetch_confluence_results(
+                cfg, one, since=since, limit=limit))
+        except Exception as err:  # noqa: BLE001
+            if "400" not in str(err):
+                raise
+            dropped.add(content_type)
+            print(f"  confluence type {content_type} was rejected — "
+                  f"edit confluence.content_types. Dropped for this run.")
+    return kept
+
+
 def _within(page, since):
     if not since:
         return True
@@ -262,7 +283,9 @@ def gather(cfg, ws, product=None, epics=None, window=None, skip_ids=None):
     if not opts["enabled"]:
         return []
     from core import filters
-    types = list(opts["content_types"]) + list(opts["title_only_types"])
+    dropped = set(cfg.get("_dropped_content_types") or [])
+    types = [name for name in list(opts["content_types"]) + list(opts["title_only_types"])
+             if name not in dropped]
     scope = "labelled" if opts["scope"] == "labelled" else "space"
     cql = filters.build_cql(ws, cfg, scope=scope, types=types)
     if not cql and not opts.get("follow_jira_links"):
@@ -273,7 +296,14 @@ def gather(cfg, ws, product=None, epics=None, window=None, skip_ids=None):
     pages = []
     seen = set()
     if cql:
-        for raw in sources.fetch_confluence_results(cfg, cql, since=since, limit=opts["max_pages"]):
+        try:
+            raws = sources.fetch_confluence_results(cfg, cql, since=since, limit=opts["max_pages"])
+        except Exception as err:  # noqa: BLE001
+            if "400" not in str(err):
+                raise
+            raws = _fetch_dropping_rejected_types(
+                cfg, ws, scope, types, since, opts["max_pages"])
+        for raw in raws:
             page = normalise(raw, base, ws, product, projects, since, opts)
             if not _within(page, since) or excluded(page, cfg, skip_ids):
                 continue

@@ -86,7 +86,6 @@ def gather(cfg, audience, window=None):
     sections = []
     for product, group in product_core.group_workstreams(cfg, streams):
         product_issues = []
-        risks = []
         product_pages = []
         for ws in group:
             jql = workstreams.scope_jql(cfg, ws, "lint")
@@ -99,7 +98,6 @@ def gather(cfg, audience, window=None):
                 issue["workstream"] = ws["abbrev"]
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
             page_since = window["start"] if window and window.get("start") else None
-            risks.extend(_risks(cfg, ws, since=page_since))
             from core import pages as page_core
             page_window = {"start": page_since} if page_since else (window or {})
             product_pages.extend(page_core.gather(cfg, ws, window=page_window))
@@ -134,7 +132,7 @@ def gather(cfg, audience, window=None):
             "needs": _needs(product_issues, cfg),
             "change": state.build_change_block(new, changed, dropped, first),
             "first": first,
-            "risks": risks[:3],
+            "risks": [],
             "pages": product_pages[:5],
             "epics": epic_rows,
             "registers": [],
@@ -143,8 +141,15 @@ def gather(cfg, audience, window=None):
             "dropped": len(dropped),
         })
     found, _skip = registers.gather(cfg, window or {"start": None}, prev)
+    from core import page_summaries
     for section in sections:
+        page_summaries.fill(cfg, section.get("pages") or [])
         section["registers"] = found
+        if any(record.get("type") == "risk" for record in found):
+            section["risks"] = []
+        else:
+            section["risks"] = [page for page in section.get("pages") or []
+                                if (page.get("kind") or "").lower() == "risk"][:3]
     snapshot["_registers"] = registers.snapshot(found)
     snapshot["_last"] = dt.date.today().isoformat()
     snapshot["_audience"] = audience
@@ -202,7 +207,43 @@ def _leadership_prep(section):
     return lines
 
 
-def render_prep(audience, sections, last, level="pm"):
+def _partner_prep(cfg, section):
+    """Visible Epics and the overdue or blocked items inside them."""
+    from core import audience as audience_core
+    opts = audience_core.settings(cfg)["partner"]
+    lines = []
+    visible_keys = set()
+    excluded = {str(label).lower() for label in opts.get("exclude_labels") or []}
+    for epic in section.get("epics") or []:
+        if not epic.get("key"):
+            continue
+        if not audience_core.partner_visible_epic(epic, {}, opts):
+            continue
+        lines.append(f"**{epic.get('summary') or epic['key']}**")
+        lines.append("")
+        visible_keys.add(epic["key"])
+        for item in epic.get("items") or []:
+            labels = {str(label).lower() for label in item.get("labels") or []}
+            if labels & excluded:
+                continue
+            lines.append(f"- {item.get('summary') or item.get('key')}")
+            if item.get("key"):
+                visible_keys.add(item["key"])
+        lines.append("")
+    lines.append("### What you owe the room")
+    lines.append("")
+    owed = [(kind, issue) for kind, issue in section.get("needs") or []
+            if kind in ("overdue", "blocked")
+            and (issue.get("key") in visible_keys or issue.get("epic") in visible_keys)]
+    if not owed:
+        lines.append("_Nothing you owe this room._")
+    for kind, issue in owed:
+        lines.append(f"- {issue.get('summary') or issue.get('key')} ({kind})")
+    lines.append("")
+    return lines
+
+
+def render_prep(audience, sections, last, level="pm", cfg=None):
     today = dt.date.today()
     since = f"since {last}" if last else "first time with this audience"
     lines = [
@@ -227,6 +268,9 @@ def render_prep(audience, sections, last, level="pm"):
             if section.get("registers"):
                 report_render.append_registers(
                     lines, section["registers"], level, "", lambda scope: True)
+            continue
+        if level == "partner":
+            lines.extend(_partner_prep(cfg, section))
             continue
         lines.append("### What changed")
         lines.append("")
@@ -271,9 +315,16 @@ def render_prep(audience, sections, last, level="pm"):
         lines.append("")
         lines.append("### Risks")
         lines.append("")
-        if not section["risks"]:
-            lines.append("_No recent risk pages._")
         from core import render as render_core
+        from core import report_render
+        risk_regs = [record for record in (section.get("registers") or [])
+                     if record.get("type") == "risk"]
+        if risk_regs:
+            for record in risk_regs:
+                lines.append(report_render.register_block(record, level, {}))
+                lines.append("")
+        elif not section["risks"]:
+            lines.append("_No recent risk pages._")
         for risk in section["risks"]:
             title = risk.get("title") or "page"
             link = render_core.markdown_link(title, risk.get("url"))
@@ -315,7 +366,7 @@ def run_prep(cfg, args):
     except window_core.WindowError as exc:
         sys.exit(str(exc))
     sections, snapshot, last = gather(cfg, audience, window)
-    text = render_prep(audience, sections, last, level)
+    text = render_prep(audience, sections, last, level, cfg=cfg)
     snapshot["_audience_level"] = level
     path = output.place(
         cfg, f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md",

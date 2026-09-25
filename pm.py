@@ -14,7 +14,8 @@ Commands:
     pm do N              Preview, then write, the action `pm today` numbered N.
     pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
-                         Includes Jira comments since the last report.
+                         --audience pm, leadership, or partner. Comments since
+                         that audience's last report.
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
                          A mention quotes the comment.
@@ -25,13 +26,17 @@ Commands:
     pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
+                         --audience leadership is the headline table.
+                         Partner metrics are refused.
     pm release-notes     Done issues since a date or in a fixVersion,
-                         with comments from that window.
+                         grouped by Epic. --audience leadership or partner.
     pm brief             Meeting prep for one audience, or a debrief.
-                         Prep quotes comments since you last met them.
+                         --audience sets the level. Prep quotes comments
+                         since you last met them.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
     pm warm              Fill the model cache ahead of time (read-only).
+                         Order: review, page summaries, report, inbox.
     pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement, comments from that window,
                          and work in progress (no model).
@@ -449,7 +454,8 @@ def build_parser():
         help="Fill the model cache ahead of time (read-only)",
         description="Fill the model cache so a later command only catches up. "
                     "Read-only: no Jira writes, no report. With no flag, warms "
-                    "review, report, and inbox. Review also covers ready --deep.")
+                    "review, page summaries, the report, then the inbox. "
+                    "Review also covers ready --deep.")
     p_warm.add_argument("--review", action="store_true",
                         help="Warm pm review (and pm ready --deep)")
     p_warm.add_argument("--report", action="store_true",

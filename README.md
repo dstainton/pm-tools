@@ -492,19 +492,24 @@ something is wrong, so it also works as a smoke test in a scheduled job.
 
 ### `pm report` — weekly state-of-product report
 
-Gathers the Sprint, the roadmap, and Confluence pages changed in the window.
-Work sits under its Epic. The file opens with **At a glance**, then each
-workstream's narrative, an Epic block, documents that changed, and a
-**Sources** appendix of real links. Decision, risk, and ADR registers render
-when they are configured.
+Gathers the Sprint, the roadmap, Confluence pages changed in the window, and
+SharePoint files changed in the lookback (listed by title). Work sits under
+its Epic, including a matched decision, risk, or ADR. The file opens with
+**At a glance**, then each workstream's narrative, an Epic block, documents
+that changed, and a **Sources** appendix of real links. Decision, risk, and
+ADR registers render when they are configured. A product may set
+`confluence_space` for pages that belong to the product rather than one
+workstream.
 
 `--audience pm` is the default and writes `weekly_report_<date>.md` plus
 `report_state.json`. `--audience leadership` writes a shorter Epic-level
 report (`weekly_report_leadership_<date>.md`, its own state file) with a
-delivery headline. `--audience partner` names only Epics marked
-`partner-visible`, and `pm report --audience partner --publish` is refused
-so a partner file is read before it leaves. `--json` writes the same
-window with an `"audience"` key.
+delivery headline and the signal rule. With more than one product, each
+product's summary sits under that product. `--audience partner` names only
+Epics marked `partner-visible`, lists further reading that carries the same
+label, and `pm report --audience partner --publish` is refused so a partner
+file is read before it leaves. `--json` writes the same window with an
+`"audience"` key. The run ends with `N model call(s), M already cached`.
 
 `pm brief --audience`, `pm release-notes --audience`, `pm metrics --audience`,
 and `pm warm --audience pm,leadership` use the same three levels. A partner

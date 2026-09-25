@@ -1092,15 +1092,20 @@ def fetch_sharepoint(cfg, query, tag_prefix, start_index):
                 continue
         except ValueError:
             pass
-        items.append(make_item(
+        item = make_item(
             ref="",
             source="SharePoint",
             title=short(f.get("name"), 140),
-            detail=f"Modified {modified[:10]}",
+            detail="",
             url=f.get("webUrl", ""),
             meta=f"Modified: {modified[:10]}",
             uid=f"sharepoint:{f.get('id', f.get('webUrl', ''))}",  # stable id
             watch=modified[:10],   # a newer modified date means it changed
-        ))
+        )
+        item["type"] = "file"
+        item["title_only"] = True
+        item["summary"] = ""
+        item["updated"] = modified[:10]
+        items.append(item)
         idx += 1
     return items, idx

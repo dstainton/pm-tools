@@ -49,6 +49,7 @@ def _row(product, ws, issue):
         "parent": issue.get("epic") or "",
         "issuetype": issue.get("issuetype") or "",
         "labels": list(issue.get("labels") or []),
+        "assignee": issue.get("assignee") or "",
     }
 
 
@@ -361,6 +362,14 @@ def run(cfg, args):
     prose = draft(cfg, bullets, level) if rows else None
     text = render(since, version, rows, prose, budget, level,
                   _extras(cfg, since, version, level, rows), cfg=cfg)
+    if level == "partner":
+        from core import audience
+        names = {row.get("assignee") for row in rows if row.get("assignee")}
+        opts = audience.settings(cfg)["partner"]
+        text, removed = audience.redact(
+            text, names, set(), drop_all_keys=not opts.get("include_jira_links"))
+        if removed:
+            print(f"{removed} line{'s' if removed != 1 else ''} removed")
     path = output.place(
         cfg, f"release_notes_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

@@ -187,6 +187,13 @@ def epic_block(epic, links=True):
     for page in epic.get("pages") or []:
         kind = page.get("kind") or page.get("type") or "page"
         lines.append(f"- Doc: {_md_link(page.get('title') or 'page', page.get('url'), links)} — {kind}")
+    for entry in epic.get("register_entries") or []:
+        kind = (entry.get("register_type") or entry.get("kind") or "entry").capitalize()
+        change = entry.get("change") or "changed"
+        lines.append(
+            f"- {kind} ({change}): "
+            f"{_md_link(entry.get('title') or 'entry', entry.get('url'), links)}"
+        )
     return "\n".join(lines)
 
 
@@ -302,6 +309,14 @@ def sources_appendix(groups, rows):
                         f"{item.get('status') or ''} | {item.get('assignee') or ''} | "
                         f"{str(item.get('updated') or '')[:10]} |"
                     )
+            for item in row.get("items") or []:
+                if item.get("source") != "SharePoint":
+                    continue
+                title = (item.get("title") or "file").replace("|", "\\|")
+                lines.append(
+                    f"| — | {_md_link(title, item.get('url'))} | file |  |  | "
+                    f"{str(item.get('updated') or '')[:10]} |"
+                )
             lines.append("")
     records = _register_records(rows)
     for record in records:
@@ -407,7 +422,7 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm"):
                     lines.append(epic_block(epic))
                     lines.append("")
             loose = [it for it in row.get("items") or []
-                     if it.get("source") == "Confluence" and not it.get("epic")]
+                     if it.get("source") in ("Confluence", "SharePoint") and not it.get("epic")]
             block = docs_block(loose)
             if block and heading != "###":
                 block = block.replace("#### ", "### ", 1)
@@ -430,19 +445,26 @@ def render_leadership(cfg, groups, rows, summaries, window):
     today = dt.date.today().isoformat()
     name = audience.display_name(cfg, "leadership")
     label = (window or {}).get("label") or "since last report"
+    several = len(groups) > 1
     lines = [
         f"# Weekly State-of-Product Report — {name}",
         f"_Audience: {name} · Window: {label} · Generated {today}_",
         "",
-        "## Summary",
-        "",
-        "\n\n".join(summaries) if summaries else "Nothing this period.",
-        "",
     ]
+    if not several:
+        lines.extend([
+            "## Summary",
+            "",
+            "\n\n".join(summaries) if summaries else "Nothing this period.",
+            "",
+        ])
     by_ws = {ws["abbrev"]: row for ws, row in rows}
-    for product, streams in groups:
+    for index, (product, streams) in enumerate(groups):
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
+        if several:
+            lines.append(summaries[index] if index < len(summaries) else "Nothing this period.")
+            lines.append("")
         lines.append("| Epic | Workstream | Status | Progress | Signal | Target |")
         lines.append("|------|------------|--------|---------:|--------|--------|")
         for ws in streams:
@@ -464,7 +486,26 @@ def render_leadership(cfg, groups, rows, summaries, window):
         append_registers(
             lines, _register_records(rows), "leadership", since,
             lambda scope, abbrev=abbrev: scope.get("product") == abbrev)
+    lines.extend(_leadership_sources(rows))
+    lines.append(SIGNAL_FOOTER)
+    lines.append("")
     return "\n".join(lines)
+
+
+def _leadership_sources(rows):
+    """Epics and documents only. No ticket rows."""
+    lines = ["## Sources", ""]
+    for _ws, row in rows:
+        for epic in row.get("epics") or []:
+            if not epic.get("key"):
+                continue
+            lines.append(f"- {_md_link(epic['key'], epic.get('url'))} {epic.get('summary') or ''}")
+        for item in row.get("items") or []:
+            if item.get("source") == "Jira":
+                continue
+            lines.append(f"- {_md_link(item.get('title') or 'page', item.get('url'))}")
+    lines.append("")
+    return lines
 
 
 def render_partner(cfg, groups, rows, summaries, window):
@@ -501,5 +542,20 @@ def render_partner(cfg, groups, rows, summaries, window):
                 if opts.get("include_jira_links"):
                     feature = _md_link(feature, epic.get("url"))
                 lines.append(f"| {feature} | {phrase} | {pct} |")
+        reading = []
+        for ws in streams:
+            for item in (by_ws.get(ws["abbrev"]) or {}).get("items") or []:
+                if item.get("source") == "Jira":
+                    continue
+                if not audience.partner_visible_page(item, opts):
+                    continue
+                title = item.get("title") or "page"
+                if opts.get("include_confluence_links"):
+                    title = _md_link(title, item.get("url"))
+                reading.append(f"- {title}")
+        if reading:
+            lines.append("Further reading:")
+            lines.append("")
+            lines.extend(reading)
         lines.append("")
     return "\n".join(lines)

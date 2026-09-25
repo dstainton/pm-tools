@@ -10,7 +10,7 @@ Five commands. That is the whole habit.
 | 4 | `pm note "..."` | Capture a thought without leaving what you were doing. |
 | 5 | `pm daily` | The Daily Scrum snapshot, printed. |
 
-Then one step further, when you need it: `pm brief --for "leadership"` before a meeting, and `pm report` on a Friday.
+Then one step further, when you need it: `pm brief --for "Monthly portfolio review"` before a meeting, and `pm report` on a Friday. `--audience leadership` or `--audience partner` on `pm report`, `pm brief`, `pm release-notes`, and `pm metrics` changes who the file is for. `pm warm` fills the model cache overnight (review, page summaries, report, inbox).
 
 `pm today --all` is the same list with mentions and new bugs included. `pm triage` is that list.
 

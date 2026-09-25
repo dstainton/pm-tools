@@ -373,6 +373,8 @@ products:
 #    components         exact Jira Component name(s) — must match Jira
 #    project            only if this stream lives outside the team project
 #    confluence_space   space key holding its decisions / risks
+#  A product may also set confluence_space. Those pages are matched to the
+#  product's Epics and filed under the workstream that owns the Epic.
 #    confluence_labels  which labels to gather from that space
 #    sharepoint_query   search term for its documents
 #    scopes             per-workstream overrides of the section above

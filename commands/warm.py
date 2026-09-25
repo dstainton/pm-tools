@@ -29,6 +29,10 @@ def _warm_pages(cfg):
     collected = []
     for ws in cfg.get("_workstreams") or []:
         collected.extend(pages.gather(cfg, ws, window=window))
+    from core import registers
+    found, _skip = registers.gather(cfg, window, {})
+    for record in found:
+        collected.extend(record.get("entries") or [])
     print(f"Summarising {len(collected)} page(s) ...")
     page_summaries.fill(cfg, collected)
 
@@ -48,6 +52,7 @@ def _warm_report(cfg, levels):
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
         row = report_cmd.prepare(cfg, ws, previous, window, skip_ids=skip_ids)
         row["registers"] = found_registers
+        report_cmd.stamp_register_entries(row)
         prepared.append((ws, row))
     groups = product_core.group_workstreams(cfg, [ws for ws, _row in prepared])
     report_cmd._attach_product_pages(cfg, groups, prepared, window, skip_ids)

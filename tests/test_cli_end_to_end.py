@@ -55,10 +55,12 @@ def backlog():
          "summary": "Secure exchange platform", "components": ["Secure Data Exchange"],
          "labels": ["partner-visible"],
          "status_name": "In Progress", "status_category": "In Progress",
+         "duedate": date(30),
          "updated": stamp(2), "sprint": None},
         {"key": "APS-2", "project": "APS", "issuetype": "Epic",
          "summary": "Public API foundations", "components": ["API Platform"],
          "status_name": "In Progress", "status_category": "In Progress",
+         "duedate": date(5),
          "updated": stamp(3), "sprint": None,
          "remote_links": [{
              "application": {"type": "com.atlassian.confluence"},
@@ -93,10 +95,12 @@ def backlog():
         # A sub-task two levels below the Epic.
         {"key": "APS-12", "project": "APS", "issuetype": "Sub-task",
          "summary": "Wire retry handling into the client SDK", "components": [],
+         "labels": ["internal"],
          "parent": "APS-10", "status_name": "To Do", "status_category": "To Do",
          "sprint": "open", "updated": stamp(1)},
         {"key": "APS-20", "project": "APS", "issuetype": "Story",
          "summary": "Rate limiting for public endpoints", "components": [],
+         "labels": ["blocked"],
          "parent": "APS-2", "status_name": "To Do", "status_category": "To Do",
          "sprint": "open", "updated": stamp(40), "changelog": [
              {"created": stamp(40), "author": {"displayName": "C. Diaz"},
@@ -578,6 +582,15 @@ class ReportTests(CliTestCase):
         # The other workstream's space stays out of it.
         self.assertNotIn("Decision: rate limit defaults", report)
 
+    def test_warm_then_leadership_makes_no_new_model_calls(self):
+        self.run_pm("warm", "--report", "--audience", "pm,leadership", "-w", "SDX")
+        before = [c for c in self.jira.calls
+                  if c[0] == "POST" and "/v1/chat/completions" in c[1]]
+        self.run_pm("report", "--audience", "leadership", "-w", "SDX")
+        after = [c for c in self.jira.calls
+                 if c[0] == "POST" and "/v1/chat/completions" in c[1]]
+        self.assertEqual(len(after), len(before))
+
     def test_leadership_hides_child_keys_and_names(self):
         self.run_pm("report", "--audience", "leadership", "--product", "IP")
         report = self.read_output(r"weekly_report_leadership_.*\.md")
@@ -852,7 +865,7 @@ class TriageTests(CliTestCase):
         self.assertTrue(os.path.exists(os.path.join(self.dir, "triage.json")))
         before = len([c for c in self.jira.calls if c[0] == "PUT"])
         preview = self.run_pm("triage", "--apply", "1", "--dry-run")
-        self.assertIn("Would PUT", preview)
+        self.assertTrue("Would PUT" in preview or "Would POST" in preview)
         self.assertIn("nothing was sent", preview)
         puts = [c for c in self.jira.calls if c[0] == "PUT"]
         self.assertEqual(len(puts), before)

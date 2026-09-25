@@ -316,7 +316,10 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
             continue
         from core import checklist
         goal = checklist.product_goal(product) or "none"
-        text = f"Product Goal: {goal}\n\nEpics:\n" + ("\n".join(facts) or "- none")
+        if who == "partner":
+            text = _partner_facts(cfg, product, streams, by_ws)
+        else:
+            text = f"Product Goal: {goal}\n\nEpics:\n" + ("\n".join(facts) or "- none")
         if who == "leadership":
             if docs:
                 lines = []
@@ -368,6 +371,80 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
     return summaries
 
 
+def _partner_facts(cfg, product, streams, by_ws):
+    """Feature names, status phrases, and progress. No keys or team names."""
+    opts = audience.settings(cfg)["partner"]
+    lines = [f"Product: {product.get('name')}", "", "Features:"]
+    docs = []
+    for ws in streams:
+        row = by_ws.get(ws["abbrev"], (None, {}, ""))[1]
+        for epic in row.get("epics") or []:
+            if not epic.get("key"):
+                continue
+            if not audience.partner_visible_epic(epic, ws, opts):
+                continue
+            total = epic.get("children_total") or 0
+            done = epic.get("children_done") or 0
+            pct = f"{int(100 * done / total)}%" if total else "0%"
+            phrase = {"new": "Planned", "done": "Delivered"}.get(
+                (epic.get("status_category") or "").lower(), "In progress")
+            due = ""
+            if opts.get("show_target_dates") and epic.get("due"):
+                due = f" | target {epic['due']}"
+            lines.append(f"- {epic.get('summary') or 'Feature'} | {phrase} | {pct} done{due}")
+            titles = []
+            excluded = {str(label).lower() for label in opts.get("exclude_labels") or []}
+            for item in epic.get("items") or []:
+                labels = {str(label).lower() for label in item.get("labels") or []}
+                if labels & excluded:
+                    continue
+                if (item.get("status_category") or "").lower() == "done":
+                    titles.append(item.get("summary") or "")
+            if titles:
+                lines.append("  Done this period: " + ", ".join(titles))
+        for item in row.get("items") or []:
+            if item.get("source") == "Jira":
+                continue
+            if audience.partner_visible_page(item, opts):
+                docs.append(item)
+    if not any(line.startswith("- ") for line in lines):
+        lines.append("- none")
+    if docs:
+        lines.append("")
+        lines.append("Documents:")
+        for page in docs[:5]:
+            summary = f" {page['summary']}" if page.get("summary") else ""
+            lines.append(f"- {page.get('title') or 'page'}.{summary}")
+    return "\n".join(lines)
+
+
+def stamp_register_entries(row):
+    """Attach matched register entries to the Epic that owns them."""
+    by_key = {epic.get("key"): epic for epic in row.get("epics") or [] if epic.get("key")}
+    abbrev = ""
+    for epic in row.get("epics") or []:
+        for item in epic.get("items") or []:
+            if item.get("workstream"):
+                abbrev = item["workstream"]
+                break
+    for record in row.get("registers") or []:
+        scope = record.get("scope") or {}
+        if scope.get("workstream") and abbrev and scope.get("workstream") != abbrev:
+            continue
+        for entry in record.get("entries") or []:
+            matched = entry.get("epic") if entry.get("epic") in by_key else ""
+            if not matched:
+                for key in entry.get("keys") or []:
+                    if key in by_key:
+                        matched = key
+                        break
+            if not matched:
+                continue
+            copied = dict(entry)
+            copied["register_type"] = record.get("type")
+            by_key[matched].setdefault("register_entries", []).append(copied)
+
+
 def _register_records_from(prepared):
     for _ws, row in prepared:
         if row.get("registers"):
@@ -405,6 +482,7 @@ def run(cfg, args):
         print(f"Gathering: {ws['name']} ({ws['abbrev']}) ...")
         row = prepare(cfg, ws, previous, window, skip_ids=skip_ids)
         row["registers"] = found_registers
+        stamp_register_entries(row)
         if not row["first_run"]:
             print(f"  changes: {len(row['new'])} new, "
                   f"{len(row['changed'])} changed, "
@@ -524,6 +602,9 @@ def run(cfg, args):
             json_path = out_path + ".json"
         with open(json_path, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, default=str, indent=2)
+    calls = int((cfg.get("model") or {}).get("_calls") or 0)
+    hits = int((cfg.get("model") or {}).get("_cache_hits") or 0)
+    print(f"{calls} model call(s), {hits} already cached.")
     print(f"\nDone. Report written to: {out_path}")
     preview = "\n".join(report.splitlines()[:24])
     print("\n" + preview)
