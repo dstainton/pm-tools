@@ -193,9 +193,12 @@ confluence:
   # A workstream folder may sit inside its product folder or directly under
   # the team page. Pages under the team page that belong to no product or
   # workstream folder are listed once as team pages.
+  #   skip       titles or ids of pages and folders never read, with
+  #              everything inside them, such as personal or scratch folders.
   # space: "POSM Chapter"
   # team_page: "API Program Services (APS) Team"
   # team_page_id: "123456"
+  # skip: ["Life Events", "SM WIP"]
 
 # ----------------------------------------------------------------------------
 #  4. SharePoint (via Microsoft Graph) — set enabled: false to skip
@@ -507,7 +510,8 @@ workstreams:
 #  same title exists in more than one folder. With confluence.team_page set
 #  and no under, the title is looked for in the register's workstream folder,
 #  then its product folder, then directly under the team page, so another
-#  team's "Risks" page is never picked.
+#  team's "Risks" page is never picked. under may name a page elsewhere in
+#  the space, for a register several teams share.
 #
 #  Two layouts can both be set. A page that appears in more than one is
 #  listed once, on a workstream, then a product, then the portfolio.

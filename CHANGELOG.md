@@ -44,7 +44,9 @@
   product folder first. `pm report` lists product-folder pages under the
   product and pages in no folder once, as team pages. A register with no
   `under` looks in its own folder, then the product folder, then directly
-  under the team page. `pm setup` writes `team_page`
+  under the team page; `under` may name a page elsewhere in the space.
+  `confluence.skip` lists pages and folders that are never read, with
+  everything inside them. `pm setup` writes `team_page`
   (`--confluence-team-page`; `--confluence-root` still works) and shows the
   folders it found. `pm doctor` shows the space key, the team page, and how
   each folder was found, and warns when a workstream reads the whole shared

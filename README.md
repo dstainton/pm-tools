@@ -235,6 +235,15 @@ In the report:
 - Pages under the team page that are not in any product or workstream
   folder appear once near the top, as team pages.
 
+To leave out folders or pages that don't belong in a report, such as
+personal notes or work in progress, list their titles. Everything inside
+them is left out too:
+
+```yaml
+confluence:
+  skip: ["Life Events", "SM WIP"]
+```
+
 If two pages have the same title, use `confluence_page_id` with the page's
 number instead. The number is in the page's web address. To stop pm-tools
 looking for a folder for one product or workstream, set
@@ -257,7 +266,9 @@ registers:
 
 - `under` names the folder to look in, when you need to. Without it, pm-tools looks in the
   register's own workstream or product folder first, then directly under
-  your team page, so another team's "Risks" page is never used.
+  your team page, so another team's "Risks" page is never used. `under` can
+  also name a page elsewhere in the space, for a register shared by several
+  teams.
 - `product` or `workstream` says where the register appears in the report.
   Leave both off to show it at the top, for the whole portfolio.
 - `page_id` can be used instead of `title` and `under`.
