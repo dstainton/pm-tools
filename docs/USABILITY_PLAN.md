@@ -6,7 +6,13 @@ differently because this exists*, and treats accessibility — including the
 way the tool reads to someone with ADHD or on the autism spectrum — as part
 of whether it works, not as a coat of paint.
 
-Nothing here is built. This is a plan.
+Historical plan. Parts of it shipped in later releases, including shorter
+help. 0.14.0 replaced that two-level help: `pm` and `pm help` discover
+commands for the configured role, and `pm <command> -h` shows the full
+syntax. `--advanced` is now an alias of that complete page. The text below
+is the original review, kept for the reasoning.
+
+Nothing here was built when this file was written. This is a plan.
 
 Vocabulary follows `docs/TERMINOLOGY.md`: Daily Scrum, refinement, Sprint
 Goal, Product Goal, Definition of Done, team working agreement, throughput

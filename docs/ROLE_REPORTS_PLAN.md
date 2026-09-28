@@ -1,11 +1,20 @@
 # Role reports and a personal snapshot
 
-Shipped in 0.13.0. This file is the design those commands follow.
-The journeys in [JOURNEYS.md](JOURNEYS.md) are the notes it was decided from.
+Shipped in 0.13.0, then revised in 0.14.0.
+
+0.13.0 gave the analyst, the developer, and the service designer one shared
+`work` report with people's names removed. 0.14.0 separates role from
+privacy. Those three roles now have their own reports, their own files, and
+their own last-run memory. `work` remains the generic internal report you
+ask for with `--audience work`. The sections below are the 0.13.0 design.
+Where they say those three roles share `work`, the installed behaviour is
+the 0.14.0 profiles in `core/report_profiles.py`. Where they describe
+`--advanced` as the only way to see every flag, the installed help shows
+that syntax on `pm <command> -h`. The journeys in
+[JOURNEYS.md](JOURNEYS.md) match the installed commands.
+
 [REPORTING_PLAN.md](REPORTING_PLAN.md) stays as it was: it shipped the three
 audiences this builds on.
-
-The sections below are that design. The commands in them are installed.
 
 ## The decision
 

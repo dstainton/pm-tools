@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.14.0 - 2026-09-28
+
+- A role chooses the report. Privacy stays separate. `analyst`,
+  `developer`, and `service-designer` no longer share one generic file.
+  Each profile keeps its own report file and its own last-run memory.
+  A missing `role` is still product management. `--audience work` is still
+  the generic internal report. `--audience` still wins for one run.
+- The product-management report opens with what needs attention, then a
+  shorter glance table, then Epic state. Generated Progress and Roadmap
+  prose are no longer requested. Definition of Done stays in the settings
+  and is printed for Sprint review and planning, not on every weekly file.
+  A compact delivery pulse replaces the full metrics appendix. Full tables
+  remain `pm metrics`. Landing dates are labelled as projections.
+- Default reports keep inline citations. `pm report --sources full` prints
+  the source tables.
+- The service-designer design-review brief includes changed service
+  documentation. Developer briefs elevate ADRs. Analyst briefs elevate
+  requirement documents.
+- The leadership report puts the Product Goal back under the product
+  heading and adds scope-change context to Delivery. A decision is not
+  described as a leadership decision unless the register marks it that way.
+- The partner table shows status and items complete. A percentage of
+  backlog items is off unless `show_backlog_percent` is set. Input needed
+  appears only when a partner-visible decision says the partner must act.
+- `pm ready --plan` groups ready and not-ready work by Epic and sets it
+  beside recent throughput, without choosing a Sprint load.
+- `pm metrics --sprint` is a Sprint review: goal, forecast, delivered,
+  added, carried in, carried out, completed work, and incomplete work.
+- `pm today --all` and the product-management report list blocker links
+  for blocked items.
+- `pm` and `pm help` are the discovery page, and they follow `role` when
+  a settings file can be read. `pm help all` lists every command.
+  `pm help <command>` matches `pm <command> -h`, which shows positionals,
+  choices, and every flag. `pm help roles` explains the sets.
+  `--advanced` is that same complete page.
+
 ## 0.13.0 - 2026-09-28
 
 - `role` in the settings file chooses the report shape. `pm` names people.

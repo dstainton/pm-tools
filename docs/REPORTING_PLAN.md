@@ -6,7 +6,12 @@ also moves the prompts, the Jira and Confluence queries, and one team's
 Jira habits out of the code into documented, overridable defaults
 (Part 7b), so the tool fits a team whose Jira is set up differently.
 
-Nothing here is built. This is a plan. It is written to be implemented step
+Historical plan. Later releases shipped Epic reports, Confluence pages, and
+the pm, leadership, and partner audiences. 0.14.0 then gave analyst,
+developer, and service designer their own reports. The text below is the
+original plan, kept for the reasoning. It is not a list of what is unbuilt.
+
+Nothing here was built when this file was written. It is written to be implemented step
 by step by someone (or some model) who has not read the rest of the code, so
 it names files, functions, data shapes, prompts, and tests explicitly. Where
 the plan says "exactly", follow it exactly. Where it gives a default, the
