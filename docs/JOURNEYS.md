@@ -11,8 +11,10 @@ files a product manager writes for other rooms, with `pm report`,
 file and its own memory of the last run.
 
 **Business analyst**, **developer**, and **service designer** are sketched
-below so the need is visible. They are not report shapes. There is no
-`--audience` value for them.
+below so the need is visible. The plan in
+[ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md) gives them one shared detailed
+report with people's names left out, plus a personal snapshot that ignores
+role.
 
 One install is one Jira user: the email and token in the settings file.
 `pm today` and `pm do` act for that person. A second person who wants their
@@ -45,9 +47,7 @@ audiences:
 
 `pm brief` remembers the depth last used for that meeting name (`--for`). A meeting you have not prepared before still starts at `pm`, even when `audiences.default` is something else.
 
-This setting is the role for the install. The words on this page (product manager, service designer) name the person. The value in the file names the file they get when they do not pass a flag.
-
-A service designer, an analyst, and a developer leave `default: pm`. Leadership and partner are files they sometimes write, not the role they install as.
+This setting is the role for the install today. [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md) is the plan for the next step: a `role` value, a detailed report that does not name people, and a personal snapshot that ignores role.
 
 ## Product manager
 
@@ -209,9 +209,7 @@ What they can run today, with `audiences.default` left as `pm`:
 4. `pm show APS-30` is one ticket while they are looking at a step in the journey.
 5. `pm release-notes --since YYYY-MM-DD` is what finished, when they are checking whether the experience moved.
 
-Worth a report shape of their own? Not yet. Leadership exists because the file is shorter. Partner exists because the file must be safe to send outside the team. A service designer wants the pages, decisions, and Epics the product-management report already contains. Their default stays `pm`.
-
-A separate shape is worth building later if we can name what it leads with, or what it drops, in a way that report cannot. That is emphasis. It is not a boundary the file has to enforce.
+The plan for this role is in [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md). They share one detailed report with the analyst and the developer, and that file does not name assignees, comment authors, or page editors. The product manager's report is the one that does. A personal snapshot of their own open work ignores role.
 
 ## A starting cut
 
@@ -224,7 +222,8 @@ These are proposals. The journeys above stay in this file either way, so a cut i
 | Partner | Keep as its own page. | The labelling step is easy to miss, and the brief is preparation rather than the page you send. Both need a sentence in the guide. |
 | Business analyst | Keep the work inside the product manager's week. Hold a separate page until a second person is actually going to run `pm lint`, `pm ready`, and `pm refine`. | The commands exist. A new audience would invent a report nobody asked for. The shared inbox is the handoff that already exists. |
 | Developer | Keep the needs. Hold the page. | Daily Scrum, ready, and one ticket are already in the product manager's week. A developer page would imply a personal Sprint queue, and that queue is not what `pm today` shows. |
-| Service designer | Include them in this list. Leave their default as `pm`. | The full report already carries pages, decisions, and Epics. A fourth file needs a rule we do not have yet. |
-| Role in the config | Use `audiences.default`. Do not add a `role` key. | Report, metrics, and release notes already follow it. A missing value means the product manager. |
+| Service designer | One shared detailed report with the analyst and the developer, without people's names. | The difference from the product manager is the names, not a separate narrative. See [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md). |
+| Role in the config | Add `role`, mapped to a shape. Keep `audiences.default` when `role` is absent. | Missing `role` stays the product manager. `service-designer`, `analyst`, and `developer` use the nameless detailed report. |
+| Personal snapshot and summary | Build `pm me`. | A snapshot is where your own open work stands today. A summary is that work over a sprint or a number of days. Neither one follows role. |
 
-If we keep the first three, the guide gains one week for the person who runs pm-tools, one page for the leadership file, and one page for the partner file. The analyst, developer, and service designer sections stay here until we choose otherwise. The role for those three installs is `audiences.default: pm`.
+If we keep the first three, the guide gains one week for the person who runs pm-tools, one page for the leadership file, and one page for the partner file. The analyst, developer, and service designer share the nameless detailed report in the plan. `pm me` is the personal snapshot and the personal summary.
