@@ -11,6 +11,7 @@ REGULAR = (
     ("do", "Carry out item N from that list, after showing the change.", "pm do 2"),
     ("note", "Save a thought for later.", 'pm note "customer wants an SSO audit export"'),
     ("daily", "What moved since yesterday, and who has what.", "pm daily"),
+    ("me", "Your open work as it stands today.", "pm me"),
     ("report", "The weekly file. --sprint is the open Sprint.", "pm report --sprint"),
     ("brief", "What changed since you last met that group.", 'pm brief --for "Leadership"'),
     ("doctor", "Check the settings, Jira, and the model.", "pm doctor"),

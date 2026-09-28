@@ -1,20 +1,19 @@
 # User journeys
 
-A working list of who uses pm-tools, and what a normal week looks like for
-each of them. The aim is to choose which journeys belong in the guide.
-Nothing here adds a setting or a command.
+Who uses pm-tools, and what a normal week looks like. The commands for each
+person are in [docs/roles](roles/README.md). This file is the reasoning
+behind those pages. The design is in
+[ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md).
 
-Three report shapes already exist. **Product management** is the full file,
-and it is the default. **Leadership** and **Partners** are the shorter
-files a product manager writes for other rooms, with `pm report`,
-`pm brief`, `pm metrics`, and `pm release-notes`. Each shape keeps its own
-file and its own memory of the last run.
+Four report shapes exist. **Product management** (`pm`) is the full file,
+and it names people. **Team** (`work`) is that same file with people's
+names left out. The analyst, the developer, and the service designer share
+it. **Leadership** and **Partners** are the shorter files. Each shape keeps
+its own file and its own memory of the last run.
 
-**Business analyst**, **developer**, and **service designer** are sketched
-below so the need is visible. The commands for each person are in [docs/roles](roles/README.md). The plan in
-[ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md) gives the analyst, the developer,
-and the service designer one shared detailed report with people's names left
-out, plus a personal snapshot that ignores role.
+`role` in the settings file chooses the shape. A missing `role` means
+`pm`. `audiences.default` applies only when `role` is absent. `--audience`
+wins for one run.
 
 One install is one Jira user: the email and token in the settings file.
 `pm today` and `pm do` act for that person. A second person who wants their
@@ -23,31 +22,35 @@ file.
 
 ## Where each role stands
 
-| Role | In the tool today | Who runs the commands |
+| Role | In the tool | Who runs the commands |
 |---|---|---|
-| Product manager | The person the program is built for. `audiences.default` is `pm` unless you change it. | They do. |
-| Leadership | An audience on the report, the brief, metrics, and release notes. | The product manager, who then sends the file. |
-| Partner | An audience on the report, the brief, and release notes. `pm metrics` stops if you ask for this audience. | The product manager. The brief is preparation, and the file says to keep it internal. |
-| Business analyst | No audience. Refinement commands already cover most of the work. Shared state can carry snooze decisions and the inbox to a second person. | Open. See the journey. |
-| Developer | No audience. The Daily Scrum, the ready check, and a single ticket already exist as commands. | Open. See the journey. |
-| Service designer | No audience. The product-management report already includes changed pages, decisions, and Epics. | Open. See the journey. |
+| Product manager | `role: pm`, or no `role` at all. The full report names people. `pm me --who` can show a colleague's open work. | They do. |
+| Leadership | `role: leadership`. The short Epic report. Names stay off the page. | The product manager, who then sends the file. A leader with several teams uses one settings file each. |
+| Partner | `role: partner`. The page that is safe to send. `pm metrics` stops if you ask for this audience. | The product manager. The brief is preparation, and the file says to keep it internal. |
+| Business analyst | `role: analyst`, which selects `work`. Refinement stays `pm lint`, `pm ready`, and `pm refine`. | They do, from their own settings file or a shared one. |
+| Developer | `role: developer`, which selects `work`. Daily Scrum, ready, and one ticket stay as they are. `pm me` is their own open work. | They do. |
+| Service designer | `role: service-designer`, which selects `work`. The report includes pages, decisions, and Epics, without people's names. | They do. |
 
 ## Role in the config
 
-The choice already has a home. In the settings file it is `audiences.default`:
-
 ```yaml
-audiences:
-  default: pm
+role: pm
 ```
 
-`pm` is the product manager's full report. `leadership` and `partner` are the other two files. When the line is missing, report, metrics, and release notes use `pm`.
+| `role` | Shape |
+|---|---|
+| `pm` | `pm` |
+| `leadership` | `leadership` |
+| `partner` | `partner` |
+| `analyst` | `work` |
+| `developer` | `work` |
+| `service-designer` | `work` |
 
-`pm report`, `pm metrics`, and `pm release-notes` read this value when you leave `--audience` off. Someone who always wants the leadership file sets `default: leadership` once, and passes `--audience partner` only for the file that leaves the building.
+`pm report`, `pm metrics`, `pm release-notes`, and the first `pm brief` for a meeting read this value when you leave `--audience` off. Someone who always wants the leadership file sets `role: leadership` once, and passes `--audience partner` only for the file that leaves the building.
 
-`pm brief` remembers the depth last used for that meeting name (`--for`). A meeting you have not prepared before still starts at `pm`, even when `audiences.default` is something else.
+`pm brief` remembers the depth last used for that meeting name (`--for`). A meeting you have not prepared before uses `role`, then `audiences.default`, then `pm`.
 
-This setting is the role for the install today. [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md) is the plan for the next step: a `role` value, a detailed report that does not name people, and a personal snapshot that ignores role.
+`pm me` ignores `role`. It is the signed-in user's own work.
 
 ## Product manager
 
@@ -129,7 +132,7 @@ The partner file has its own memory. A partner report on Monday does not change 
 
 ## Business analyst
 
-Sketched only. The work is real, and most of the commands already exist. They are the refinement afternoon inside the product manager's week. This section is here so we can see whether that afternoon deserves its own page, and whether a second person should run it.
+The work is the refinement afternoon inside the product manager's week. The commands are on the [analyst](roles/analyst.md) page. `role: analyst` makes `pm report` the detailed file with people's names left out. `pm me` is their own open work.
 
 What they need:
 
@@ -140,7 +143,7 @@ What they need:
 - One ticket on screen while they are writing criteria.
 - The same snooze decisions as the product manager, when both of them touch the backlog.
 
-A session with today's commands:
+A session:
 
 1. `pm lint --workstream SDX` lists the gaps. The result is exact. It does not ask the model.
 2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model, and that part is a suggestion.
@@ -156,14 +159,14 @@ If the analyst is a second person:
 - `state.shared_path` on a synced folder shares snooze decisions and the inbox. `today.json`, the cache, and the write log stay on each machine. The settings file describes this as the way the product manager and the analyst see the same queues.
 - Their own `pm today` needs their own config. That screen is the open Sprint and the decisions in it. It is the product manager's morning list, aimed at whoever's token is in the file.
 
-What this journey does not have:
+What this journey does not change:
 
-- An audience flag. The output is a worksheet and a pass or fail, not a narrative for a room.
-- A command that starts from "assigned to the analyst". Ready and refine look at the workstream's backlog.
+- Ready and refine look at the workstream's backlog. They do not start from "assigned to the analyst". `pm me` is that personal list.
+- `pm do` and `pm refine --apply` write to Jira as the person whose token is in the file.
 
 ## Developer
 
-Sketched only. "Developer" here means someone on the Scrum team building the product. It is not the "For developers" section of the README, which is about changing pm-tools itself.
+"Developer" here means someone on the Scrum team building the product. It is not the "For developers" section of the README, which is about changing pm-tools itself. The commands are on the [developer](roles/developer.md) page. `role: developer` selects the detailed report without people's names.
 
 What they need:
 
@@ -173,7 +176,7 @@ What they need:
 - One ticket: status, parent, acceptance criteria, link.
 - A short account of what shipped, when they are checking a release.
 
-Commands that already serve a piece of that:
+Commands:
 
 1. `pm daily` is the Daily Scrum snapshot: movement, comments in that window, and work in progress. It does not use the model.
 2. `pm ready` is the team's working agreement as a pass or fail. The team can run it before planning and ignore the rest of the morning screen.
@@ -181,17 +184,15 @@ Commands that already serve a piece of that:
 4. `pm release-notes --since YYYY-MM-DD` is what finished. `--audience leadership` shortens that to Epics. The partner version is the one that strips keys.
 5. `pm today` shows the open Sprint for the project: the goal, what needs a decision, what moved, what stalled. The decisions are overdue, blocked, unassigned, and untouched work. That is a portfolio view of the Sprint.
 
-What this journey does not have:
+`pm me` is the open tickets assigned to the signed-in user. `pm today` stays the whole open Sprint, not that personal list.
 
-- A "mine" view. The open-Sprint query is the whole project Sprint, not `assignee = currentUser()`.
-- A write command that is safe to hand to the whole team. `pm do` and `pm refine --apply` change Jira as the configured user, after a confirmation.
-- An audience. A developer reading the leadership report is a reader of a file the product manager already produces.
+`pm do` and `pm refine --apply` change Jira as the configured user, after a confirmation. They stay the product manager's writes.
 
 A developer who installs pm-tools with their own token gets their own mentions inside `pm triage`, because mentions follow the account on that token. The Sprint list on `pm today` is still the whole open Sprint.
 
 ## Service designer
 
-Sketched only. This is the person on the team who draws the service end to end: what a person experiences, what staff do, and which systems sit behind that. Journey maps, blueprints, and research live in Confluence beside the backlog.
+This is the person on the team who draws the service end to end: what a person experiences, what staff do, and which systems sit behind that. Journey maps, blueprints, and research live in Confluence beside the backlog. The commands are on the [service designer](roles/service-designer.md) page.
 
 What they need:
 
@@ -201,7 +202,7 @@ What they need:
 - One ticket when a story touches a step in the journey.
 - The same Sprint window the product manager uses, when they are preparing a review.
 
-What they can run today, with `audiences.default` left as `pm`:
+With `role: service-designer`, `pm report` is the detailed file and it does not name assignees, comment authors, or page editors:
 
 1. `pm report` includes changed Confluence pages, the decision, risk, and ADR registers, and the Epics. That is the layer a design review starts from.
 2. `pm report --sprint` is that same file for the open Sprint.
@@ -209,21 +210,14 @@ What they can run today, with `audiences.default` left as `pm`:
 4. `pm show APS-30` is one ticket while they are looking at a step in the journey.
 5. `pm release-notes --since YYYY-MM-DD` is what finished, when they are checking whether the experience moved.
 
-The plan for this role is in [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md). They share one detailed report with the analyst and the developer, and that file does not name assignees, comment authors, or page editors. The product manager's report is the one that does. A personal snapshot of their own open work ignores role.
+They share that shape with the analyst and the developer. `pm me` is their own open work, and it ignores role.
 
-## A starting cut
+## What the guide keeps
 
-These are proposals. The journeys above stay in this file either way, so a cut is a choice about the guide, not a loss of the notes.
-
-| Journey | Proposal | Why |
-|---|---|---|
-| Product manager | Keep, and treat it as the spine of the guide. | Every other journey hangs off commands this person runs. [docs/START.md](START.md) is the short form. |
-| Leadership | Keep as its own page. | The commands, the file, and the memory already exist. The guide should say which command to run before which meeting. |
-| Partner | Keep as its own page. | The labelling step is easy to miss, and the brief is preparation rather than the page you send. Both need a sentence in the guide. |
-| Business analyst | Same nameless detailed report as the developer and the service designer. Refinement stays `pm lint`, `pm ready`, and `pm refine`. | The report difference from the product manager is the names. The worksheet is unchanged. |
-| Developer | Same nameless detailed report. Daily Scrum, ready, and one ticket stay as they are. | A personal Sprint queue is `pm me`, not a change to `pm today`. |
-| Service designer | One shared detailed report with the analyst and the developer, without people's names. | The difference from the product manager is the names, not a separate narrative. See [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md). |
-| Role in the config | Add `role`, mapped to a shape. Keep `audiences.default` when `role` is absent. | Missing `role` stays the product manager. `service-designer`, `analyst`, and `developer` use the nameless detailed report. |
-| Personal snapshot and summary | Build `pm me`. | A snapshot is where your own open work stands today. A summary is that work over a sprint or a number of days. Neither one follows role. |
-
-If we keep the first three, the guide gains one week for the person who runs pm-tools, one page for the leadership file, and one page for the partner file. The analyst, developer, and service designer share the nameless detailed report in the plan. `pm me` is the personal snapshot and the personal summary.
+| Journey | Where it lives |
+|---|---|
+| Product manager | [product-manager.md](roles/product-manager.md). [START.md](START.md) is the short form. |
+| Leadership | [leadership.md](roles/leadership.md). One settings file per team when the teams do not share a project. |
+| Partner | [partner.md](roles/partner.md). The labelling step, and the brief kept internal. |
+| Business analyst, developer, service designer | One shared detailed report, `work`, without people's names. Refinement, the Daily Scrum, and one ticket stay as they are. |
+| Personal snapshot and summary | `pm me`. A snapshot is open work today. A summary is that work over a sprint or a number of days. Neither one follows role. |

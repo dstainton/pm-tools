@@ -47,8 +47,8 @@ pm ready --workstream ITK
 
 When your team has its own Jira project, use your own settings file. The
 steps for a second file are on the [leadership](leadership.md) page:
-`pm init --path`, `pm setup --path`, then `--config` after the command,
-as in `pm daily --config ~/.pm-tools/aps.yaml`.
+`pm init --path`, `pm setup --path`, then `--config` before or after the
+command, as in `pm daily --config ~/.pm-tools/aps.yaml`. Pass it once.
 
 ## What to leave alone
 

@@ -408,7 +408,7 @@ pm schedule add warm --at 07:00
 | `--refresh` | Ignore earlier results and fetch everything again. |
 | `--out FOLDER` | Save this run's files in a different folder. |
 | `--plain` | No colours or symbols. |
-| `--config FILE` | Use a different settings file. |
+| `--config FILE` | Use a different settings file. The flag can go before or after the command name. Pass it once. |
 
 ---
 
@@ -489,7 +489,7 @@ Keep in mind:
 - [docs/START.md](docs/START.md): the five commands to begin with.
 - [docs/EVERYDAY.md](docs/EVERYDAY.md): everyday commands and report windows.
 - [docs/roles/README.md](docs/roles/README.md): typical commands for each role, with examples.
-- [docs/JOURNEYS.md](docs/JOURNEYS.md): a week for the product manager, and the files written for leadership and partners.
+- [docs/JOURNEYS.md](docs/JOURNEYS.md): a week for each role, and why the reports differ.
 - [docs/ROLE_REPORTS_PLAN.md](docs/ROLE_REPORTS_PLAN.md): how role reports, `pm me`, and the two help pages are shaped.
 - [docs/DEPTH.md](docs/DEPTH.md): going further.
 - [docs/AUTOMATION.md](docs/AUTOMATION.md): scheduling, scripts, and Power Automate.

@@ -14,8 +14,9 @@ Commands:
     pm do N              Preview, then write, the action `pm today` numbered N.
     pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
-                         --audience pm, leadership, or partner. Comments since
-                         that audience's last report.
+                         role chooses pm, work, leadership, or partner.
+                         --audience overrides that for one run. Comments since
+                         that shape's last report.
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
                          A mention quotes the comment.
@@ -26,13 +27,17 @@ Commands:
     pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
-                         --audience leadership is the headline table.
-                         Partner metrics are refused.
+                         pm and work are the full tables. Leadership is the
+                         headline. Partner metrics are refused.
     pm release-notes     Done issues since a date or in a fixVersion,
-                         grouped by Epic. --audience leadership or partner.
+                         grouped by Epic. work lists items. Leadership lists
+                         Epics. Partner lists visible work.
     pm brief             Meeting prep for one audience, or a debrief.
-                         --audience sets the level. Prep quotes comments
-                         since you last met them.
+                         The first meeting uses role. A saved depth wins
+                         after that. Prep quotes comments since you last met them.
+    pm me                Your open work as it stands today, or a summary
+                         over --sprint, --since, --days, or --summary.
+                         Does not move the weekly-report memory.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
     pm warm              Fill the model cache ahead of time (read-only).
@@ -44,7 +49,8 @@ Commands:
                          the newly installed code. Never replaces it.
 
 Common options (every command except init and update):
-  --config PATH        Path to the config file. If omitted, pm searches:
+  --config PATH        Path to the config file, before or after the command
+                       name. Pass it once. If omitted, pm searches:
                        1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm-tools/config.yaml,
                        4) the config.yaml shipped next to this file.
   --product NAMES      Only these products, by abbreviation or full name.

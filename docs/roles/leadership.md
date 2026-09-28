@@ -74,7 +74,7 @@ points a whole terminal session at one file:
 
 ```powershell
 $env:PM_CONFIG = "$HOME\.pm-tools\aps.yaml"
-pm report --audience leadership --sprint
+pm report --sprint
 ```
 
 Check each file on its own. `pm doctor` tells you what is wrong in the file

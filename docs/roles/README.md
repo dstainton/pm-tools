@@ -1,8 +1,8 @@
 # Roles
 
 Each page is the commands that suit that person, with examples. The longer
-reasoning is in [the journeys](../JOURNEYS.md). What we intend to build
-next is in [the plan](../ROLE_REPORTS_PLAN.md).
+reasoning is in [the journeys](../JOURNEYS.md). The design of `role`,
+`pm me`, and the two help pages is in [the plan](../ROLE_REPORTS_PLAN.md).
 
 | Role | Page |
 |---|---|

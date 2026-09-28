@@ -1,11 +1,11 @@
 # Role reports and a personal snapshot
 
-A plan for who a report names, and for a report about one person's own work.
-The journeys in [JOURNEYS.md](JOURNEYS.md) are the notes this plan decides from.
+Shipped in 0.13.0. This file is the design those commands follow.
+The journeys in [JOURNEYS.md](JOURNEYS.md) are the notes it was decided from.
 [REPORTING_PLAN.md](REPORTING_PLAN.md) stays as it was: it shipped the three
-audiences this plan builds on.
+audiences this builds on.
 
-Nothing here is built yet.
+The sections below are that design. The commands in them are installed.
 
 ## The decision
 
@@ -24,46 +24,38 @@ report shape. They share one detailed report with the names removed. Leadership
 stays the short report. Partner stays the report that is safe to send outside
 the team.
 
-## What is true today
+## Where a name is kept
 
-`audiences.default` is already the shape used when `--audience` is left off.
-`pm report`, `pm metrics`, and `pm release-notes` read it. A missing value
-means `pm`. `pm brief` remembers the depth of each meeting, and a meeting
-that has never been prepared starts at `pm` even when `audiences.default`
-is something else.
-
-The product-management report names people in several places:
+Only the `pm` shape names people:
 
 - The sources table has an Assignee column (`core/report_render.py`,
   `sources_appendix`).
-- Changed pages say who edited them (`docs_block`, "by {name}").
-- Register entries can show an Owner. Leadership still shows that owner on
-  decisions (`register_block`, `show_owner`).
-- Comments are rendered as `2026-09-22 Dana: the excerpt`
-  (`core/comments.py`, `format_line`).
-- The material sent to the model includes `Assignee:` on each issue
-  (`core/model.py`, `_item_line`).
+- Changed pages can say who edited them (`docs_block`, "by {name}").
+- Register entries can show an Owner (`register_block`).
+- Comments are `2026-09-22 Dana: the excerpt` (`core/comments.py`,
+  `format_line`).
+- The material sent to the model includes `Assignee:` (`core/model.py`,
+  `_item_line`).
 
-Leadership already drops the sources table and speaks in Epics. Partner
-already drops lines that contain a person's name (`core/audience.py`,
-`redact`). The leaks are the ones in the list above: a leadership decision
-owner, a comment author on a non-pm release note, an assignee inside a model
-prompt.
+`work`, `leadership`, and `partner` leave those fields off. Partner
+redaction still runs after that, for any name the model wrote into the
+prose.
 
-A weekly report is a window. With no flags it starts at the last run for
-that audience and then moves that memory. `--since`, `--days`, and
-`--sprint` are a read: they set the window and leave the memory where it
-was (`core/window.py`). There is no report that means "where do things
-stand right now," and there is no report limited to `assignee = currentUser()`.
-That query exists (`core/queries.py`, `assignee.me`) and is not used by the
-report.
+`pm today`, `pm daily`, `pm show`, `pm lint`, and `pm ready` keep names.
+They are working screens. `pm today` is the open Sprint for the whole
+project, plus the decisions in it.
 
-`pm today` is the open Sprint for the whole project, plus the decisions in
-it. It is not a personal snapshot.
+`pm me` is the snapshot and the summary. It ignores role. With no window
+it is open issues for the signed-in user (`assignee = currentUser()`).
+A window is what finished and what is still open.
+
+A weekly report with no flags starts at the last run for that shape and
+then moves that memory. `--since`, `--days`, and `--sprint` leave the
+memory where it was (`core/window.py`).
 
 ## Shapes
 
-Four shapes. The first three exist. `work` is new.
+Four shapes.
 
 | Shape | People | What the file contains |
 |---|---|---|
