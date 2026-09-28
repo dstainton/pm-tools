@@ -60,7 +60,7 @@ output:
   directory: "~/.pm-tools/out/aps"
 ```
 
-On Windows PowerShell:
+The settings flag goes after the command name. On Windows PowerShell:
 
 ```powershell
 pm doctor --config $HOME\.pm-tools\aps.yaml
@@ -68,9 +68,8 @@ pm report --config $HOME\.pm-tools\aps.yaml --audience leadership --sprint
 pm report --config $HOME\.pm-tools\des.yaml --audience leadership --sprint
 ```
 
-The settings flag goes after the command name. On macOS or Linux,
-`~/.pm-tools/aps.yaml` is the same path. `PM_CONFIG` points a whole
-terminal session at one file:
+On macOS or Linux, `~/.pm-tools/aps.yaml` is the same path. `PM_CONFIG`
+points a whole terminal session at one file:
 
 ```powershell
 $env:PM_CONFIG = "$HOME\.pm-tools\aps.yaml"
