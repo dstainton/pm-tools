@@ -45,7 +45,7 @@ audiences:
 
 `pm brief` remembers the depth last used for that meeting name (`--for`). A meeting you have not prepared before still starts at `pm`, even when `audiences.default` is something else.
 
-A second key called `role` would store the same choice and the two would drift. One setting is enough. The words on this page (product manager, service designer) name the person. The value in the file names the file they get when they do not pass a flag.
+This setting is the role for the install. The words on this page (product manager, service designer) name the person. The value in the file names the file they get when they do not pass a flag.
 
 A service designer, an analyst, and a developer leave `default: pm`. Leadership and partner are files they sometimes write, not the role they install as.
 
