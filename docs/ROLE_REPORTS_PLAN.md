@@ -263,6 +263,97 @@ not the whole team. The team, with names, remains `pm report`.
 - Two shapes in one suite do not share report-state files (`work` uses the
   same `output_name` rule as `leadership`).
 
+## Help
+
+`pm -h` today is every command, and `pm report -h` is every flag on that
+command. An everyday user has to pick a typical command out of that list.
+Role pages now carry the examples ([docs/roles](roles/README.md)). The
+command line should match them: a short help, and a full help behind one
+flag.
+
+### Regular help
+
+`pm`, `pm help`, and `pm -h` show the same page. No arguments today exits
+with an error because a subcommand is required. After this change, no
+arguments prints regular help and exits 0.
+
+The page is the commands from [docs/START.md](START.md), each with the
+example already on the product-manager role page:
+
+```text
+pm today
+pm do 2
+pm note "customer wants an SSO audit export"
+pm daily
+pm report --sprint
+pm brief --for "Leadership"
+pm doctor
+```
+
+`pm setup` leads the list, with `pm setup` as the example. One line at the
+bottom points at `pm help --advanced` and at
+[docs/roles](roles/README.md). This page does not list flags.
+
+### Advanced help
+
+`pm help --advanced` lists every command, grouped the way the README groups
+them: everyday, backlog, reporting, setup. Each command has one example.
+Flags stay off this page. The last line of each command is
+`pm <command> -h` for the common flags and `pm <command> -h --advanced`
+for the rest.
+
+`pm mcp` stays on the advanced page only. It is off until
+`--yes-i-understand`.
+
+### Help for one command
+
+`pm report -h` is what the command does, two examples, and the flags people
+actually type: `--sprint`, `--since`, `--audience`, `--publish`,
+`--workstream`, `--product`, `--config`. A last line offers
+`pm report -h --advanced`.
+
+`pm report -h --advanced` is the full flag list argparse prints today.
+
+The same split applies to every command. Common flags are a short curated
+set stored next to the examples. The advanced list is the parser's own
+arguments, so a new flag shows up there without a second edit.
+
+### Where the words live
+
+Role pages stay hand-written. A leader's two config files, a partner label,
+and an analyst's worksheet do not belong on `pm -h`.
+
+Everyday examples live in one table, `core/helptext.py`: command, one-line
+description, regular example, advanced example, and the common flag names.
+`pm help` and `pm <command> -h` read it. The product-manager role page uses
+the same example strings, and a test fails if `pm today` or
+`pm report --sprint` disappears from either side.
+
+`build_parser` turns default help off and handles `-h` itself, so argparse
+does not print the long page before the short one can.
+
+`--config` today belongs to each command (`pm report --config FILE`).
+People who keep one file per team type the file first. Accept both
+`pm report --config FILE` and `pm --config FILE report`, with the same
+file winning if it is passed once. The role pages show the order that
+already works. The second order is part of this help step.
+
+### Tests
+
+- `pm help` contains `pm today` and `pm report --sprint`, and does not
+  contain `pm mcp` or `--fail-on`.
+- `pm` with no arguments prints that same page and exits 0.
+- `pm help --advanced` contains `pm coverage` and `pm mcp`.
+- `pm report -h` contains `--sprint` and does not contain `--json`.
+- `pm report -h --advanced` contains `--json`.
+- `pm report --config FILE` and `pm --config FILE report` open the same file.
+
+### Step
+
+7. **Help.** The table, the short page, the advanced page, and the
+   per-command split. Role pages are already written and stay the long
+   form. This step does not change report output.
+
 ## Not in this plan
 
 - A different prose prompt per role. Analyst, developer, and service

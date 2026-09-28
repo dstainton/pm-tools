@@ -487,8 +487,9 @@ Keep in mind:
 
 - [docs/START.md](docs/START.md): the five commands to begin with.
 - [docs/EVERYDAY.md](docs/EVERYDAY.md): everyday commands and report windows.
+- [docs/roles/README.md](docs/roles/README.md): typical commands for each role, with examples.
 - [docs/JOURNEYS.md](docs/JOURNEYS.md): a week for the product manager, and the files written for leadership and partners.
-- [docs/ROLE_REPORTS_PLAN.md](docs/ROLE_REPORTS_PLAN.md): the plan for reports that omit people's names, and for a personal snapshot.
+- [docs/ROLE_REPORTS_PLAN.md](docs/ROLE_REPORTS_PLAN.md): the plan for reports that omit people's names, a personal snapshot, and a shorter help.
 - [docs/DEPTH.md](docs/DEPTH.md): going further.
 - [docs/AUTOMATION.md](docs/AUTOMATION.md): scheduling, scripts, and Power Automate.
 - [docs/CUSTOMISING.md](docs/CUSTOMISING.md): changing the wording sent to

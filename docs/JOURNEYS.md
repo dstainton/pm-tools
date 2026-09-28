@@ -11,10 +11,10 @@ files a product manager writes for other rooms, with `pm report`,
 file and its own memory of the last run.
 
 **Business analyst**, **developer**, and **service designer** are sketched
-below so the need is visible. The plan in
-[ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md) gives them one shared detailed
-report with people's names left out, plus a personal snapshot that ignores
-role.
+below so the need is visible. The commands for each person are in [docs/roles](roles/README.md). The plan in
+[ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md) gives the analyst, the developer,
+and the service designer one shared detailed report with people's names left
+out, plus a personal snapshot that ignores role.
 
 One install is one Jira user: the email and token in the settings file.
 `pm today` and `pm do` act for that person. A second person who wants their
