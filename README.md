@@ -487,6 +487,7 @@ Keep in mind:
 
 - [docs/START.md](docs/START.md): the five commands to begin with.
 - [docs/EVERYDAY.md](docs/EVERYDAY.md): everyday commands and report windows.
+- [docs/JOURNEYS.md](docs/JOURNEYS.md): a week for the product manager, and the files written for leadership and partners. Analyst and developer are notes toward a later decision.
 - [docs/DEPTH.md](docs/DEPTH.md): going further.
 - [docs/AUTOMATION.md](docs/AUTOMATION.md): scheduling, scripts, and Power Automate.
 - [docs/CUSTOMISING.md](docs/CUSTOMISING.md): changing the wording sent to
