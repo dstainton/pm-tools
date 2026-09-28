@@ -11,7 +11,7 @@ pm schedule add warm --at 06:30
 pm schedule add report --at 07:30
 ```
 
-`pm warm --audience pm,leadership` also drafts the leadership product summaries. `audiences.warm` in config is the list used when `--audience` is omitted.
+`pm warm --audience pm,leadership` also drafts the leadership product summaries. `work` belongs in that list when the install uses the nameless report. `audiences.warm` in config is the list used when `--audience` is omitted. A nameless shape is cached separately from `pm`, because that prompt leaves people's names out.
 
 ## Scripts
 

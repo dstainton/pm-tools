@@ -602,12 +602,27 @@ workstreams:
 #    epics.children epics.resolved
 #    registers.descendants registers.children
 
-# Who a narrative report is for. pm keeps today's file names.
+# Who this install writes for when a command is run without --audience.
+# `role`, when set, wins over audiences.default. A missing role means pm,
+# which is what a file written before role existed already does.
+#   role: pm
+#   role: leadership
+#   role: partner
+#   role: analyst          # detailed report, no people's names
+#   role: developer        # same shape as analyst
+#   role: service-designer # same shape as analyst
+# `pm me --summary` uses me.summary when you do not name a window.
+#   me:
+#     summary: sprint      # or a number of days, such as 14
+# audiences.default is the fallback when role is absent. pm keeps the
+# original file names. work is the detailed report with names left out.
 audiences:
   default: pm
   warm: [pm]
   pm:
     name: "Product management"
+  work:
+    name: "Team"
   leadership:
     name: "Leadership"
     at_risk_due_days: 14

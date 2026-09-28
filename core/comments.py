@@ -72,8 +72,11 @@ def author_name(comment):
     return author.get("displayName") or author.get("name") or "Someone"
 
 
-def format_line(comment, excerpt_chars):
-    """`2026-09-22 Dana: the excerpt`, or '' when the body is empty."""
+def format_line(comment, excerpt_chars, author=True):
+    """`2026-09-22 Dana: the excerpt`, or the date and excerpt alone.
+
+    Role reports other than the product manager's leave the author off.
+    """
     text = sources.short(comment_text(comment), excerpt_chars or 0)
     if not text:
         return ""
@@ -82,7 +85,9 @@ def format_line(comment, excerpt_chars):
         when = created.astimezone(dt.timezone.utc).date().isoformat()
     else:
         when = "undated"
-    return f"{when} {author_name(comment)}: {text}"
+    if author:
+        return f"{when} {author_name(comment)}: {text}"
+    return f"{when}: {text}"
 
 
 def report_cutoff(snapshot, opts, now=None):
@@ -123,7 +128,7 @@ def _updated_inside(issue, cutoff):
     return updated >= cutoff
 
 
-def load_for_issues(jira_cfg, issues, cutoff, opts):
+def load_for_issues(jira_cfg, issues, cutoff, opts, author=True):
     """`{key: [comment lines]}` for issues updated inside the window.
 
     At most `max_issues` issues are asked, newest update first. An issue
@@ -157,7 +162,7 @@ def load_for_issues(jira_cfg, issues, cutoff, opts):
             continue
         lines = []
         for comment in raw:
-            line = format_line(comment, excerpt)
+            line = format_line(comment, excerpt, author=author)
             if line:
                 lines.append(line)
         if lines:
@@ -165,10 +170,10 @@ def load_for_issues(jira_cfg, issues, cutoff, opts):
     return found
 
 
-def attach(cfg, jira_cfg, issues, cutoff):
+def attach(cfg, jira_cfg, issues, cutoff, author=True):
     """Set `issue['comments']` to the formatted lines, or an empty list."""
     opts = settings(cfg)
-    found = load_for_issues(jira_cfg, issues, cutoff, opts)
+    found = load_for_issues(jira_cfg, issues, cutoff, opts, author=author)
     for issue in issues:
         key = _issue_key(issue)
         issue["comments"] = found.get(key) or []

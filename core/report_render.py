@@ -197,13 +197,15 @@ def epic_block(epic, links=True):
     return "\n".join(lines)
 
 
-def docs_block(pages):
+def docs_block(pages, names=True):
     if not pages:
         return ""
     lines = ["#### Documentation changed", ""]
     for page in pages:
         when = page.get("updated") or ""
-        who = f" by {page['updated_by']}" if page.get("updated_by") else ""
+        who = ""
+        if names and page.get("updated_by"):
+            who = f" by {page['updated_by']}"
         extra = " (Listed by title.)" if page.get("title_only") or page.get("unsummarised") else ""
         summary = f" {page['summary']}" if page.get("summary") else ""
         lines.append(
@@ -215,6 +217,8 @@ def docs_block(pages):
 
 def register_block(record, level="pm", opts=None):
     opts = opts or {}
+    from core.audience import names_people
+    show_names = opts["names"] if "names" in opts else names_people(level)
     root = record.get("root") or {}
     since = opts.get("since") or ""
     new_n = sum(1 for e in record.get("entries") or [] if e.get("change") == "new")
@@ -232,11 +236,13 @@ def register_block(record, level="pm", opts=None):
     else:
         count += f" · no new or changed entries" + (f" since {since}" if since else "")
     if root.get("edited_in_window"):
-        who = f" by {root['updated_by']}" if root.get("updated_by") else ""
+        who = ""
+        if show_names and root.get("updated_by"):
+            who = f" by {root['updated_by']}"
         count += f" · summary page updated {root.get('updated') or ''}{who}"
     lines = [f"**{_md_link(record.get('name') or 'Register', root.get('url'))}** — {count}", ""]
     show_status = level != "partner"
-    show_owner = level == "pm" or (level == "leadership" and record.get("type") == "decision")
+    show_owner = show_names
     for entry in record.get("entries") or []:
         if level == "leadership" and record.get("type") == "risk":
             if not (entry.get("high") or entry.get("change") == "new"):
@@ -266,8 +272,11 @@ def register_block(record, level="pm", opts=None):
     return "\n".join(lines)
 
 
-def append_registers(lines, records, level, since, match):
+def append_registers(lines, records, level, since, match, names=None):
     """Print the registers whose scope matches. No heading when none do."""
+    from core.audience import names_people
+    if names is None:
+        names = names_people(level)
     chosen = [record for record in (records or []) if match(record.get("scope") or {})]
     if not chosen:
         return
@@ -276,7 +285,7 @@ def append_registers(lines, records, level, since, match):
     for record in chosen:
         if level == "partner" and not record.get("partner_visible"):
             continue
-        lines.append(register_block(record, level, {"since": since}))
+        lines.append(register_block(record, level, {"since": since, "names": names}))
         lines.append("")
 
 
@@ -287,16 +296,22 @@ def _register_records(rows):
     return []
 
 
-def sources_appendix(groups, rows):
+def sources_appendix(groups, rows, names=True):
     by_ws = {ws["abbrev"]: row for ws, row in rows}
     lines = ["## Sources", ""]
+    if names:
+        header = "| Epic | Item | Type | Status | Assignee | Updated |"
+        rule = "|------|------|------|--------|----------|---------|"
+    else:
+        header = "| Epic | Item | Type | Status | Updated |"
+        rule = "|------|------|------|--------|---------|"
     for product, streams in groups:
         for ws in streams:
             row = by_ws.get(ws["abbrev"]) or {}
             lines.append(f"### {ws['name']} ({ws['abbrev']})")
             lines.append("")
-            lines.append("| Epic | Item | Type | Status | Assignee | Updated |")
-            lines.append("|------|------|------|--------|----------|---------|")
+            lines.append(header)
+            lines.append(rule)
             for epic in row.get("epics") or []:
                 label = epic.get("summary") or "Not under an Epic"
                 if epic.get("key"):
@@ -304,19 +319,28 @@ def sources_appendix(groups, rows):
                 for item in epic.get("items") or []:
                     title = (item.get("summary") or item.get("title") or "").replace("|", "\\|")
                     link = _md_link(item.get("key") or title, item.get("url"))
-                    lines.append(
-                        f"| {label} | {link} {title} | {item.get('issuetype') or ''} | "
-                        f"{item.get('status') or ''} | {item.get('assignee') or ''} | "
-                        f"{str(item.get('updated') or '')[:10]} |"
-                    )
+                    status = item.get("status") or ""
+                    updated = str(item.get("updated") or "")[:10]
+                    kind = item.get("issuetype") or ""
+                    if names:
+                        lines.append(
+                            f"| {label} | {link} {title} | {kind} | "
+                            f"{status} | {item.get('assignee') or ''} | {updated} |"
+                        )
+                    else:
+                        lines.append(
+                            f"| {label} | {link} {title} | {kind} | {status} | {updated} |"
+                        )
             for item in row.get("items") or []:
                 if item.get("source") != "SharePoint":
                     continue
                 title = (item.get("title") or "file").replace("|", "\\|")
-                lines.append(
-                    f"| — | {_md_link(title, item.get('url'))} | file |  |  | "
-                    f"{str(item.get('updated') or '')[:10]} |"
-                )
+                link = _md_link(title, item.get("url"))
+                updated = str(item.get("updated") or "")[:10]
+                if names:
+                    lines.append(f"| — | {link} | file |  |  | {updated} |")
+                else:
+                    lines.append(f"| — | {link} | file |  | {updated} |")
             lines.append("")
     records = _register_records(rows)
     for record in records:
@@ -361,8 +385,8 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def _docs_under(pages, heading):
-    block = docs_block(pages)
+def _docs_under(pages, heading, names=True):
+    block = docs_block(pages, names=names)
     if not block:
         return ""
     return block.replace("#### Documentation changed", heading, 1)
@@ -372,6 +396,7 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm", team_pa
     today = dt.date.today().isoformat()
     from core import audience
     name = audience.display_name(cfg, who)
+    names = audience.names_people(who)
     title = "# Weekly State-of-Product Report"
     if who != "pm":
         title += f" — {name}"
@@ -395,12 +420,12 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm", team_pa
         lines.append("")
         lines.append(at_a_glance(groups, rows))
         lines.append("")
-        block = _docs_under(team_pages, "### Team pages changed")
+        block = _docs_under(team_pages, "### Team pages changed", names)
         if block:
             lines.extend([block, ""])
         append_registers(lines, records, who, since, lambda scope: not scope)
     else:
-        block = _docs_under(team_pages, "## Team pages changed")
+        block = _docs_under(team_pages, "## Team pages changed", names)
         if block:
             lines.extend([block, ""])
     body_by = {ws["abbrev"]: body for ws, body in sections}
@@ -417,7 +442,7 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm", team_pa
                 lines.append(f"Product Goal: {goal}")
                 lines.append("")
             lines.extend(_increment_lines(cfg, product))
-            block = _docs_under(product_docs, "### Product pages changed")
+            block = _docs_under(product_docs, "### Product pages changed", names)
             if block:
                 lines.extend([block, ""])
             abbrev = product.get("abbrev")
@@ -444,7 +469,7 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm", team_pa
             loose = [it for it in row.get("items") or []
                      if it.get("source") in ("Confluence", "SharePoint") and not it.get("epic")
                      and not (show_products and product and it.get("product_only"))]
-            block = docs_block(loose)
+            block = docs_block(loose, names=names)
             if block and heading != "###":
                 block = block.replace("#### ", "### ", 1)
             if block:
@@ -454,7 +479,7 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm", team_pa
             append_registers(
                 lines, records, who, since,
                 lambda scope, abbrev=abbrev: scope.get("workstream") == abbrev)
-    lines.append(sources_appendix(groups, rows))
+    lines.append(sources_appendix(groups, rows, names=names))
     lines.append("")
     lines.append(SIGNAL_FOOTER)
     lines.append("")

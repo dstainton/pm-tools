@@ -86,9 +86,20 @@ def _risks(cfg, ws, since=None):
     return items[:3]
 
 
-def gather(cfg, audience, window=None):
+def prep_level(cfg, args, previous):
+    """A saved meeting depth wins. Otherwise the install's role."""
+    from core import audience as audience_core
+    if getattr(args, "audience", None):
+        return audience_core.resolve_shape(cfg, args)
+    saved = (previous or {}).get("_audience_level")
+    if saved:
+        return saved
+    return audience_core.resolve_shape(cfg, None)
+
+
+def gather(cfg, audience_name, window=None, author=True):
     streams = cfg.get("_workstreams") or []
-    prev = state.load_state(_state_path(cfg, audience))
+    prev = state.load_state(_state_path(cfg, audience_name))
     last = prev.get("_last")
     snapshot = {}
     sections = []
@@ -105,7 +116,8 @@ def gather(cfg, audience, window=None):
                       if jql else [])
             comments.attach(
                 cfg, cfg.get("jira") or {}, issues,
-                comments.audience_cutoff(last, comments.settings(cfg)))
+                comments.audience_cutoff(last, comments.settings(cfg)),
+                author=author)
             for issue in issues:
                 issue["workstream"] = ws["abbrev"]
                 product_issues.append(today_cmd._tag_issue(issue, ws, product))
@@ -167,7 +179,7 @@ def gather(cfg, audience, window=None):
                                 if (page.get("kind") or "").lower() == "risk"][:3]
     snapshot["_registers"] = registers.saved_memory(cfg, found)
     snapshot["_last"] = dt.date.today().isoformat()
-    snapshot["_audience"] = audience
+    snapshot["_audience"] = audience_name
     progress.finish()
     return sections, snapshot, last
 
@@ -374,14 +386,16 @@ def run_prep(cfg, args):
         sys.exit("Which audience? e.g.  pm brief --for \"Monthly portfolio review\"")
     from core import audience as audience_core
     previous = state.load_state(_state_path(cfg, audience))
-    level = getattr(args, "audience", None) or previous.get("_audience_level") or "pm"
+    level = prep_level(cfg, args, previous)
     print(f"Preparing the brief for {audience} ({level}) ...")
     from core import window as window_core
     try:
         window = window_core.resolve(cfg, args, default_start=None, projects=[])
     except window_core.WindowError as exc:
         sys.exit(str(exc))
-    sections, snapshot, last = gather(cfg, audience, window)
+    from core import audience as audience_core
+    sections, snapshot, last = gather(
+        cfg, audience, window, author=audience_core.names_people(level))
     text = render_prep(audience, sections, last, level, cfg=cfg)
     snapshot["_audience_level"] = level
     path = output.place(

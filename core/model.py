@@ -425,7 +425,7 @@ def infer_partner(model_cfg, product, facts, cfg=None):
                       f"Product: {product.get('name')}\n\n{facts}\n")
 
 
-def _item_line(item):
+def _item_line(item, names=True):
     """One Jira child, in the grouped-material shape."""
     kind = item.get("issuetype") or "Item"
     title = item.get("summary") or item.get("title") or item.get("key") or "item"
@@ -435,7 +435,7 @@ def _item_line(item):
     extra = []
     if status:
         extra.append(f"Status: {status}")
-    if assignee:
+    if names and assignee:
         extra.append(f"Assignee: {assignee}")
     if extra:
         bits[0] += " | " + " | ".join(extra)
@@ -502,7 +502,7 @@ def _pick_children(epic, max_per_epic):
 
 def build_grouped_material(epics, loose_pages, comment_budget=6000,
                            page_budget=8000, max_items=40, max_per_epic=8,
-                           register_entries=None):
+                           register_entries=None, names=True):
     """Epic-grouped material. Comments and page excerpts share their budgets."""
     lines = []
     shown = 0
@@ -547,7 +547,7 @@ def build_grouped_material(epics, loose_pages, comment_budget=6000,
         for item in children:
             if not room():
                 break
-            lines.extend(_item_line(item))
+            lines.extend(_item_line(item, names=names))
             lines.extend(comments_of(item))
             shown += 1
         if more and room():

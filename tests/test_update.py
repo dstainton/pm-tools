@@ -167,10 +167,15 @@ class UpdateCommandTests(unittest.TestCase):
             [sys.executable, os.path.join(root, "pm.py"), "--help"],
             capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("update", proc.stdout)
-        self.assertIn("coverage", proc.stdout)
-        self.assertIn("release-notes", proc.stdout)
         self.assertIn("usage: pm", proc.stdout)
+        self.assertIn("pm today", proc.stdout)
+        advanced = subprocess.run(
+            [sys.executable, os.path.join(root, "pm.py"), "help", "--advanced"],
+            capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertEqual(advanced.returncode, 0, advanced.stderr)
+        self.assertIn("update", advanced.stdout)
+        self.assertIn("coverage", advanced.stdout)
+        self.assertIn("release-notes", advanced.stdout)
         today = subprocess.run(
             [sys.executable, os.path.join(root, "pm.py"), "today", "--help"],
             capture_output=True, text=True, encoding="utf-8", timeout=30)

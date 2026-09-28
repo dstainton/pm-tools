@@ -362,6 +362,7 @@ pm schedule add warm --at 07:00
 | `pm inbox` | Lists your notes. `edit`, `create`, and `drop` tidy them, turn them into Jira tickets, or throw them away. |
 | `pm triage` | Everything waiting on a decision from you, with the action that clears each one. |
 | `pm daily` | What moved since yesterday, and work in progress. |
+| `pm me` | Your open tickets as they stand today. `--sprint` is that Sprint. |
 
 **Backlog quality**
 
@@ -377,7 +378,7 @@ pm schedule add warm --at 07:00
 
 | Command | What it does |
 |---|---|
-| `pm report` | The weekly update. `--audience leadership` writes a shorter version, and `--audience partner` writes one safe to share outside the team. |
+| `pm report` | The weekly update. `role` in the settings file chooses it: the full report, the same detail without people's names, a short Epic report for leadership, or a page safe to share with a partner. `--audience` overrides that for one run. |
 | `pm brief --for "NAME"` | Meeting preparation for one group. `--debrief notes.md` turns your meeting notes into decisions and actions. |
 | `pm metrics` | How much the team finishes each week, how long work takes, and a likely finish date. |
 | `pm release-notes` | Finished work since a date (`--since`) or in a release (`--version`). |
@@ -396,7 +397,7 @@ pm schedule add warm --at 07:00
 | `pm update` | Installs the latest version and adds any new settings to your file. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
 
-Add `-h` to any command to see its options, for example `pm report -h`.
+`pm` and `pm help` list the everyday commands. `pm report -h` lists the usual flags for that command. Add `--advanced` when you want every command or every flag.
 
 ### Options that work everywhere
 
@@ -407,7 +408,7 @@ Add `-h` to any command to see its options, for example `pm report -h`.
 | `--refresh` | Ignore earlier results and fetch everything again. |
 | `--out FOLDER` | Save this run's files in a different folder. |
 | `--plain` | No colours or symbols. |
-| `--config FILE` | Use a different settings file. |
+| `--config FILE` | Use a different settings file. The flag can go before or after the command name. Pass it once. |
 
 ---
 
@@ -487,6 +488,9 @@ Keep in mind:
 
 - [docs/START.md](docs/START.md): the five commands to begin with.
 - [docs/EVERYDAY.md](docs/EVERYDAY.md): everyday commands and report windows.
+- [docs/roles/README.md](docs/roles/README.md): typical commands for each role, with examples.
+- [docs/JOURNEYS.md](docs/JOURNEYS.md): a week for each role, and why the reports differ.
+- [docs/ROLE_REPORTS_PLAN.md](docs/ROLE_REPORTS_PLAN.md): how role reports, `pm me`, and the two help pages are shaped.
 - [docs/DEPTH.md](docs/DEPTH.md): going further.
 - [docs/AUTOMATION.md](docs/AUTOMATION.md): scheduling, scripts, and Power Automate.
 - [docs/CUSTOMISING.md](docs/CUSTOMISING.md): changing the wording sent to

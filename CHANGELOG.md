@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.0 - 2026-09-28
+
+- `role` in the settings file chooses the report shape. `pm` names people.
+  `analyst`, `developer`, and `service-designer` share `work`: the same
+  detailed report with assignees, comment authors, page editors, and
+  decision owners left out. `leadership` stays the short Epic report.
+  `partner` stays the page you can send outside the team. `--audience`
+  wins for one run, then `role`, then `audiences.default`, then `pm`.
+  A file with no `role` behaves as before. The first brief for a meeting
+  uses that same resolution. A depth already saved for the meeting stays.
+- `pm me` is the open work assigned to the signed-in account, as it stands
+  today. It does not call the model and does not move the weekly-report
+  memory. `--sprint`, `--since`, `--days`, or `--summary` is what finished
+  and what is still open in that window. `--who` names a colleague only
+  when the report shape is `pm`.
+- `pm`, `pm help`, and `pm -h` list everyday commands with one example.
+  `pm help --advanced` lists every command. `pm report -h` lists the usual
+  flags, and `pm report -h --advanced` lists every flag.
+- `--config` works before the command name as well as after it. Pass it
+  once.
+
 ## 0.12.1 - 2026-09-28
 
 - `pm report --sprint` finds the open sprint when the board has a long

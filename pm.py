@@ -14,8 +14,9 @@ Commands:
     pm do N              Preview, then write, the action `pm today` numbered N.
     pm doctor            Verify config, Jira, statuses, fields, model, cache.
     pm report            Weekly state-of-product report (uses the local model).
-                         --audience pm, leadership, or partner. Comments since
-                         that audience's last report.
+                         role chooses pm, work, leadership, or partner.
+                         --audience overrides that for one run. Comments since
+                         that shape's last report.
     pm lint              Deterministic Product Backlog checks (no model).
     pm triage            Queue of things waiting on a decision from you.
                          A mention quotes the comment.
@@ -26,13 +27,17 @@ Commands:
     pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
-                         --audience leadership is the headline table.
-                         Partner metrics are refused.
+                         pm and work are the full tables. Leadership is the
+                         headline. Partner metrics are refused.
     pm release-notes     Done issues since a date or in a fixVersion,
-                         grouped by Epic. --audience leadership or partner.
+                         grouped by Epic. work lists items. Leadership lists
+                         Epics. Partner lists visible work.
     pm brief             Meeting prep for one audience, or a debrief.
-                         --audience sets the level. Prep quotes comments
-                         since you last met them.
+                         The first meeting uses role. A saved depth wins
+                         after that. Prep quotes comments since you last met them.
+    pm me                Your open work as it stands today, or a summary
+                         over --sprint, --since, --days, or --summary.
+                         Does not move the weekly-report memory.
     pm publish           Send a Markdown file to Confluence and/or Teams.
     pm schedule          Register read-only commands on a timer.
     pm warm              Fill the model cache ahead of time (read-only).
@@ -44,7 +49,8 @@ Commands:
                          the newly installed code. Never replaces it.
 
 Common options (every command except init and update):
-  --config PATH        Path to the config file. If omitted, pm searches:
+  --config PATH        Path to the config file, before or after the command
+                       name. Pass it once. If omitted, pm searches:
                        1) $PM_CONFIG, 2) ./config.yaml, 3) ~/.pm-tools/config.yaml,
                        4) the config.yaml shipped next to this file.
   --product NAMES      Only these products, by abbreviation or full name.
@@ -90,6 +96,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core import cache as fetch_cache                           # noqa: E402
+from core import helptext as helptext_core                     # noqa: E402
 from core import model as model_core                           # noqa: E402
 from core import progress                                      # noqa: E402
 from core.config import load_config, filter_workstreams        # noqa: E402
@@ -99,7 +106,7 @@ from commands import (report, lint, ready, init, setup, show,   # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
                       schedule, update, coverage, release_notes, warm,
-                      mcp_server)
+                      mcp_server, me)
 
 
 def resolve_config_path(explicit):
@@ -145,9 +152,64 @@ def _prog_name():
     return "pm"
 
 
+_SUBPARSERS = {}
+
+
+class _HelpFlag(argparse.Action):
+    """Print the short page, or the full flag list with --advanced, then stop.
+
+    Exits during parsing so a required argument does not block `pm do -h`.
+    """
+
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings=option_strings, dest=dest, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        advanced = "--advanced" in sys.argv[1:]
+        parts = parser.prog.split()
+        name = parts[-1] if len(parts) >= 2 else ""
+        if name and name != "help":
+            text = helptext_core.command_page(parser, name, advanced=advanced)
+        elif advanced:
+            text = helptext_core.advanced_page(_SUBPARSERS)
+        else:
+            text = helptext_core.regular_page()
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        parser.exit(0)
+
+
+def selected_config(args):
+    """The settings file from `--config`, before or after the command name."""
+    local = getattr(args, "config", None)
+    global_path = getattr(args, "config_global", None)
+    if local and global_path:
+        left = os.path.abspath(os.path.expanduser(local))
+        right = os.path.abspath(os.path.expanduser(global_path))
+        if left != right:
+            sys.exit("Pass --config once.")
+    return local or global_path
+
+
+class _Parser(argparse.ArgumentParser):
+    """Subcommands must not grow argparse's own -h. Ours prints the short page."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs["add_help"] = False
+        super().__init__(*args, **kwargs)
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(
-        prog=_prog_name(), description="pm-tools CLI")
+    help_opts = argparse.ArgumentParser(add_help=False)
+    help_opts.add_argument("-h", "--help", action=_HelpFlag, dest="help_requested",
+                           help="Show typical commands, or this command's usual flags")
+    help_opts.add_argument("--advanced", action="store_true",
+                           help="With -h, list every command or every flag")
+
+    parser = _Parser(
+        prog=_prog_name(), description="pm-tools CLI", parents=[help_opts])
+    parser.add_argument("--config", dest="config_global", default=None,
+                        help="Settings file, before the command name")
 
     # Options shared by the config-driven subcommands (not init or update).
     common = argparse.ArgumentParser(add_help=False)
@@ -181,13 +243,11 @@ def build_parser():
                             help="Preview the Jira write and stop")
 
     sub = parser.add_subparsers(
-        dest="command", required=True,
-        metavar="{init,products,workstreams,today,do,doctor,report,lint,"
-                "triage,refine,review,note,inbox,metrics,brief,publish,"
-                "schedule,ready,daily,coverage,release-notes,warm,update}")
+        dest="command", required=False,
+        metavar="{today,do,note,daily,report,brief,doctor,...}")
 
     # init is special: no config needed (it creates one), so no `common`.
-    p_init = sub.add_parser("init",
+    p_init = sub.add_parser("init", parents=[help_opts],
                             help="Create a starter config at ~/.pm-tools/config.yaml")
     p_init.add_argument("--force", action="store_true",
                         help="Overwrite an existing config")
@@ -195,7 +255,7 @@ def build_parser():
                         help="Write to a specific path instead of ~/.pm-tools")
     p_init.set_defaults(func=init.run, needs_config=False)
 
-    p_prod = sub.add_parser("products", parents=[common],
+    p_prod = sub.add_parser("products", parents=[help_opts, common],
                             help="List, add, remove or check your products")
     p_prod.add_argument("action", nargs="?", default="list",
                         choices=["list", "add", "remove", "check"],
@@ -218,7 +278,7 @@ def build_parser():
                         help="With `check`, print the JQL pm generates")
     p_prod.set_defaults(func=products.run, needs_config=True)
 
-    p_ws = sub.add_parser("workstreams", parents=[common],
+    p_ws = sub.add_parser("workstreams", parents=[help_opts, common],
                           help="List, add, remove or check your workstreams")
     p_ws.add_argument("action", nargs="?", default="list",
                       choices=["list", "add", "remove", "check"],
@@ -247,7 +307,7 @@ def build_parser():
                       help="With `check`, print the JQL pm generates")
     p_ws.set_defaults(func=workstreams.run, needs_config=True)
 
-    p_today = sub.add_parser("today", parents=[common],
+    p_today = sub.add_parser("today", parents=[help_opts, common],
                              help="Bounded daily screen across the portfolio")
     p_today.add_argument("--all", action="store_true",
                          help="Include triage kinds (mentions, new bugs) "
@@ -256,14 +316,14 @@ def build_parser():
                          help="Print the numbered actions as JSON")
     p_today.set_defaults(func=today.run_today, needs_config=True)
 
-    p_do = sub.add_parser("do", parents=[common, write_opts],
+    p_do = sub.add_parser("do", parents=[help_opts, common, write_opts],
                           help="Preview, then write, the numbered action "
                                "from `pm today`")
     p_do.add_argument("number", type=int, help="The number from the last "
                       "`pm today` (e.g. 1)")
     p_do.set_defaults(func=today.run_do, needs_config=True)
 
-    p_doctor = sub.add_parser("doctor", parents=[common],
+    p_doctor = sub.add_parser("doctor", parents=[help_opts, common],
                               help="Verify config, Jira, statuses, fields, model, cache")
     p_doctor.add_argument("--discover-fields", action="store_true",
                           help="List custom-field IDs that look like story "
@@ -277,7 +337,7 @@ def build_parser():
     p_doctor.set_defaults(func=doctor.run, needs_config=True)
 
     p_setup = sub.add_parser(
-        "setup",
+        "setup", parents=[help_opts],
         help="Fill in the config one step at a time",
         description="Fill in the config one step at a time. "
                     "--section model lists local servers and can install "
@@ -316,21 +376,21 @@ def build_parser():
                          help="Write the flags and do not prompt or install")
     p_setup.set_defaults(func=setup.run, needs_config=False)
 
-    p_show = sub.add_parser("show", parents=[common],
+    p_show = sub.add_parser("show", parents=[help_opts, common],
                             help="One issue: status, assignee, dates, link")
     p_show.add_argument("key", help="Issue key, e.g. APS-30")
     p_show.add_argument("--json", action="store_true")
     p_show.set_defaults(func=show.run, needs_config=True)
 
     p_mcp = sub.add_parser(
-        "mcp", parents=[common],
+        "mcp", parents=[help_opts, common],
         help="stdio MCP server for read-only commands (off by default)")
     p_mcp.add_argument("--yes-i-understand", action="store_true",
                        help="Start the server. Tool results leave the machine "
                             "when the client is Copilot.")
     p_mcp.set_defaults(func=mcp_server.run, needs_config=True)
 
-    p_report = sub.add_parser("report", parents=[common, write_opts],
+    p_report = sub.add_parser("report", parents=[help_opts, common, write_opts],
                               help="Weekly state-of-product report, with "
                                    "comments since the last report")
     p_report.add_argument("--publish", action="store_true",
@@ -339,13 +399,14 @@ def build_parser():
                           help="Start of the window. Does not move last-report memory.")
     p_report.add_argument("--sprint", nargs="?", const="open", default=None,
                           help="This Sprint (open), a number (138), or last")
-    p_report.add_argument("--audience", choices=["pm", "leadership", "partner"],
-                          help="Who the report is for (default: pm)")
+    p_report.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
+                          help="Who the report is for (default: role, else "
+                               "audiences.default, else pm)")
     p_report.add_argument("--json", action="store_true",
                           help="Also write the gathered report as JSON")
     p_report.set_defaults(func=report.run, needs_config=True)
 
-    p_lint = sub.add_parser("lint", parents=[common, write_opts],
+    p_lint = sub.add_parser("lint", parents=[help_opts, common, write_opts],
                             help="Deterministic backlog quality checks")
     p_lint.add_argument("--json", action="store_true",
                         help="Write findings as JSON instead of Markdown")
@@ -372,20 +433,20 @@ def build_parser():
                         help="Show snoozed, accepted and assigned findings too")
     p_lint.set_defaults(func=lint.run, needs_config=True)
 
-    p_triage = sub.add_parser("triage", parents=[common, write_opts],
+    p_triage = sub.add_parser("triage", parents=[help_opts, common, write_opts],
                               help="Queue of things waiting on a decision from you")
     p_triage.add_argument("--apply", type=int, metavar="N",
                           help="Do the numbered triage action")
     p_triage.set_defaults(func=triage.run, needs_config=True)
 
-    p_refine = sub.add_parser("refine", parents=[common, write_opts],
+    p_refine = sub.add_parser("refine", parents=[help_opts, common, write_opts],
                               help="Draft titles, criteria and estimates for "
                                    "items that fail the ready agreement")
     p_refine.add_argument("--apply", action="store_true",
                           help="Write the kept drafts from the worksheet")
     p_refine.set_defaults(func=refine.run, needs_config=True)
 
-    p_review = sub.add_parser("review", parents=[common, write_opts],
+    p_review = sub.add_parser("review", parents=[help_opts, common, write_opts],
                               help="Without --apply, the old model judgement; "
                                    "with --apply, a refine worksheet "
                                    "(deprecated)")
@@ -396,14 +457,14 @@ def build_parser():
                           help="Write the kept drafts from the worksheet")
     p_review.set_defaults(func=refine.run, needs_config=True)
 
-    p_note = sub.add_parser("note", parents=[common],
+    p_note = sub.add_parser("note", parents=[help_opts, common],
                             help="Capture a thought offline")
     p_note.add_argument("text", nargs="*",
                         help="The note (quote it if it has spaces)")
     p_note.set_defaults(func=inbox.run_note, needs_config=True)
 
     p_inbox = sub.add_parser(
-        "inbox", parents=[common, write_opts],
+        "inbox", parents=[help_opts, common, write_opts],
         help="List, edit, create or drop captured notes",
         description="List, edit, create or drop captured notes. "
                     "edit writes inbox.json only.")
@@ -419,7 +480,7 @@ def build_parser():
     p_inbox.set_defaults(func=inbox.run_inbox, needs_config=True)
 
     p_metrics = sub.add_parser(
-        "metrics", parents=[common],
+        "metrics", parents=[help_opts, common],
         help="Delivery metrics per product and workstream",
         description="Delivery metrics per product and workstream. "
                     "--sprint reports the open sprint.")
@@ -427,14 +488,14 @@ def build_parser():
                            help="How many weeks back (default: metrics.weeks or 8)")
     p_metrics.add_argument("--sprint", nargs="?", const="open", default=None,
                            help="Open sprint, a sprint number, or last")
-    p_metrics.add_argument("--audience", choices=["pm", "leadership", "partner"],
-                           help="pm shows the full tables; leadership a headline; "
-                                "partner is refused")
+    p_metrics.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
+                           help="pm and work show the full tables; leadership a "
+                                "headline; partner is refused")
     p_metrics.add_argument("--json", action="store_true",
                            help="Write the numbers as JSON")
     p_metrics.set_defaults(func=metrics.run, needs_config=True)
 
-    p_brief = sub.add_parser("brief", parents=[common, write_opts],
+    p_brief = sub.add_parser("brief", parents=[help_opts, common, write_opts],
                              help="Meeting prep for one audience, or a debrief. "
                                   "Prep includes comments since you last met them")
     p_brief.add_argument("--for", dest="for_audience", metavar="AUDIENCE",
@@ -445,22 +506,22 @@ def build_parser():
                          help="With --debrief, create the action tickets")
     p_brief.add_argument("--publish", action="store_true",
                          help="Also send the brief to Confluence and/or Teams")
-    p_brief.add_argument("--audience", choices=["pm", "leadership", "partner"],
+    p_brief.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
                          help="How deep the prep goes (default: the level saved "
-                              "for this meeting, else pm)")
+                              "for this meeting, else role)")
     p_brief.add_argument("--since", metavar="YYYY-MM-DD",
                          help="Start of the window. Does not move last-met memory.")
     p_brief.add_argument("--sprint", nargs="?", const="open", default=None,
                          help="This Sprint (open), a number (138), or last")
     p_brief.set_defaults(func=brief.run, needs_config=True)
 
-    p_publish = sub.add_parser("publish", parents=[common, write_opts],
+    p_publish = sub.add_parser("publish", parents=[help_opts, common, write_opts],
                                help="Send a Markdown file to Confluence and/or Teams")
     p_publish.add_argument("file", nargs="?",
                            help="The Markdown file to send")
     p_publish.set_defaults(func=publish.run, needs_config=True)
 
-    p_sched = sub.add_parser("schedule", parents=[common],
+    p_sched = sub.add_parser("schedule", parents=[help_opts, common],
                              help="Register read-only commands on a timer")
     p_sched.add_argument("action", nargs="?", default="list",
                          choices=["list", "add", "remove"],
@@ -471,7 +532,7 @@ def build_parser():
                          help="Weekday time, e.g. 08:30")
     p_sched.add_argument("--weekly", metavar="DAY@HH:MM",
                          help="One day a week, e.g. fri@16:00")
-    p_sched.add_argument("--audience", choices=["pm", "leadership", "partner"],
+    p_sched.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
                          help="With add report, the audience. Partner is refused.")
     p_sched.add_argument("--for", dest="for_audience",
                          help="With `add brief`, the audience name")
@@ -483,7 +544,7 @@ def build_parser():
     p_sched.set_defaults(func=schedule.run, needs_config=True)
 
     p_warm = sub.add_parser(
-        "warm", parents=[common],
+        "warm", parents=[help_opts, common],
         help="Fill the model cache ahead of time (read-only)",
         description="Fill the model cache so a later command only catches up. "
                     "Read-only: no Jira writes, no report. With no flag, warms "
@@ -504,7 +565,7 @@ def build_parser():
     p_warm.set_defaults(func=warm.run, needs_config=True)
 
     p_ready = sub.add_parser(
-        "ready", parents=[common],
+        "ready", parents=[help_opts, common],
         help="Team working agreement (pass/fail)",
         description="Team working agreement: pass/fail per ticket. "
                     "too-big-for-a-sprint blocks only when it is listed.")
@@ -516,7 +577,7 @@ def build_parser():
                               "items are ready")
     p_ready.set_defaults(func=ready.run, needs_config=True)
 
-    p_daily = sub.add_parser("daily", parents=[common],
+    p_daily = sub.add_parser("daily", parents=[help_opts, common],
                              help="Daily Scrum movement, comments from that "
                                   "window, and work in progress")
     p_daily.add_argument("--days", type=int, default=1,
@@ -530,8 +591,28 @@ def build_parser():
                          help="Also echo the snapshot to the terminal")
     p_daily.set_defaults(func=daily.run, needs_config=True)
 
+    p_me = sub.add_parser(
+        "me", parents=[help_opts, common],
+        help="Your open work as it stands, or a summary over a window",
+        description="Your open work as it stands today. "
+                    "--sprint, --since, --days, or --summary is that window. "
+                    "This does not move the weekly report memory.")
+    p_me.add_argument("--sprint", nargs="?", const="open", default=None,
+                      help="This Sprint (open), a number (138), or last")
+    p_me.add_argument("--since", metavar="YYYY-MM-DD",
+                      help="Start of the window")
+    p_me.add_argument("--days", type=int, default=None,
+                      help="How many days back")
+    p_me.add_argument("--summary", action="store_true",
+                      help="Use me.summary (sprint, or a number of days)")
+    p_me.add_argument("--who", default=None, metavar="NAME",
+                      help="Someone else's work. Only when the report shape is pm.")
+    p_me.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
+                      help="With --who, confirms the shape is pm")
+    p_me.set_defaults(func=me.run, needs_config=True)
+
     p_cover = sub.add_parser(
-        "coverage", parents=[common],
+        "coverage", parents=[help_opts, common],
         help="Open issues no workstream claims, overlaps, and unused "
              "components",
         description="Open issues no workstream claims, issues two or more "
@@ -540,7 +621,7 @@ def build_parser():
     p_cover.set_defaults(func=coverage.run, needs_config=True)
 
     p_notes = sub.add_parser(
-        "release-notes", parents=[common],
+        "release-notes", parents=[help_opts, common],
         help="Done issues since a date or in a fixVersion",
         description="Done issues since a date or in a fixVersion, grouped by "
                     "product and workstream. Comments from that window sit "
@@ -550,13 +631,14 @@ def build_parser():
                          help="Include issues resolved on or after this date")
     p_notes.add_argument("--version", metavar="NAME",
                          help="Include issues in this fixVersion")
-    p_notes.add_argument("--audience", choices=["pm", "leadership", "partner"],
-                         help="pm lists items, leadership lists Epics, "
+    p_notes.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
+                         help="pm and work list items, leadership lists Epics, "
                               "partner lists visible work")
     p_notes.set_defaults(func=release_notes.run, needs_config=True)
 
     p_update = sub.add_parser(
-        "update", help="Upgrade pm-tools and migrate the config")
+        "update", parents=[help_opts],
+        help="Upgrade pm-tools and migrate the config")
     p_update.add_argument("--config", default=None,
                           help="Config file to migrate (default: ~/.pm-tools/config.yaml)")
     p_update.add_argument("--code-only", action="store_true",
@@ -567,6 +649,20 @@ def build_parser():
                           help="Show what would change and write nothing")
     p_update.set_defaults(func=update.run, needs_config=False)
 
+    p_help = sub.add_parser(
+        "help", parents=[help_opts],
+        help="Typical commands, or every command with --advanced")
+    p_help.set_defaults(needs_config=False)
+
+    global _SUBPARSERS
+    _SUBPARSERS = {}
+    for action in sub._choices_actions:
+        child = sub.choices.get(action.dest)
+        if child is None:
+            continue
+        child._pm_blurb = action.help or ""
+        _SUBPARSERS[action.dest] = child
+    parser._pm_subs = _SUBPARSERS
     return parser
 
 
@@ -599,12 +695,26 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
+    command = getattr(args, "command", None)
+    advanced = "--advanced" in sys.argv[1:]
+    if command in (None, "help"):
+        page = (helptext_core.advanced_page(parser._pm_subs) if advanced
+                else helptext_core.regular_page())
+        print(page, end="")
+        return
+    if advanced:
+        sys.exit(f"pm {command} -h --advanced lists every flag.")
+
+    chosen = selected_config(args)
+    if command == "update":
+        args.config = chosen
+
     # init runs before any config discovery — it's what creates the config.
     if not getattr(args, "needs_config", True):
         args.func(args)
         return
 
-    config_path = resolve_config_path(getattr(args, "config", None))
+    config_path = resolve_config_path(chosen)
     cfg = load_config(config_path)
     # `pm workstreams add/remove` edits this file, and every command mentions it
     # when something is misconfigured, so keep the resolved path to hand.
