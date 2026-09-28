@@ -4,15 +4,15 @@ A working list of who uses pm-tools, and what a normal week looks like for
 each of them. The aim is to choose which journeys belong in the guide.
 Nothing here adds a setting or a command.
 
-Three roles already exist. **Product management** is the person who runs
-the program. **Leadership** and **Partners** are audiences that person
-writes for, with `pm report`, `pm brief`, `pm metrics`, and
-`pm release-notes`. Each audience keeps its own file and its own memory of
-the last run.
+Three report shapes already exist. **Product management** is the full file,
+and it is the default. **Leadership** and **Partners** are the shorter
+files a product manager writes for other rooms, with `pm report`,
+`pm brief`, `pm metrics`, and `pm release-notes`. Each shape keeps its own
+file and its own memory of the last run.
 
-**Business analyst** and **developer** are sketched below so the need is
-visible. They are not audiences. There is no `--audience` value for them,
-and this page does not propose one yet.
+**Business analyst**, **developer**, and **service designer** are sketched
+below so the need is visible. They are not report shapes. There is no
+`--audience` value for them.
 
 One install is one Jira user: the email and token in the settings file.
 `pm today` and `pm do` act for that person. A second person who wants their
@@ -23,11 +23,31 @@ file.
 
 | Role | In the tool today | Who runs the commands |
 |---|---|---|
-| Product manager | The person the program is built for. The default audience is `pm`. | They do. |
+| Product manager | The person the program is built for. `audiences.default` is `pm` unless you change it. | They do. |
 | Leadership | An audience on the report, the brief, metrics, and release notes. | The product manager, who then sends the file. |
 | Partner | An audience on the report, the brief, and release notes. `pm metrics` stops if you ask for this audience. | The product manager. The brief is preparation, and the file says to keep it internal. |
 | Business analyst | No audience. Refinement commands already cover most of the work. Shared state can carry snooze decisions and the inbox to a second person. | Open. See the journey. |
 | Developer | No audience. The Daily Scrum, the ready check, and a single ticket already exist as commands. | Open. See the journey. |
+| Service designer | No audience. The product-management report already includes changed pages, decisions, and Epics. | Open. See the journey. |
+
+## Role in the config
+
+The choice already has a home. In the settings file it is `audiences.default`:
+
+```yaml
+audiences:
+  default: pm
+```
+
+`pm` is the product manager's full report. `leadership` and `partner` are the other two files. When the line is missing, report, metrics, and release notes use `pm`.
+
+`pm report`, `pm metrics`, and `pm release-notes` read this value when you leave `--audience` off. Someone who always wants the leadership file sets `default: leadership` once, and passes `--audience partner` only for the file that leaves the building.
+
+`pm brief` remembers the depth last used for that meeting name (`--for`). A meeting you have not prepared before still starts at `pm`, even when `audiences.default` is something else.
+
+A second key called `role` would store the same choice and the two would drift. One setting is enough. The words on this page (product manager, service designer) name the person. The value in the file names the file they get when they do not pass a flag.
+
+A service designer, an analyst, and a developer leave `default: pm`. Leadership and partner are files they sometimes write, not the role they install as.
 
 ## Product manager
 
@@ -169,6 +189,30 @@ What this journey does not have:
 
 A developer who installs pm-tools with their own token gets their own mentions inside `pm triage`, because mentions follow the account on that token. The Sprint list on `pm today` is still the whole open Sprint.
 
+## Service designer
+
+Sketched only. This is the person on the team who draws the service end to end: what a person experiences, what staff do, and which systems sit behind that. Journey maps, blueprints, and research live in Confluence beside the backlog.
+
+What they need:
+
+- Which pages that describe the service changed: research, journey maps, blueprints, decisions.
+- Which Epics a person using the service would notice.
+- Decisions and risks that change the experience.
+- One ticket when a story touches a step in the journey.
+- The same Sprint window the product manager uses, when they are preparing a review.
+
+What they can run today, with `audiences.default` left as `pm`:
+
+1. `pm report` includes changed Confluence pages, the decision, risk, and ADR registers, and the Epics. That is the layer a design review starts from.
+2. `pm report --sprint` is that same file for the open Sprint.
+3. `pm brief --for "Design review"` is what changed since the last design review.
+4. `pm show APS-30` is one ticket while they are looking at a step in the journey.
+5. `pm release-notes --since YYYY-MM-DD` is what finished, when they are checking whether the experience moved.
+
+Worth a report shape of their own? Not yet. Leadership exists because the file is shorter. Partner exists because the file must be safe to send outside the team. A service designer wants the pages, decisions, and Epics the product-management report already contains. Their default stays `pm`.
+
+A separate shape is worth building later if we can name what it leads with, or what it drops, in a way that report cannot. That is emphasis. It is not a boundary the file has to enforce.
+
 ## A starting cut
 
 These are proposals. The journeys above stay in this file either way, so a cut is a choice about the guide, not a loss of the notes.
@@ -180,5 +224,7 @@ These are proposals. The journeys above stay in this file either way, so a cut i
 | Partner | Keep as its own page. | The labelling step is easy to miss, and the brief is preparation rather than the page you send. Both need a sentence in the guide. |
 | Business analyst | Keep the work inside the product manager's week. Hold a separate page until a second person is actually going to run `pm lint`, `pm ready`, and `pm refine`. | The commands exist. A new audience would invent a report nobody asked for. The shared inbox is the handoff that already exists. |
 | Developer | Keep the needs. Hold the page. | Daily Scrum, ready, and one ticket are already in the product manager's week. A developer page would imply a personal Sprint queue, and that queue is not what `pm today` shows. |
+| Service designer | Include them in this list. Leave their default as `pm`. | The full report already carries pages, decisions, and Epics. A fourth file needs a rule we do not have yet. |
+| Role in the config | Use `audiences.default`. Do not add a `role` key. | Report, metrics, and release notes already follow it. A missing value means the product manager. |
 
-If we keep the first three, the guide gains one week for the person who runs pm-tools, one page for the leadership file, and one page for the partner file. The analyst and developer sections stay here until we choose otherwise.
+If we keep the first three, the guide gains one week for the person who runs pm-tools, one page for the leadership file, and one page for the partner file. The analyst, developer, and service designer sections stay here until we choose otherwise. The role for those three installs is `audiences.default: pm`.

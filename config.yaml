@@ -602,7 +602,11 @@ workstreams:
 #    epics.children epics.resolved
 #    registers.descendants registers.children
 
-# Who a narrative report is for. pm keeps today's file names.
+# Who this install writes for when a command is run without --audience.
+# pm is the product manager's full report. leadership and partner are the
+# other files. A missing default means pm. A service designer, analyst, or
+# developer leaves this as pm and passes --audience only for another room.
+# pm keeps today's file names.
 audiences:
   default: pm
   warm: [pm]
