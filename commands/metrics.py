@@ -130,21 +130,86 @@ def render(groups, weeks):
 
 
 def render_headline(groups, weeks):
-    """Leadership delivery table: rate, cycle, open, and landing."""
+    """Leadership delivery table: rate, cycle, open, scope, and a projection."""
     lines = ["## Delivery", ""]
+    lines.append(
+        "_Landing is a projection from recent throughput, not a commitment._"
+    )
+    lines.append("")
     for product, rows in groups:
         lines.append(f"### {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Done / week | Cycle (median) | Open | Landing |")
-        lines.append("|------------|------------:|---------------:|-----:|---------|")
+        lines.append("| Workstream | Done / week | Cycle (median) | Open | "
+                     "Scope added | Landing (projection) |")
+        lines.append("|------------|------------:|---------------:|-----:|"
+                     "------------:|----------------------|")
         for row in rows:
             cycle = row["cycle"]
             cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
             landing = _fmt_date(row.get("landing"))
+            added = (row.get("scope_change") or {}).get("added")
+            added_txt = "—" if added is None else str(added)
+            lines.append(
+                f"| {row['workstream']} | {row['weekly_rate']:.1f} | {cycle_txt} | "
+                f"{row['open']} | {added_txt} | {landing} |")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_pulse(groups, weeks):
+    """Short delivery note for a report. Full tables stay on `pm metrics`."""
+    lines = [
+        "## Delivery pulse",
+        "",
+        "_Done per week, median cycle time, and open count. "
+        "A landing date is a projection from recent throughput, not a commitment. "
+        "Full detail: `pm metrics`._",
+        "",
+    ]
+    lines.append("| Workstream | Done / week | Cycle (median) | Open | "
+                 "Landing (projection) |")
+    lines.append("|------------|------------:|---------------:|-----:|"
+                 "----------------------|")
+    for _product, rows in groups:
+        for row in rows:
+            cycle = row["cycle"]
+            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
+            landing = _fmt_date(row.get("landing")) if row.get("landing") else "—"
             lines.append(
                 f"| {row['workstream']} | {row['weekly_rate']:.1f} | {cycle_txt} | "
                 f"{row['open']} | {landing} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_sprint_context(sprint_name, groups):
+    """Sprint delivery for a developer report. No portfolio forecast."""
+    lines = ["## This sprint", ""]
+    if sprint_name:
+        lines.append(f"_{sprint_name}_")
         lines.append("")
+    lines.append("| Workstream | Forecast at start | Delivered | Added | "
+                 "Carried in | Unfinished |")
+    lines.append("|-----------|------------------:|----------:|------:|"
+                 "-----------:|-----------:|")
+    any_sprint = False
+    for _product, rows in groups:
+        for row in rows:
+            if row.get("forecast") is None:
+                lines.append(f"| {row.get('workstream')} | — | — | — | — | — |")
+                continue
+            any_sprint = True
+            unfinished = len(row.get("unfinished") or [])
+            lines.append(
+                f"| {row.get('workstream')} | {row['forecast']:.0f} | "
+                f"{row['done']:.0f} | {row['added_points']:.0f} | "
+                f"{row['carried']} | {unfinished} |")
+    lines.append("")
+    if not any_sprint:
+        lines.append("_No open sprint._")
+        lines.append("")
+    lines.append("Sprint review: `pm metrics --sprint`. Full history: `pm metrics`.")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -189,38 +254,98 @@ def gather_sprint(cfg):
                 overrides={"status": "any", "sprint": "open"})
             issues = _history(cfg, project, jql)
             snap = core.sprint_snapshot(issues, sprint)
+            snap["goal"] = (sprint.get("goal") or "").strip()
             snap["workstream"] = ws.get("abbrev")
             rows.append(snap)
         out.append((product, rows))
     return sprint_name, out
 
 
-def render_sprint(sprint_name, groups):
+def _sprint_cards(rows, field, limit=12):
+    cards = []
+    for row in rows:
+        for card in row.get(field) or []:
+            cards.append(card)
+    return cards[:limit], len(cards)
+
+
+def render_sprint(sprint_name, groups, cfg=None):
+    """Sprint review: goal, forecast, what finished, and what did not."""
     title = sprint_name or "Open sprint"
+    goal = ""
+    for _product, rows in groups:
+        for row in rows:
+            if row.get("goal"):
+                goal = row["goal"]
+                break
+        if goal:
+            break
     lines = [
         f"# {title}",
-        "_Open sprint. Forecast at the start, points done, points added "
-        "after the start, and items carried in. Facts from the changelog._",
+        "_Sprint review. Forecast, delivered work, scope added after the "
+        "start, and work still open. Facts from the changelog. "
+        "A forecast is not a commitment._",
         "",
     ]
+    if goal:
+        lines.append(f"Sprint Goal: {goal}")
+        lines.append("")
     any_sprint = False
     for product, rows in groups:
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Forecast at start | Points done | "
-                     "Points added | Carried in |")
-        lines.append("|-----------|------------------:|------------:|"
-                     "-------------:|-----------:|")
+        lines.append("| Workstream | Forecast at start | Delivered | "
+                     "Added after start | Carried in | Carried out |")
+        lines.append("|-----------|------------------:|----------:|"
+                     "------------------:|-----------:|------------:|")
         for row in rows:
             if row.get("forecast") is None:
-                lines.append(f"| {row['workstream']} | — | — | — | — |")
+                lines.append(f"| {row['workstream']} | — | — | — | — | — |")
                 continue
             any_sprint = True
             lines.append(
                 f"| {row['workstream']} | {row['forecast']:.0f} | "
                 f"{row['done']:.0f} | {row['added_points']:.0f} | "
-                f"{row['carried']} |")
+                f"{row['carried']} | {len(row.get('carried_out') or [])} |")
         lines.append("")
+        epics = []
+        for row in rows:
+            for epic in row.get("epics") or []:
+                if epic not in epics:
+                    epics.append(epic)
+        if epics:
+            lines.append("Epics advanced")
+            lines.append("")
+            for epic in epics:
+                lines.append(f"- {epic}")
+            lines.append("")
+        done_cards, done_n = _sprint_cards(rows, "completed")
+        open_cards, open_n = _sprint_cards(rows, "unfinished")
+        if done_cards:
+            lines.append(f"Completed ({done_n})")
+            lines.append("")
+            for card in done_cards:
+                lines.append(f"- {card.get('key')} {card.get('summary') or ''}".rstrip())
+            if done_n > len(done_cards):
+                lines.append(f"- {done_n - len(done_cards)} more")
+            lines.append("")
+        if open_cards:
+            lines.append(f"Incomplete ({open_n})")
+            lines.append("")
+            for card in open_cards:
+                lines.append(f"- {card.get('key')} {card.get('summary') or ''}".rstrip())
+            if open_n > len(open_cards):
+                lines.append(f"- {open_n - len(open_cards)} more")
+            lines.append("")
+        if cfg is not None:
+            from core import checklist
+            items = checklist.definition_items(cfg, product)
+            if items:
+                lines.append("Definition of Done")
+                lines.append("")
+                for item in items:
+                    lines.append(f"- {item.get('text')}")
+                lines.append("")
     if not any_sprint:
         lines.append("_No open sprint._")
         lines.append("")
@@ -245,7 +370,7 @@ def run_sprint(cfg, args):
             json.dump(payload, fh, indent=2, default=str)
         print(f"\nDone. Sprint metrics written to: {path}")
         return
-    text = render_sprint(sprint_name, groups)
+    text = render_sprint(sprint_name, groups, cfg=cfg)
     path = output.place(
         cfg, f"sprint_metrics_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))
@@ -256,9 +381,11 @@ def run_sprint(cfg, args):
 
 
 def run(cfg, args):
-    from core import audience
-    who = audience.level(cfg, args)
-    if who == "partner":
+    from core import report_profiles
+    profile_id = report_profiles.resolve(cfg, args)
+    privacy = report_profiles.privacy(profile_id)
+    who = privacy
+    if privacy == "partner":
         sys.exit("pm metrics has no partner view.")
     if getattr(args, "sprint", False):
         run_sprint(cfg, args)

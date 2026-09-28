@@ -65,11 +65,11 @@ def _prepare_report(cfg, author):
     return prepared, groups
 
 
-def _infer_sections(cfg, prepared, names):
+def _infer_sections(cfg, prepared, names, section_roles):
     from commands import report as report_cmd
     sections = []
-    if not prepared:
-        return sections
+    if not prepared or not section_roles:
+        return [(ws, "") for ws, _row in prepared]
     model.announce(cfg["model"], len(prepared), "pm warm report")
     for ws, row in prepared:
         model.tick(cfg["model"], ws["abbrev"])
@@ -77,32 +77,50 @@ def _infer_sections(cfg, prepared, names):
             cfg["model"], cfg["output"]["audience"],
             ws, row["items"], row["change_block"],
             comment_budget=comments.settings(cfg)["section_chars"],
-            cfg=cfg, material=report_cmd.section_material(cfg, row, names=names))
+            cfg=cfg, material=report_cmd.section_material(cfg, row, names=names),
+            section_roles=section_roles)
         sections.append((ws, body))
     return sections
 
 
 def _warm_report(cfg, levels):
+    """Cache the same section prompt `pm report` will send for each profile."""
     from commands import report as report_cmd
-    want_names = "pm" in levels
-    want_plain = any(level in levels for level in ("work", "leadership", "partner"))
-    plain = []
-    plain_prepared = []
-    plain_groups = []
-    if want_plain:
-        plain_prepared, plain_groups = _prepare_report(cfg, author=False)
-        plain = _infer_sections(cfg, plain_prepared, names=False)
-    if want_names:
-        # The named gather is what `pm report` sends. Its replies are cached
-        # on the way through; the leadership summary uses the nameless one.
-        named_prepared, _named_groups = _prepare_report(cfg, author=True)
-        _infer_sections(cfg, named_prepared, names=True)
-    if "leadership" in levels and plain:
+    from core import report_profiles
+    prepared_by_names = {}
+
+    def prepared_for(names):
+        if names not in prepared_by_names:
+            prepared_by_names[names] = _prepare_report(cfg, author=names)
+        return prepared_by_names[names]
+
+    cached = {}
+    profiles = []
+    for level in levels:
+        if level not in report_profiles.PROFILES:
+            raise SystemExit(
+                f"Unknown audience {level}. Use {', '.join(report_profiles.known())}.")
+        profiles.append(report_profiles.get(level))
+    for profile in profiles:
+        roles = report_profiles.sections(profile["id"])
+        names = report_profiles.names_people(profile["id"])
+        key = (names, roles)
+        if not roles or key in cached:
+            continue
+        prepared, groups = prepared_for(names)
+        cached[key] = (prepared, groups, _infer_sections(cfg, prepared, names, roles))
+    for profile in profiles:
+        if profile["id"] not in ("leadership", "partner"):
+            continue
+        names = False
+        roles = report_profiles.sections(profile["id"])
+        if (names, roles) in cached:
+            prepared, groups, sections = cached[(names, roles)]
+        else:
+            prepared, groups = prepared_for(names)
+            sections = [(ws, "") for ws, _row in prepared]
         report_cmd._audience_summaries(
-            cfg, plain_groups, plain_prepared, plain, "leadership")
-    if "partner" in levels and plain_prepared:
-        report_cmd._audience_summaries(
-            cfg, plain_groups, plain_prepared, plain, "partner")
+            cfg, groups, prepared, sections, profile["privacy"])
 
 
 def _warm_inbox(cfg):
@@ -130,10 +148,6 @@ def run(cfg, args):
         raw = getattr(args, "audience", None)
         if raw:
             levels = [part.strip() for part in str(raw).split(",") if part.strip()]
-            bad = [part for part in levels if part not in audience.LEVELS]
-            if bad:
-                raise SystemExit(
-                    f"Unknown audience {bad[0]}. Use {', '.join(audience.LEVELS)}.")
         else:
             levels = list(audience.settings(cfg)["warm"] or ["pm"])
         print("Warming report ...")

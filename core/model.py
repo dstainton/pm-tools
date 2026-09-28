@@ -596,7 +596,7 @@ def build_grouped_material(epics, loose_pages, comment_budget=6000,
 def infer_report_section(model_cfg, audience, workstream, items, change_block,
                          comment_budget=6000, cfg=None, material=None,
                          epics=None, loose_pages=None, page_budget=8000,
-                         register_entries=None):
+                         register_entries=None, section_roles=None):
     """Ask the local model to write the report section for one workstream.
 
     A list in `items` keeps the flat material the older callers send. Pass
@@ -616,6 +616,9 @@ def infer_report_section(model_cfg, audience, workstream, items, change_block,
         f"Material:\n{material}\n\n"
         f"{prompts.get(cfg, 'report.section_tail')}"
     )
-    return call_model(model_cfg,
-                      prompts.get(cfg, "report.section", audience=audience),
-                      user_content)
+    if section_roles:
+        system = prompts.section_prompt(
+            cfg, section_roles, audience=audience)
+    else:
+        system = prompts.get(cfg, "report.section", audience=audience)
+    return call_model(model_cfg, system, user_content)

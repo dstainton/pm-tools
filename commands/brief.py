@@ -87,14 +87,22 @@ def _risks(cfg, ws, since=None):
 
 
 def prep_level(cfg, args, previous):
-    """A saved meeting depth wins. Otherwise the install's role."""
-    from core import audience as audience_core
+    """Profile for this brief.
+
+    An explicit `--audience` wins. A saved leadership, partner, or pm depth
+    stays with that meeting. A saved generic `work` depth does not hide the
+    role's own documents.
+    """
+    from core import report_profiles
     if getattr(args, "audience", None):
-        return audience_core.resolve_shape(cfg, args)
+        return report_profiles.resolve(cfg, args)
+    saved_profile = (previous or {}).get("_profile")
+    if saved_profile in report_profiles.PROFILES:
+        return saved_profile
     saved = (previous or {}).get("_audience_level")
-    if saved:
+    if saved in ("leadership", "partner", "pm"):
         return saved
-    return audience_core.resolve_shape(cfg, None)
+    return report_profiles.resolve(cfg, None)
 
 
 def gather(cfg, audience_name, window=None, author=True):
@@ -360,15 +368,26 @@ def render_prep(audience, sections, last, level="pm", cfg=None):
             lines.append(f"- {link}" + (f" — {sentence}" if sentence else ""))
         lines.append("")
         docs = section.get("pages") or []
-        if level == "pm" and docs:
-            lines.append("### Documents changed")
-            lines.append("")
-            for page in docs[:5]:
-                title = page.get("title") or "page"
-                link = render_core.markdown_link(title, page.get("url"))
-                summary = page.get("summary") or ""
-                lines.append(f"- {link}" + (f" — {summary}" if summary else ""))
-            lines.append("")
+        from core import report_profiles
+        profile = (report_profiles.get(level)
+                   if level in report_profiles.PROFILES else None)
+        if profile and profile.get("brief_documents") and docs:
+            hints = profile.get("brief_doc_hints") or ()
+            chosen = [page for page in docs if report_profiles.page_matches(page, hints)]
+            if not hints:
+                chosen = list(docs)
+            elif profile.get("id") == "service-designer":
+                rest = [page for page in docs if page not in chosen]
+                chosen = chosen + rest[:2]
+            if chosen:
+                lines.append(f"### {profile.get('brief_doc_heading') or 'Documents changed'}")
+                lines.append("")
+                for page in chosen[:8]:
+                    title = page.get("title") or "page"
+                    link = render_core.markdown_link(title, page.get("url"))
+                    summary = page.get("summary") or ""
+                    lines.append(f"- {link}" + (f" — {summary}" if summary else ""))
+                lines.append("")
         from core import report_render
         records = [row for row in (section.get("registers") or [])
                    if (row.get("scope") or {}).get("product") in (None, product.get("abbrev"))
@@ -387,6 +406,9 @@ def run_prep(cfg, args):
     from core import audience as audience_core
     previous = state.load_state(_state_path(cfg, audience))
     level = prep_level(cfg, args, previous)
+    from core import report_profiles
+    privacy = (report_profiles.privacy(level)
+               if level in report_profiles.PROFILES else level)
     print(f"Preparing the brief for {audience} ({level}) ...")
     from core import window as window_core
     try:
@@ -395,9 +417,10 @@ def run_prep(cfg, args):
         sys.exit(str(exc))
     from core import audience as audience_core
     sections, snapshot, last = gather(
-        cfg, audience, window, author=audience_core.names_people(level))
+        cfg, audience, window, author=audience_core.names_people(privacy))
     text = render_prep(audience, sections, last, level, cfg=cfg)
-    snapshot["_audience_level"] = level
+    snapshot["_audience_level"] = privacy
+    snapshot["_profile"] = level
     path = output.place(
         cfg, f"brief_{_slug(audience)}_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

@@ -7,7 +7,7 @@ Defaults live in the code. The config file holds overrides only.
 
 ### `report.section`
 
-Writes one workstream's section of the weekly report from its Material. Change the wording or add team rules; keep {headings} so the report keeps its seven sections.
+Writes one workstream's section of the weekly report from its Material. Change the wording or add team rules; keep {headings} so the report keeps the headings for this profile.
 
 Used by: pm report, pm warm --report (one call per workstream).
 Placeholders: audience, empty_section, first_run_line, heading_changed, heading_decisions, heading_dependencies, heading_progress, heading_risks, heading_roadmap, heading_waiting, headings.
@@ -17,7 +17,7 @@ Write a weekly status note for {audience}.
 
 Use ONLY the CHANGE SUMMARY and the Material. Do not invent people, dates, status, or work.
 
-Output exactly these seven headings, in this order, and nothing else:
+Output exactly these headings, in this order, and nothing else:
 {headings}
 
 Rules:
@@ -28,7 +28,7 @@ Rules:
 5. A dated line under an item is a comment from this window. Use it for what changed, decisions, blockers, and risks, and cite that item's tag. A comment is not a status change.
 
 Example of one filled section:
-### {heading_progress}
+### {heading_changed}
 - Status endpoint is in review. [APS-10]
 - Certificate rotation cadence is decided. [D1]
 ```
@@ -40,7 +40,7 @@ Last line of the user message for the weekly section.
 Used by: pm report, pm warm --report.
 
 ```
-Write the seven sections now.
+Write the sections now.
 ```
 
 ### `brief.debrief`
@@ -312,6 +312,7 @@ Rules:
 3. After a fact, cite its tag like [APS-1] or [D2]. Use only tags in the Facts.
 4. Every Epic marked At risk appears under Risks to watch.
 5. Do not add a title or a reference list.
+6. Under Decisions needed, list a decision only when the Facts mark it for leadership. Other open decisions are not a request for a leadership decision. If none are marked for leadership, that section is exactly: Nothing this period.
 
 Example of one filled section:
 ### Risks to watch

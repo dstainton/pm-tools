@@ -13,6 +13,7 @@ Rules:
 3. After a fact, cite its tag like [APS-1] or [D2]. Use only tags in the Facts.
 4. Every Epic marked At risk appears under Risks to watch.
 5. Do not add a title or a reference list.
+6. Under Decisions needed, list a decision only when the Facts mark it for leadership. Other open decisions are not a request for a leadership decision. If none are marked for leadership, that section is exactly: Nothing this period.
 
 Example of one filled section:
 ### Risks to watch

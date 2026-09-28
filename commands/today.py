@@ -529,7 +529,7 @@ def _goal_lines(goal, width):
 
 
 def render_screen(bundle, actions, aging, today=None, cfg=None,
-                  links=False, width=None):
+                  links=False, width=None, dependencies=None):
     today = today or dt.date.today()
     open_n = len(bundle["open_items"])
     lines = [
@@ -654,6 +654,14 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
         lines.append("  Every in-scope item meets the team's ready agreement.")
     lines.append("")
     lines.append("`pm do N` previews, then writes after one confirmation.")
+    if dependencies is not None:
+        lines.append("")
+        lines.append("DEPENDENCIES")
+        if not dependencies:
+            lines.append("  No blocker links on the blocked items in this list.")
+        for line in dependencies:
+            lines.append(f"  {line}")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -677,9 +685,19 @@ def run_today(cfg, args):
     save_actions(bundle["opts"]["state_file"], payload)
     if getattr(args, "json", False):
         print(json.dumps({"actions": actions}, indent=2, default=str))
+    dependencies = None
+    if getattr(args, "all", False):
+        from core import dependencies as dependency_core
+        try:
+            rows = dependency_core.collect(cfg, bundle.get("open_items") or [], limit=15)
+            known = {item.get("key") for item in bundle.get("open_items") or [] if item.get("key")}
+            dependencies = dependency_core.lines_for(rows, known)
+        except Exception:                              # noqa: BLE001
+            dependencies = []
     print(render_screen(bundle, actions, aging, cfg=cfg,
                         links=terminal_links() and not getattr(args, "plain", False),
-                        width=terminal_width()))
+                        width=terminal_width(),
+                        dependencies=dependencies))
     print(f"\nActions saved to {bundle['opts']['state_file']}.")
 
 

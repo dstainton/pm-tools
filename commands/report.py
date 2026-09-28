@@ -468,12 +468,38 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
             for ws in streams:
                 body = by_ws.get(ws["abbrev"], (None, {}, ""))[2]
                 pulled = report_render.extract_sections(body, role_names)
+                waiting_name = prompts.heading(cfg, "report.section", "waiting")
                 for name in role_names:
                     chunk = report_render.strip_links(pulled.get(name) or "")
-                    if chunk:
+                    if not chunk:
+                        continue
+                    if name == waiting_name:
+                        team.append(
+                            f"{ws['abbrev']}, open decisions not marked for leadership: {chunk}")
+                    else:
                         team.append(f"{ws['abbrev']}, {name}: {chunk}")
             if team:
                 text += "\n\nFrom the team reports:\n" + "\n".join(team)
+            marked = []
+            other = []
+            for record in _register_records_from(prepared):
+                if record.get("type") != "decision":
+                    continue
+                for entry in record.get("entries") or []:
+                    if entry.get("change") not in ("new", "changed"):
+                        continue
+                    line = (
+                        f"- [{entry.get('ref') or 'D?'}] {entry.get('title')}. "
+                        f"{entry.get('summary') or ''}".rstrip()
+                    )
+                    if report_render._marked_for(entry, "leadership"):
+                        marked.append(line)
+                    else:
+                        other.append(line)
+            text += "\n\nDecisions marked for leadership:\n" + ("\n".join(marked) or "- none")
+            if other:
+                text += ("\n\nOther open decisions (not marked for leadership):\n"
+                         + "\n".join(other[:8]))
         model.tick(cfg["model"],
                    f"{product.get('abbrev') or 'product'} — writing the summary")
         if who == "leadership":
@@ -506,13 +532,13 @@ def _partner_facts(cfg, product, streams, by_ws):
                 continue
             total = epic.get("children_total") or 0
             done = epic.get("children_done") or 0
-            pct = f"{int(100 * done / total)}%" if total else "0%"
             phrase = {"new": "Planned", "done": "Delivered"}.get(
                 (epic.get("status_category") or "").lower(), "In progress")
             due = ""
             if opts.get("show_target_dates") and epic.get("due"):
                 due = f" | target {epic['due']}"
-            lines.append(f"- {epic.get('summary') or 'Feature'} | {phrase} | {pct} done{due}")
+            count = f"{done} of {total} items complete" if total else "no backlog items"
+            lines.append(f"- {epic.get('summary') or 'Feature'} | {phrase} | {count}{due}")
             titles = []
             excluded = {str(label).lower() for label in opts.get("exclude_labels") or []}
             for item in epic.get("items") or []:
@@ -566,6 +592,54 @@ def stamp_register_entries(row):
             by_key[matched].setdefault("register_entries", []).append(copied)
 
 
+def _dependency_lines(cfg, prepared):
+    """Blocker links for items already marked blocked. Capped inside collect."""
+    from core import dependencies
+    issues = []
+    known = set()
+    for _ws, row in prepared:
+        for epic in row.get("epics") or []:
+            if epic.get("key"):
+                known.add(epic["key"])
+            for item in epic.get("items") or []:
+                known.add(item.get("key"))
+                issues.append(item)
+        for item in row.get("items") or []:
+            if item.get("key"):
+                known.add(item["key"])
+                if item.get("source") == "Jira":
+                    issues.append(item)
+    try:
+        rows = dependencies.collect(cfg, issues, limit=15)
+    except Exception:                              # noqa: BLE001
+        return []
+    return dependencies.lines_for(rows, known)
+
+
+def _append_delivery(cfg, report, profile):
+    mode = (profile or {}).get("metrics") or "none"
+    if mode == "none":
+        return report
+    try:
+        from commands import metrics as metrics_cmd
+        if mode == "headline":
+            progress.start("Measuring delivery")
+            extra = metrics_cmd.render_headline(metrics_cmd.gather(cfg, 8), 8)
+        elif mode == "sprint":
+            progress.start("Measuring the open sprint")
+            sprint_name, groups = metrics_cmd.gather_sprint(cfg)
+            extra = metrics_cmd.render_sprint_context(sprint_name, groups)
+        elif mode == "pulse":
+            progress.start("Measuring delivery")
+            extra = metrics_cmd.render_pulse(metrics_cmd.gather(cfg, 8), 8)
+        else:
+            return report
+    except Exception as exc:                              # noqa: BLE001
+        print(f"Delivery note skipped: {exc}")
+        return report
+    return report.rstrip() + "\n\n" + extra
+
+
 def _register_records_from(prepared):
     for _ws, row in prepared:
         if row.get("registers"):
@@ -577,8 +651,12 @@ def run(cfg, args):
     """Entry point called by pm.py."""
     selected = cfg["_workstreams"]
 
-    who = audience.level(cfg, args)
-    if who == "partner" and getattr(args, "publish", False):
+    from core import report_profiles
+    profile_id = report_profiles.resolve(cfg, args)
+    profile = report_profiles.get(profile_id)
+    who = profile_id
+    privacy = profile["privacy"]
+    if privacy == "partner" and getattr(args, "publish", False):
         sys.exit("Read a partner report before it leaves. "
                  "Publish it with: pm publish <file>")
     state_path = audience.state_path(cfg, who, args)
@@ -605,7 +683,7 @@ def run(cfg, args):
     for index, ws in enumerate(selected, 1):
         label = progress.numbered(index, total, f"{ws['name']} ({ws['abbrev']})")
         row = prepare(cfg, ws, previous, window, skip_ids=skip_ids,
-                      progress_label=label, author=audience.names_people(who))
+                      progress_label=label, author=report_profiles.names_people(who))
         row["registers"] = found_registers
         stamp_register_entries(row)
         if not row["first_run"]:
@@ -628,9 +706,15 @@ def run(cfg, args):
 
     sections = []
     all_items = []
-    model.announce(cfg["model"], len(prepared), "pm report")
+    section_roles = report_profiles.sections(who)
+    if section_roles:
+        model.announce(cfg["model"], len(prepared), "pm report")
 
     for ws, row in prepared:
+        if not section_roles:
+            sections.append((ws, ""))
+            all_items += row["items"]
+            continue
         model.tick(cfg["model"],
                    f"{ws['abbrev']} — writing the section, "
                    f"{len(row['items'])} items")
@@ -639,7 +723,8 @@ def run(cfg, args):
             ws, row["items"], row["change_block"],
             comment_budget=comments.settings(cfg)["section_chars"],
             cfg=cfg, material=section_material(
-                cfg, row, names=audience.names_people(who)))
+                cfg, row, names=report_profiles.names_people(who)),
+            section_roles=section_roles)
         body, removed = citations.resolve(body, citations.citation_map(row["items"]))
         if removed:
             print(f"  ({ws['abbrev']}: {removed} citation removed — not in the material)")
@@ -667,17 +752,10 @@ def run(cfg, args):
         for epic in row.get("epics") or []:
             if epic.get("key") and not epic.get("url") and base:
                 epic["url"] = f"{base}/browse/{epic['key']}"
-    if who == "leadership":
-        summaries = _audience_summaries(cfg, groups, prepared, sections, who)
+    if privacy == "leadership":
+        summaries = _audience_summaries(cfg, groups, prepared, sections, privacy)
         report = report_render.render_leadership(cfg, groups, prepared, summaries, window)
-        try:
-            from commands import metrics as metrics_cmd
-            progress.start("Measuring delivery")
-            report = report.rstrip() + "\n\n" + metrics_cmd.render_headline(
-                metrics_cmd.gather(cfg, 8), 8)
-        except Exception as exc:                              # noqa: BLE001
-            print(f"Delivery table skipped: {exc}")
-    elif who == "partner":
+    elif privacy == "partner":
         opts = audience.settings(cfg)["partner"]
         visible = []
         for ws, row in prepared:
@@ -688,7 +766,7 @@ def run(cfg, args):
             sys.exit("No Epic is marked for partners. Add the label "
                      "partner-visible to an Epic, or set partner_visible: true "
                      "on a workstream.")
-        summaries = _audience_summaries(cfg, groups, prepared, sections, who)
+        summaries = _audience_summaries(cfg, groups, prepared, sections, privacy)
         report = report_render.render_partner(cfg, groups, prepared, summaries, window)
         names = set()
         for _ws, row in prepared:
@@ -702,15 +780,12 @@ def run(cfg, args):
         if removed:
             print(f"{removed} line{'s' if removed != 1 else ''} removed")
     else:
+        dependency_lines = _dependency_lines(cfg, prepared)
         report = report_render.render_pm(
             cfg, groups, prepared, sections, window, scope_note, who=who,
-            team_pages=team)
-    if who in ("pm", "work"):
-        try:
-            from commands import metrics as metrics_cmd
-            report = report.rstrip() + "\n\n" + metrics_cmd.render(metrics_cmd.gather(cfg, 8), 8)
-        except Exception as exc:                              # noqa: BLE001
-            print(f"Metrics appendix skipped: {exc}")
+            team_pages=team, sources=report_profiles.sources_mode(who, args),
+            dependencies=dependency_lines)
+    report = _append_delivery(cfg, report, profile)
     out_path = output.place(
         cfg, audience.output_name(cfg, who, dt.date.today().isoformat()),
         getattr(args, "out", None))

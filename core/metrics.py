@@ -261,13 +261,42 @@ def sprint_snapshot(issues, sprint, epic_types=("Epic",)):
                 carried += 1
         if finished and (not start or finished >= start):
             done_points += points
+    completed = []
+    unfinished = []
+    for issue in issues or []:
+        if _is_epic_type(issue, epic_types):
+            continue
+        finished = done_on(issue)
+        if start and finished and finished < start:
+            continue
+        card = {
+            "key": issue.get("key") or "",
+            "summary": issue.get("summary") or "",
+            "epic": issue.get("epic") or issue.get("parent") or "",
+            "points": issue.get("story_points") or 0,
+        }
+        if finished and (not start or finished >= start):
+            completed.append(card)
+        elif not finished:
+            unfinished.append(card)
+    carried_out = [card for card in unfinished if card["key"] not in added_keys]
+    epics = []
+    for card in completed:
+        epic = card.get("epic")
+        if epic and epic not in epics:
+            epics.append(epic)
     return {
         "name": sprint.get("name") or "",
+        "goal": (sprint.get("goal") or "").strip(),
         "forecast": forecast,
         "done": done_points,
         "added_points": added_points,
         "added": added["added"],
         "carried": carried,
+        "completed": completed,
+        "unfinished": unfinished,
+        "carried_out": carried_out,
+        "epics": epics,
     }
 
 

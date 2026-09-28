@@ -24,7 +24,7 @@ Write a weekly status note for {audience}.
 Use ONLY the CHANGE SUMMARY and the Material. Do not invent people, dates, \
 status, or work.
 
-Output exactly these seven headings, in this order, and nothing else:
+Output exactly these headings, in this order, and nothing else:
 {headings}
 
 Rules:
@@ -40,12 +40,12 @@ what changed, decisions, blockers, and risks, and cite that item's tag. \
 A comment is not a status change.
 
 Example of one filled section:
-### {heading_progress}
+### {heading_changed}
 - Status endpoint is in review. [APS-10]
 - Certificate rotation cadence is decided. [D1]
 """
 
-REPORT_SECTION_TAIL = "Write the seven sections now."
+REPORT_SECTION_TAIL = "Write the sections now."
 
 BRIEF_DEBRIEF = """\
 Extract decisions and actions from these meeting notes.
@@ -195,6 +195,7 @@ Rules:
 3. After a fact, cite its tag like [APS-1] or [D2]. Use only tags in the Facts.
 4. Every Epic marked At risk appears under Risks to watch.
 5. Do not add a title or a reference list.
+6. Under Decisions needed, list a decision only when the Facts mark it for leadership. Other open decisions are not a request for a leadership decision. If none are marked for leadership, that section is exactly: Nothing this period.
 
 Example of one filled section:
 ### Risks to watch
@@ -254,25 +255,25 @@ PROMPTS = {
         "pm report, pm warm --report (one call per workstream)",
         "Writes one workstream's section of the weekly report from its "
         "Material. Change the wording or add team rules; keep {headings} so "
-        "the report keeps its seven sections.",
+        "the report keeps the headings for this profile.",
         REPORT_SECTION,
         runtime=("audience",),
         values={
-            "empty_section": "No update this week.",
-            "first_run_line": "First report — no prior week to compare against.",
+            "empty_section": "No update in this window.",
+            "first_run_line": "First report. No earlier window to compare against.",
         },
         headings=(
-            ("changed", "What changed since last week"),
-            ("progress", "Progress this sprint"),
-            ("roadmap", "Roadmap status"),
-            ("decisions", "Decisions since last report"),
-            ("dependencies", "Open dependencies"),
-            ("waiting", "Decisions we are waiting on"),
+            ("changed", "Changed"),
+            ("progress", "Progress"),
+            ("roadmap", "Roadmap"),
+            ("decisions", "Decisions made"),
+            ("dependencies", "Dependencies"),
+            ("waiting", "Decisions needed"),
             ("risks", "Risks"),
         ),
         required=("headings", "empty_section", "first_run_line"),
         append_at="Example of one filled section:",
-        version=2,
+        version=3,
     ),
     "report.section_tail": _entry(
         "pm report, pm warm --report",
@@ -373,6 +374,7 @@ PROMPTS = {
         "One portfolio summary per product, from Epic facts. Cite Epic keys "
         "and document tags only.",
         LEADERSHIP,
+        version=2,
     ),
     "report.partner": _entry(
         "pm report --audience partner",
@@ -537,6 +539,23 @@ def get(cfg, prompt_id, **runtime):
 def headings(cfg, prompt_id="report.section"):
     """Tuple of heading texts in role order, after config overrides."""
     return tuple(text for _role, text in effective(cfg, prompt_id)["headings"])
+
+
+def section_prompt(cfg, roles, prompt_id="report.section", **runtime):
+    """The section prompt with only the heading roles in `roles`.
+
+    Order follows the built-in heading list. An empty `roles` returns the
+    full prompt, which is what older callers send.
+    """
+    record = effective(cfg, prompt_id)
+    entry = PROMPTS[prompt_id]
+    pairs = list(record["headings"])
+    if roles:
+        wanted = set(roles)
+        pairs = [(role, text) for role, text in pairs if role in wanted]
+    values = _render_values(
+        {**entry, "_id": prompt_id}, record["values"], pairs, runtime)
+    return render(record["text"], values)
 
 
 def heading(cfg, prompt_id, role):

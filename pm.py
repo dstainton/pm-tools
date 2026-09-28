@@ -156,9 +156,10 @@ _SUBPARSERS = {}
 
 
 class _HelpFlag(argparse.Action):
-    """Print the short page, or the full flag list with --advanced, then stop.
+    """Print discovery help, or one command's complete page, then stop.
 
     Exits during parsing so a required argument does not block `pm do -h`.
+    `--advanced` is the same complete page.
     """
 
     def __init__(self, option_strings, dest, **kwargs):
@@ -173,10 +174,39 @@ class _HelpFlag(argparse.Action):
         elif advanced:
             text = helptext_core.advanced_page(_SUBPARSERS)
         else:
-            text = helptext_core.regular_page()
+            text = helptext_core.discovery_page(_optional_role(), _SUBPARSERS)
         sys.stdout.write(text)
         sys.stdout.flush()
         parser.exit(0)
+
+
+def _optional_role(explicit=None):
+    """The configured role when a settings file can be read. Never exits.
+
+    Help does not need a valid config. A broken file still shows commands.
+    """
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+    if os.environ.get("PM_CONFIG"):
+        candidates.append(os.environ["PM_CONFIG"])
+    candidates.append(os.path.join(os.getcwd(), "config.yaml"))
+    candidates.append(os.path.expanduser(config_file()))
+    for path in candidates:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            import yaml
+            with open(path, encoding="utf-8") as fh:
+                data = yaml.safe_load(fh) or {}
+        except (OSError, yaml.YAMLError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        role = data.get("role")
+        role = role.strip() if isinstance(role, str) else ""
+        return role or None
+    return None
 
 
 def selected_config(args):
@@ -202,9 +232,9 @@ class _Parser(argparse.ArgumentParser):
 def build_parser():
     help_opts = argparse.ArgumentParser(add_help=False)
     help_opts.add_argument("-h", "--help", action=_HelpFlag, dest="help_requested",
-                           help="Show typical commands, or this command's usual flags")
+                           help="Show what to type, or how to run this command")
     help_opts.add_argument("--advanced", action="store_true",
-                           help="With -h, list every command or every flag")
+                           help="Same as the complete help page")
 
     parser = _Parser(
         prog=_prog_name(), description="pm-tools CLI", parents=[help_opts])
@@ -398,10 +428,17 @@ def build_parser():
     p_report.add_argument("--since", metavar="YYYY-MM-DD",
                           help="Start of the window. Does not move last-report memory.")
     p_report.add_argument("--sprint", nargs="?", const="open", default=None,
+                          metavar="SPRINT",
                           help="This Sprint (open), a number (138), or last")
-    p_report.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
+    p_report.add_argument("--audience",
+                          choices=["pm", "work", "leadership", "partner",
+                                   "analyst", "developer", "service-designer"],
                           help="Who the report is for (default: role, else "
-                               "audiences.default, else pm)")
+                               "audiences.default, else pm). work is the "
+                               "generic internal report.")
+    p_report.add_argument("--sources", choices=["compact", "full"], default=None,
+                          help="compact keeps inline citations (default). "
+                               "full adds the source tables.")
     p_report.add_argument("--json", action="store_true",
                           help="Also write the gathered report as JSON")
     p_report.set_defaults(func=report.run, needs_config=True)
@@ -487,10 +524,14 @@ def build_parser():
     p_metrics.add_argument("--weeks", type=int, default=None,
                            help="How many weeks back (default: metrics.weeks or 8)")
     p_metrics.add_argument("--sprint", nargs="?", const="open", default=None,
+                           metavar="SPRINT",
                            help="Open sprint, a sprint number, or last")
-    p_metrics.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
-                           help="pm and work show the full tables; leadership a "
-                                "headline; partner is refused")
+    p_metrics.add_argument("--audience",
+                           choices=["pm", "work", "leadership", "partner",
+                                    "analyst", "developer", "service-designer"],
+                           help="pm, work, analyst, developer, and "
+                                "service-designer show the full tables; "
+                                "leadership a headline; partner is refused")
     p_metrics.add_argument("--json", action="store_true",
                            help="Write the numbers as JSON")
     p_metrics.set_defaults(func=metrics.run, needs_config=True)
@@ -506,7 +547,9 @@ def build_parser():
                          help="With --debrief, create the action tickets")
     p_brief.add_argument("--publish", action="store_true",
                          help="Also send the brief to Confluence and/or Teams")
-    p_brief.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
+    p_brief.add_argument("--audience",
+                         choices=["pm", "work", "leadership", "partner",
+                                  "analyst", "developer", "service-designer"],
                          help="How deep the prep goes (default: the level saved "
                               "for this meeting, else role)")
     p_brief.add_argument("--since", metavar="YYYY-MM-DD",
@@ -569,6 +612,9 @@ def build_parser():
         help="Team working agreement (pass/fail)",
         description="Team working agreement: pass/fail per ticket. "
                     "too-big-for-a-sprint blocks only when it is listed.")
+    p_ready.add_argument("--plan", action="store_true",
+                         help="Planning view: ready work, refinement gaps, "
+                              "decisions, dependencies, and recent throughput")
     p_ready.add_argument("--deep", action="store_true",
                          help="Also run the model reviews as blocking checks")
     p_ready.add_argument("--fail-under", type=float, default=None,
@@ -651,7 +697,9 @@ def build_parser():
 
     p_help = sub.add_parser(
         "help", parents=[help_opts],
-        help="Typical commands, or every command with --advanced")
+        help="What to type, every command, or one command's syntax")
+    p_help.add_argument("topic", nargs="?", default=None,
+                        help="all, roles, or a command name")
     p_help.set_defaults(needs_config=False)
 
     global _SUBPARSERS
@@ -698,8 +746,19 @@ def main():
     command = getattr(args, "command", None)
     advanced = "--advanced" in sys.argv[1:]
     if command in (None, "help"):
-        page = (helptext_core.advanced_page(parser._pm_subs) if advanced
-                else helptext_core.regular_page())
+        topic = getattr(args, "topic", None) if command == "help" else None
+        role = _optional_role(getattr(args, "config_global", None))
+        if advanced or topic == "all":
+            page = helptext_core.all_page(parser._pm_subs)
+        elif topic == "roles":
+            page = helptext_core.roles_page()
+        elif topic:
+            child = parser._pm_subs.get(topic)
+            if child is None:
+                sys.exit(f"Unknown command {topic}. Run: pm help all")
+            page = helptext_core.command_page(child, topic)
+        else:
+            page = helptext_core.discovery_page(role, parser._pm_subs)
         print(page, end="")
         return
     if advanced:
