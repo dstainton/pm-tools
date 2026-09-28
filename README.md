@@ -369,7 +369,7 @@ pm schedule add warm --at 07:00
 | Command | What it does |
 |---|---|
 | `pm lint` | Checks every ticket against simple rules: estimate, parent, dates, acceptance criteria, stalled work. |
-| `pm ready` | Pass or fail per ticket against your team's ready rules. `--deep` also asks the AI model. |
+| `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also asks the AI model. |
 | `pm refine` | Drafts missing titles, acceptance criteria, and estimates into a file you edit. `--apply` sends what you kept to Jira. |
 | `pm review` | Asks the AI model which titles are unclear and which acceptance criteria are incomplete. |
 | `pm coverage` | Open tickets no workstream owns, tickets two workstreams both claim, and Components nobody uses. |
@@ -378,9 +378,9 @@ pm schedule add warm --at 07:00
 
 | Command | What it does |
 |---|---|
-| `pm report` | The weekly update. `role` in the settings file chooses it: the full report, the same detail without people's names, a short Epic report for leadership, or a page safe to share with a partner. `--audience` overrides that for one run. |
-| `pm brief --for "NAME"` | Meeting preparation for one group. `--debrief notes.md` turns your meeting notes into decisions and actions. |
-| `pm metrics` | How much the team finishes each week, how long work takes, and a likely finish date. |
+| `pm report` | The update for your role. Product management opens on what needs attention. Analyst, developer, and service designer each get a different report. Leadership stays short. Partner stays safe to send outside the team. `--audience` overrides the role for one run. `--sources full` adds the source tables. |
+| `pm brief --for "NAME"` | Meeting preparation for one group, including the documents that role cares about. `--debrief notes.md` turns your meeting notes into decisions and actions. |
+| `pm metrics` | How much the team finishes each week, how long work takes, and a projected finish date. `pm metrics --sprint` is the Sprint review. |
 | `pm release-notes` | Finished work since a date (`--since`) or in a release (`--version`). |
 | `pm publish FILE` | Sends a report to Confluence or Microsoft Teams, after you confirm. |
 
@@ -397,7 +397,7 @@ pm schedule add warm --at 07:00
 | `pm update` | Installs the latest version and adds any new settings to your file. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
 
-`pm` and `pm help` list the everyday commands. `pm report -h` lists the usual flags for that command. Add `--advanced` when you want every command or every flag.
+`pm` and `pm help` list the commands for your role, when the settings file has one. `pm help all` lists every command. `pm <command> -h` shows how to run that command, including the required words and the flags. `pm help roles` explains the sets. `--advanced` is the same complete page.
 
 ### Options that work everywhere
 
@@ -490,7 +490,7 @@ Keep in mind:
 - [docs/EVERYDAY.md](docs/EVERYDAY.md): everyday commands and report windows.
 - [docs/roles/README.md](docs/roles/README.md): typical commands for each role, with examples.
 - [docs/JOURNEYS.md](docs/JOURNEYS.md): a week for each role, and why the reports differ.
-- [docs/ROLE_REPORTS_PLAN.md](docs/ROLE_REPORTS_PLAN.md): how role reports, `pm me`, and the two help pages are shaped.
+- [docs/ROLE_REPORTS_PLAN.md](docs/ROLE_REPORTS_PLAN.md): the earlier role-report design, and what 0.14.0 changed.
 - [docs/DEPTH.md](docs/DEPTH.md): going further.
 - [docs/AUTOMATION.md](docs/AUTOMATION.md): scheduling, scripts, and Power Automate.
 - [docs/CUSTOMISING.md](docs/CUSTOMISING.md): changing the wording sent to

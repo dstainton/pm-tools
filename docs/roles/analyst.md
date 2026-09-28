@@ -14,9 +14,11 @@ pm refine --workstream SDX
 ```
 
 `pm lint` lists the gaps. The result follows fixed rules. `pm ready` is a
-pass or fail against the team's working agreement. `pm ready --deep` also
-asks the model, and that part is a suggestion you read before you act on
-it.
+pass or fail against the team's working agreement. `pm ready --plan` groups
+what is ready and what still needs refinement by Epic, with the reason, and
+sets the ready points beside recent throughput. That throughput is context,
+not a Sprint commitment. `pm ready --deep` also asks the model, and that
+part is a suggestion you read before you act on it.
 
 `pm refine` writes a worksheet. Delete a field to leave it unchanged.
 Apply what you kept:
@@ -75,8 +77,9 @@ Components nobody uses.
 role: analyst
 ```
 
-`pm report --sprint` is then the detailed report with people's names left
-out. You share that shape with the developer and the service designer.
+`pm report --sprint` is then the analyst report: decisions that affect
+requirements, changed requirement pages, dependencies, and Epic context.
+People's names stay off the page. Delivery metrics stay on `pm metrics`.
 
 ```text
 pm me

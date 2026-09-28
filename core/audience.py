@@ -1,8 +1,8 @@
-"""Who a report is for, and which install role selects that shape.
+"""Privacy for a report: who may be named, and what a partner may see.
 
-Shapes: pm (names people), work (the same detail without names), leadership,
-partner. `role` maps a person onto a shape. `--audience` overrides it for
-one run.
+Shapes: pm (names people), work (the same facts without names), leadership,
+partner. The report a role receives lives in `core.report_profiles`.
+`--audience` still overrides that profile for one run.
 """
 
 import os

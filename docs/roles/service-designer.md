@@ -13,13 +13,12 @@ pm report --sprint
 pm report --workstream SDX --sprint
 ```
 
-The report includes changed Confluence pages, the decision, risk, and ADR
-registers, and the Epics. `--sprint` is the open Sprint and does not move
-the memory of the last report.
-
-With `role: service-designer` in the settings file, this is the same detail
-without assignees, page editors, or comment authors. The design is in the
-[plan](../ROLE_REPORTS_PLAN.md).
+With `role: service-designer`, changed research, journey, blueprint, and
+service pages come first, then decisions and risks that affect the
+experience, then Epic movement. The header names the service designer
+role. Assignees, page editors, and comment authors stay off the page.
+`--sprint` is the open Sprint and does not move the memory of the last
+report. Delivery metrics are not appended.
 
 ## A design review
 
@@ -27,7 +26,8 @@ without assignees, page editors, or comment authors. The design is in the
 pm brief --for "Design review"
 ```
 
-What changed since you last prepared that meeting. After the review:
+What changed since you last prepared that meeting, including changed
+service documentation. After the review:
 
 ```text
 pm brief --for "Design review" --debrief notes.md
@@ -62,8 +62,9 @@ pm report --config ~/.pm-tools/service.yaml --sprint
 role: service-designer
 ```
 
-That selects the detailed report with people's names left out. You share
-that shape with the analyst and the developer.
+That selects the service-designer report. It is not the analyst report
+and it is not the developer report. `--audience work` is the older generic
+internal report, for one run.
 
 ```text
 pm me

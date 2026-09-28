@@ -608,9 +608,9 @@ workstreams:
 #   role: pm
 #   role: leadership
 #   role: partner
-#   role: analyst          # detailed report, no people's names
-#   role: developer        # same shape as analyst
-#   role: service-designer # same shape as analyst
+#   role: analyst          # requirements report, no people's names
+#   role: developer        # blockers, ADRs, and sprint context
+#   role: service-designer # service documentation before Epic detail
 # `pm me --summary` uses me.summary when you do not name a window.
 #   me:
 #     summary: sprint      # or a number of days, such as 14

@@ -33,7 +33,12 @@ is one ticket: status, parent, and link.
 ```text
 pm release-notes --since 2026-08-01
 pm release-notes --version 2.4
+pm metrics --sprint
 ```
+
+`pm metrics --sprint` is the Sprint review: the Sprint Goal, the forecast
+at the start, what was delivered, what was added after the start, what was
+carried in, and what is still open.
 
 `--audience leadership` shortens that to Epics. `--audience partner` is
 the page with keys and names removed, for someone outside the team.
@@ -63,8 +68,9 @@ of tickets assigned to you.
 role: developer
 ```
 
-`pm report` is then the detailed report without assignees or comment
-authors.
+`pm report` then leads with blockers, dependencies, ADRs, and technical
+decisions, plus Epic state and what shipped. It does not name assignees.
+It does not forecast the portfolio. Full delivery history is `pm metrics`.
 
 ```text
 pm me

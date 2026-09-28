@@ -267,6 +267,116 @@ def _gather_deep(cfg, ws, issues):
     return deep
 
 
+def _points(issue):
+    points = issue.get("story_points")
+    if isinstance(points, bool) or not isinstance(points, (int, float)):
+        return 0
+    return points if points > 0 else 0
+
+
+def _recent_throughput(cfg):
+    """Recent done-per-week, when the metrics fetch works. Never a commitment."""
+    try:
+        from commands import metrics as metrics_cmd
+        groups = metrics_cmd.gather(cfg, 8)
+    except Exception:                              # noqa: BLE001
+        return []
+    rates = []
+    for product, rows in groups:
+        for row in rows:
+            rates.append({
+                "product": product.get("abbrev") or "",
+                "workstream": row.get("workstream") or "",
+                "weekly_rate": row.get("weekly_rate") or 0,
+            })
+    return rates
+
+
+def render_plan(cfg, plan_rows, throughput=None):
+    """What is ready to plan, grouped by Epic, beside recent throughput."""
+    from core import blocked as blocked_core
+    lines = [
+        "## Planning",
+        "",
+        "_Ready items can be planned. Throughput is recent history, not a "
+        "Sprint commitment and not a recommendation._",
+        "",
+    ]
+    ready_points = 0
+    ready_count = 0
+    refine = []
+    by_epic = {}
+    blocked_lines = []
+    for ws, verdicts, issues in plan_rows:
+        by_key = {issue.get("key"): issue for issue in issues}
+        for verdict in verdicts:
+            issue = by_key.get(verdict["key"]) or {}
+            epic = issue.get("epic") or "No Epic"
+            bucket = by_epic.setdefault(epic, {"ready": [], "not": [], "ws": ws})
+            points = _points(issue)
+            if verdict["ready"]:
+                ready_count += 1
+                ready_points += points
+                bucket["ready"].append((verdict, points))
+            else:
+                reasons = "; ".join(
+                    item.get("reason") or item.get("criterion") or ""
+                    for item in verdict.get("failed") or [])
+                bucket["not"].append((verdict, reasons))
+                refine.append((verdict, reasons, ws))
+            if blocked_core.is_blocked(issue, cfg):
+                blocked_lines.append(
+                    f"- {verdict['key']} {verdict.get('title') or ''} "
+                    f"({ws.get('abbrev')}) is blocked")
+    lines.append(f"Ready to plan: {ready_count} item(s), {ready_points:g} point(s).")
+    lines.append("")
+    lines.append("### By Epic")
+    lines.append("")
+    if not by_epic:
+        lines.append("_No items in the ready scope._")
+        lines.append("")
+    for epic, bucket in by_epic.items():
+        ws = bucket["ws"]
+        lines.append(f"**{epic}** ({ws.get('abbrev')})")
+        lines.append("")
+        if bucket["ready"]:
+            lines.append("Ready:")
+            for verdict, points in bucket["ready"]:
+                point_bit = f", {points:g} pt" if points else ""
+                lines.append(f"- {verdict['key']} {verdict.get('title') or ''}{point_bit}")
+            lines.append("")
+        if bucket["not"]:
+            lines.append("Needs refinement:")
+            for verdict, reasons in bucket["not"]:
+                why = f" ({reasons})" if reasons else ""
+                lines.append(f"- {verdict['key']} {verdict.get('title') or ''}{why}")
+            lines.append("")
+    if blocked_lines:
+        lines.append("### Open dependencies")
+        lines.append("")
+        lines.extend(blocked_lines[:12])
+        lines.append("")
+    if throughput:
+        lines.append("### Recent throughput")
+        lines.append("")
+        lines.append("| Workstream | Done per week |")
+        lines.append("|------------|-------------:|")
+        for row in throughput:
+            lines.append(f"| {row['workstream']} | {row['weekly_rate']:.1f} |")
+        lines.append("")
+        lines.append(
+            "Compare the ready points with this rate yourself. "
+            "pm-tools does not choose a Sprint load."
+        )
+        lines.append("")
+    else:
+        lines.append(
+            "Recent throughput was not available. `pm metrics` has the full history."
+        )
+        lines.append("")
+    return "\n".join(lines)
+
+
 def run(cfg, args):
     lint_cfg = cfg.get("lint", {})
     ready_cfg = cfg.get("ready", {})
@@ -276,6 +386,7 @@ def run(cfg, args):
     deep = getattr(args, "deep", False)
 
     results = []
+    plan_rows = []
     reminders = []
     gaps = []
     seen_reminders = set()
@@ -310,6 +421,8 @@ def run(cfg, args):
         print(f"  {len(issues)} items — {ready_n} ready, "
               f"{len(issues) - ready_n} not ready.")
         results.append((ws, verdicts))
+        if getattr(args, "plan", False):
+            plan_rows.append((ws, verdicts, issues))
 
         if any(item.get("label") for item in items):
             done_jql = workstreams.scope_jql(
@@ -324,6 +437,11 @@ def run(cfg, args):
         getattr(args, "out", None))
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(report)
+    if getattr(args, "plan", False):
+        plan = render_plan(cfg, plan_rows, _recent_throughput(cfg))
+        with open(out_path, "a", encoding="utf-8") as fh:
+            fh.write("\n" + plan)
+        print(plan)
     print(f"\nDone. Readiness report written to: {out_path}")
 
     fail_under = getattr(args, "fail_under", None)

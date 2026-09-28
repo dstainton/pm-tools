@@ -567,10 +567,9 @@ class ReportTests(CliTestCase):
         self.assertIn("Fake model reply for the end-to-end test", report)
         self.assertIn("## Sources", report)
         self.assertNotIn("## References", report)
-        self.assertIn("**[APS-1](", report)
+        self.assertIn("**[APS-1 Secure exchange platform](", report)
         self.assertIn(f"{self.jira.url}/browse/APS-10", report)
-        # The roadmap half of the gather is the workstream's epic.
-        self.assertIn("APS-1 Secure exchange platform", report)
+        self.assertIn(f"{self.jira.url}/browse/APS-1", report)
         self.assertTrue(os.path.exists(os.path.join(self.dir,
                                                     "report_state.json")))
 

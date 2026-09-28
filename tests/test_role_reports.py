@@ -142,7 +142,7 @@ class BriefAndMetricsTests(unittest.TestCase):
                                   {"_audience_level": "leadership"})
         self.assertEqual(saved, "leadership")
         fresh = brief.prep_level(cfg, Namespace(audience=None), None)
-        self.assertEqual(fresh, "work")
+        self.assertEqual(fresh, "service-designer")
         forced = brief.prep_level(cfg, Namespace(audience="pm"), None)
         self.assertEqual(forced, "pm")
 

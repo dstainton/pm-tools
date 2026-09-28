@@ -5,13 +5,14 @@ person are in [docs/roles](roles/README.md). This file is the reasoning
 behind those pages. The design is in
 [ROLE_REPORTS_PLAN.md](ROLE_REPORTS_PLAN.md).
 
-Four report shapes exist. **Product management** (`pm`) is the full file,
-and it names people. **Team** (`work`) is that same file with people's
-names left out. The analyst, the developer, and the service designer share
-it. **Leadership** and **Partners** are the shorter files. Each shape keeps
-its own file and its own memory of the last run.
+A role chooses the report. Privacy is separate: only the product-management
+report names people. The analyst, the developer, and the service designer
+each get their own report, and none of those reports name people.
+**Leadership** and **Partners** stay the shorter files. `work` is the older
+generic internal report, available with `--audience work`. Each profile
+keeps its own file and its own memory of the last run.
 
-`role` in the settings file chooses the shape. A missing `role` means
+`role` in the settings file chooses the profile. A missing `role` means
 `pm`. `audiences.default` applies only when `role` is absent. `--audience`
 wins for one run.
 
@@ -27,9 +28,9 @@ file.
 | Product manager | `role: pm`, or no `role` at all. The full report names people. `pm me --who` can show a colleague's open work. | They do. |
 | Leadership | `role: leadership`. The short Epic report. Names stay off the page. | The product manager, who then sends the file. A leader with several teams uses one settings file each. |
 | Partner | `role: partner`. The page that is safe to send. `pm metrics` stops if you ask for this audience. | The product manager. The brief is preparation, and the file says to keep it internal. |
-| Business analyst | `role: analyst`, which selects `work`. Refinement stays `pm lint`, `pm ready`, and `pm refine`. | They do, from their own settings file or a shared one. |
-| Developer | `role: developer`, which selects `work`. Daily Scrum, ready, and one ticket stay as they are. `pm me` is their own open work. | They do. |
-| Service designer | `role: service-designer`, which selects `work`. The report includes pages, decisions, and Epics, without people's names. | They do. |
+| Business analyst | `role: analyst`. The report leads with refinement, requirement changes, and decisions. `pm ready --plan` is the planning view. | They do, from their own settings file or a shared one. |
+| Developer | `role: developer`. The report leads with blockers, dependencies, ADRs, and what shipped. `pm me` is their own open work. | They do. |
+| Service designer | `role: service-designer`. Changed service documentation comes before Epic detail. The design-review brief includes those pages. | They do. |
 
 ## Role in the config
 
@@ -37,14 +38,14 @@ file.
 role: pm
 ```
 
-| `role` | Shape |
-|---|---|
-| `pm` | `pm` |
-| `leadership` | `leadership` |
-| `partner` | `partner` |
-| `analyst` | `work` |
-| `developer` | `work` |
-| `service-designer` | `work` |
+| `role` | Report | Names people |
+|---|---|---|
+| `pm` | Product management | Yes |
+| `leadership` | Portfolio | No |
+| `partner` | External | No |
+| `analyst` | Requirements and refinement | No |
+| `developer` | Blockers, ADRs, and delivery context | No |
+| `service-designer` | Service documentation and experience decisions | No |
 
 `pm report`, `pm metrics`, `pm release-notes`, and the first `pm brief` for a meeting read this value when you leave `--audience` off. Someone who always wants the leadership file sets `role: leadership` once, and passes `--audience partner` only for the file that leaves the building.
 
@@ -132,7 +133,7 @@ The partner file has its own memory. A partner report on Monday does not change 
 
 ## Business analyst
 
-The work is the refinement afternoon inside the product manager's week. The commands are on the [analyst](roles/analyst.md) page. `role: analyst` makes `pm report` the detailed file with people's names left out. `pm me` is their own open work.
+The work is the refinement afternoon inside the product manager's week. The commands are on the [analyst](roles/analyst.md) page. `role: analyst` makes `pm report` the requirements report: decisions that affect requirements, changed requirement pages, dependencies, and Epic context. It does not append delivery metrics. `pm ready --plan` groups ready and not-ready work by Epic and sets that beside recent throughput, without choosing a Sprint load. `pm me` is their own open work.
 
 What they need:
 
@@ -166,7 +167,7 @@ What this journey does not change:
 
 ## Developer
 
-"Developer" here means someone on the Scrum team building the product. It is not the "For developers" section of the README, which is about changing pm-tools itself. The commands are on the [developer](roles/developer.md) page. `role: developer` selects the detailed report without people's names.
+"Developer" here means someone on the Scrum team building the product. It is not the "For developers" section of the README, which is about changing pm-tools itself. The commands are on the [developer](roles/developer.md) page. `role: developer` selects a report that leads with blockers, dependencies, ADRs, and technical decisions. It does not list the whole documentation inventory, and it does not forecast the portfolio. `pm metrics --sprint` is the Sprint review.
 
 What they need:
 
@@ -202,15 +203,15 @@ What they need:
 - One ticket when a story touches a step in the journey.
 - The same Sprint window the product manager uses, when they are preparing a review.
 
-With `role: service-designer`, `pm report` is the detailed file and it does not name assignees, comment authors, or page editors:
+With `role: service-designer`, `pm report` names that role in the header and does not name assignees, comment authors, or page editors. Changed service pages come before Epic detail. Delivery metrics are not appended.
 
-1. `pm report` includes changed Confluence pages, the decision, risk, and ADR registers, and the Epics. That is the layer a design review starts from.
+1. `pm report` leads with research, journey, blueprint, and service pages, then decisions and risks that change the experience, then Epic movement.
 2. `pm report --sprint` is that same file for the open Sprint.
-3. `pm brief --for "Design review"` is what changed since the last design review.
+3. `pm brief --for "Design review"` includes the changed Confluence pages, not only the backlog.
 4. `pm show APS-30` is one ticket while they are looking at a step in the journey.
 5. `pm release-notes --since YYYY-MM-DD` is what finished, when they are checking whether the experience moved.
 
-They share that shape with the analyst and the developer. `pm me` is their own open work, and it ignores role.
+`pm me` is their own open work, and it ignores role.
 
 ## What the guide keeps
 
@@ -219,5 +220,7 @@ They share that shape with the analyst and the developer. `pm me` is their own o
 | Product manager | [product-manager.md](roles/product-manager.md). [START.md](START.md) is the short form. |
 | Leadership | [leadership.md](roles/leadership.md). One settings file per team when the teams do not share a project. |
 | Partner | [partner.md](roles/partner.md). The labelling step, and the brief kept internal. |
-| Business analyst, developer, service designer | One shared detailed report, `work`, without people's names. Refinement, the Daily Scrum, and one ticket stay as they are. |
+| Business analyst | [analyst.md](roles/analyst.md). Requirement report, plus `pm ready --plan`. |
+| Developer | [developer.md](roles/developer.md). Blockers, ADRs, and `pm metrics --sprint`. |
+| Service designer | [service-designer.md](roles/service-designer.md). Changed service documentation, including the design-review brief. |
 | Personal snapshot and summary | `pm me`. A snapshot is open work today. A summary is that work over a sprint or a number of days. Neither one follows role. |
