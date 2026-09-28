@@ -417,10 +417,77 @@ def dedupe_sprints(sprints):
     return unique
 
 
+# Agile list endpoints return 50 rows unless startAt/maxResults are sent.
+# A board on Sprint 139 keeps the open sprint off that first page.
+_AGILE_PAGE = 50
+_AGILE_PAGE_CAP = 40
+
+
+def _paged_values(url, params, auth, headers):
+    """Every `values` row from a paged Agile GET.
+
+    Stop on the last page, a short page, or a page that repeats ids already
+    seen. Some Jira sites ignore startAt and would otherwise loop.
+    A later page that fails keeps the rows already read. The first page
+    still raises, so the caller can skip a board with no sprint endpoint.
+    """
+    collected = []
+    seen = set()
+    start = 0
+    for _page in range(_AGILE_PAGE_CAP):
+        query = dict(params)
+        query["startAt"] = start
+        query["maxResults"] = _AGILE_PAGE
+        try:
+            resp = send("GET", url, params=query, auth=auth, headers=headers,
+                        timeout=30)
+            resp.raise_for_status()
+        except requests.RequestException:
+            if collected:
+                break
+            raise
+        body = resp.json() or {}
+        values = body.get("values") or []
+        fresh = []
+        for item in values:
+            key = item.get("id")
+            if key is None:
+                key = ("row", start, len(fresh))
+            if key in seen:
+                continue
+            seen.add(key)
+            fresh.append(item)
+        collected.extend(fresh)
+        if not values or not fresh or body.get("isLast") is True:
+            break
+        total = body.get("total")
+        start += len(values)
+        if total is not None and start >= int(total):
+            break
+        if len(values) < _AGILE_PAGE:
+            break
+    return collected
+
+
+def _sprint_record(sprint, board, project):
+    return {
+        "id": sprint.get("id"),
+        "name": sprint.get("name") or "",
+        "goal": (sprint.get("goal") or "").strip(),
+        "board": board.get("name") or "",
+        "project": project,
+        "start": (sprint.get("startDate") or "")[:10] or None,
+        "end": (sprint.get("endDate") or sprint.get("end") or "")[:10] or None,
+        "state": sprint.get("state") or "active",
+    }
+
+
 def fetch_sprints(cfg, project, states=("active",)):
     """Sprints for a project, if Agile is on.
 
     `states` is passed to the Agile API (`active`, `closed`, `future`).
+    Every page is read. Jira sends 50 sprints at a time, oldest first, so
+    the open sprint on a long-lived board is not on the first page.
     A sprint on more than one board is returned once. Returns [] when the
     endpoint is missing or the project has no board.
     """
@@ -431,38 +498,25 @@ def fetch_sprints(cfg, project, states=("active",)):
     auth = _auth(cfg)
     headers = {"Accept": "application/json"}
     try:
-        resp = send("GET",f"{base}/rest/agile/1.0/board",
-                            params={"projectKeyOrId": project},
-                            auth=auth, headers=headers, timeout=30)
-        resp.raise_for_status()
-        boards = resp.json().get("values") or []
+        boards = _paged_values(
+            f"{base}/rest/agile/1.0/board",
+            {"projectKeyOrId": project}, auth, headers)
     except requests.RequestException:
         return []
 
     sprints = []
-    for board in boards[:5]:
+    for board in boards:
         board_id = board.get("id")
         if board_id is None:
             continue
         try:
-            resp = send("GET",
+            raw = _paged_values(
                 f"{base}/rest/agile/1.0/board/{board_id}/sprint",
-                params={"state": state},
-                auth=auth, headers=headers, timeout=30)
-            resp.raise_for_status()
-            for sprint in resp.json().get("values") or []:
-                sprints.append({
-                    "id": sprint.get("id"),
-                    "name": sprint.get("name") or "",
-                    "goal": (sprint.get("goal") or "").strip(),
-                    "board": board.get("name") or "",
-                    "project": project,
-                    "start": (sprint.get("startDate") or "")[:10] or None,
-                    "end": (sprint.get("endDate") or sprint.get("end") or "")[:10] or None,
-                    "state": sprint.get("state") or "active",
-                })
+                {"state": state}, auth, headers)
         except requests.RequestException:
             continue
+        for sprint in raw:
+            sprints.append(_sprint_record(sprint, board, project))
     return dedupe_sprints(sprints)
 
 

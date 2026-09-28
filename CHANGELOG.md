@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1 - 2026-09-28
+
+- `pm report --sprint` finds the open sprint when the board has a long
+  history. Jira returns 50 sprints at a time, oldest first, so Sprint 139
+  was past the first page and the command said "No open Sprint." The same
+  lookup reads every board for the project, not only the first five.
+
 ## 0.12.0 - 2026-09-25
 
 - Long commands say what they are doing. A report names each step (Jira,

@@ -1,7 +1,9 @@
+import datetime as dt
 import unittest
 from unittest.mock import patch
 
 from core import sources
+from core import window as window_core
 
 
 class FakeResponse:
@@ -165,6 +167,94 @@ class ActiveSprintTests(unittest.TestCase):
                    side_effect=self._get(boards, {"1": [first, second]})):
             found = sources.fetch_active_sprints(CFG, "APS")
         self.assertEqual([s["id"] for s in found], [138, 139])
+
+    def test_open_sprint_past_the_first_page_is_the_current_sprint(self):
+        closed = [
+            {"id": i, "name": f"APS SP{i}", "state": "closed",
+             "startDate": "2020-01-01T00:00:00.000Z",
+             "endDate": "2020-01-14T00:00:00.000Z"}
+            for i in range(1, 51)
+        ]
+        current = {
+            "id": 139, "name": "APS SP139", "state": "active",
+            "startDate": "2026-09-15T00:00:00.000Z",
+            "endDate": "2026-09-29T00:00:00.000Z",
+        }
+        history = closed + [current]
+
+        def get(url, **kwargs):
+            params = kwargs.get("params") or {}
+            if url.rstrip("/").endswith("/board"):
+                return FakeResponse({
+                    "values": [{"id": 1, "name": "APS board"}],
+                    "isLast": True,
+                })
+            start = int(params.get("startAt") or 0)
+            page = history[start:start + 50]
+            return FakeResponse({
+                "values": page,
+                "startAt": start,
+                "maxResults": 50,
+                "total": len(history),
+                "isLast": start + 50 >= len(history),
+            })
+
+        class Args:
+            since = None
+            days = None
+            weeks = None
+            sprint = "open"
+
+        with patch("core.sources.requests.get", side_effect=get):
+            found = sources.fetch_sprints(
+                CFG, "APS", states=("active", "closed", "future"))
+            window = window_core.resolve(
+                {"jira": CFG}, Args(), projects=["APS"],
+                today=dt.date(2026, 9, 20))
+        self.assertIn(139, [s["id"] for s in found])
+        self.assertEqual(window["sprint_id"], 139)
+        self.assertEqual(window["label"], "APS SP139")
+        self.assertEqual(window["jql"], "sprint = 139")
+
+    def test_a_sprint_on_a_later_board_is_kept(self):
+        boards = [{"id": i, "name": f"board {i}"} for i in range(1, 7)]
+        current = {"id": 139, "name": "APS SP139", "state": "active",
+                   "endDate": "2026-09-29T00:00:00.000Z"}
+
+        def get(url, **kwargs):
+            if url.rstrip("/").endswith("/board"):
+                return FakeResponse({"values": boards, "isLast": True})
+            board_id = url.rstrip("/").split("/")[-2]
+            values = [current] if board_id == "6" else []
+            return FakeResponse({"values": values, "isLast": True})
+
+        with patch("core.sources.requests.get", side_effect=get):
+            found = sources.fetch_sprints(CFG, "APS", states=("active",))
+        self.assertEqual([s["id"] for s in found], [139])
+        self.assertEqual(found[0]["board"], "board 6")
+
+    def test_a_repeated_sprint_page_stops(self):
+        calls = {"n": 0}
+        page = [{"id": i, "name": f"APS SP{i}", "state": "closed"}
+                for i in range(1, 51)]
+
+        def get(url, **kwargs):
+            if url.rstrip("/").endswith("/board"):
+                return FakeResponse({
+                    "values": [{"id": 1, "name": "APS board"}],
+                    "isLast": True,
+                })
+            calls["n"] += 1
+            return FakeResponse({
+                "values": page,
+                "isLast": False,
+                "total": 5000,
+            })
+
+        with patch("core.sources.requests.get", side_effect=get):
+            found = sources.fetch_sprints(CFG, "APS", states=("closed",))
+        self.assertEqual(calls["n"], 2)
+        self.assertEqual(len(found), 50)
 
 
 if __name__ == "__main__":

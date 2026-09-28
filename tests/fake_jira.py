@@ -377,6 +377,27 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(length) or b"{}")
 
+    def _page(self, values, query):
+        """One Agile page. Jira defaults to 50 and sets isLast."""
+        try:
+            start = int((query.get("startAt") or ["0"])[0])
+        except (TypeError, ValueError):
+            start = 0
+        try:
+            size = int((query.get("maxResults") or ["50"])[0])
+        except (TypeError, ValueError):
+            size = 50
+        if size < 1:
+            size = 50
+        page = list(values)[start:start + size]
+        return {
+            "maxResults": size,
+            "startAt": start,
+            "total": len(values),
+            "isLast": start + size >= len(values),
+            "values": page,
+        }
+
     # -- GETs --------------------------------------------------------------
     def do_GET(self):                                # noqa: N802 — http.server API
         self.calls.append(("GET", self.path))
@@ -395,7 +416,7 @@ class _Handler(BaseHTTPRequestHandler):
         if match:
             board_id = match.group(1)
             values = self.sprints.get(str(board_id), self.sprints.get("default", []))
-            return self._send({"values": values})
+            return self._send(self._page(values, parse_qs(parsed.query)))
 
         if path.startswith("/rest/agile/1.0/board"):
             query = parse_qs(parsed.query)
@@ -403,7 +424,7 @@ class _Handler(BaseHTTPRequestHandler):
             boards = []
             if project and project in self.components:
                 boards.append({"id": 1, "name": f"{project} board"})
-            return self._send({"values": boards})
+            return self._send(self._page(boards, query))
 
         match = re.match(r"/rest/api/3/project/([^/]+)/statuses", path)
         if match:

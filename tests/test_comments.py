@@ -215,10 +215,11 @@ class MaterialTests(unittest.TestCase):
 
 class TriageQuoteTests(unittest.TestCase):
     def test_the_reply_line_quotes_the_mention(self):
-        issue = {"key": "APS-1", "updated": _stamp(NOW)}
+        recent = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+        issue = {"key": "APS-1", "updated": _stamp(recent)}
         me = {"accountId": "abc-1", "displayName": "Dana"}
         comment = {
-            "created": _stamp(NOW),
+            "created": _stamp(recent),
             "author": {"displayName": "Sam"},
             "body": {"type": "doc", "content": [{
                 "type": "paragraph",
