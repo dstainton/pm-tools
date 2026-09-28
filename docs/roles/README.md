@@ -13,6 +13,5 @@ next is in [the plan](../ROLE_REPORTS_PLAN.md).
 | Developer | [developer.md](developer.md) |
 | Service designer | [service-designer.md](service-designer.md) |
 
-Examples on these pages work today, except the sections marked Planned.
-`pm me`, `role:` in the settings file, and the detailed report that omits
-people's names are planned and not installed yet.
+The examples on these pages are commands you can run. `role` in the
+settings file chooses the report shape. `pm me` is your own open work.

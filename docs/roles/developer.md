@@ -57,9 +57,20 @@ in the file, after a confirmation. They are the product manager's writes.
 `pm today` is the whole open Sprint and the decisions in it, not the list
 of tickets assigned to you.
 
-## Planned
+## Your report
 
-`pm me` will be the open tickets assigned to the signed-in user, as they
-stand today. `pm me --sprint` will be your work over that Sprint. `role:
-developer` will make `pm report` the detailed report without assignees or
-comment authors. See the [plan](../ROLE_REPORTS_PLAN.md).
+```yaml
+role: developer
+```
+
+`pm report` is then the detailed report without assignees or comment
+authors.
+
+```text
+pm me
+pm me --sprint
+```
+
+`pm me` is the open tickets assigned to the signed-in user, as they stand
+today. `pm me --sprint` is your work over that Sprint. The design is in
+the [plan](../ROLE_REPORTS_PLAN.md).

@@ -106,13 +106,19 @@ pm publish ~/.pm-tools/out/weekly_report_leadership_2026-09-28.md
 pm show APS-30
 ```
 
-## Planned
+## Your own work
 
-`pm me` will be your own open work as it stands today, with no comparison
-to a previous date. `pm me --who "A. Lee"` will be the same page for
-someone else. `pm me --sprint` will be that person's work over a Sprint.
-Those commands are in the [plan](../ROLE_REPORTS_PLAN.md) and are not
-available yet.
+```text
+pm me
+pm me --who "A. Lee"
+pm me --sprint
+```
+
+`pm me` is the open work assigned to the signed-in account, as it stands
+today. It does not compare with a previous date, and it does not move the
+weekly report memory. `pm me --who "A. Lee"` is the same page for someone
+else. That flag is only available when the report shape is `pm`.
+`pm me --sprint` is the work finished and still open in the open Sprint.
 
 Other roles: [leadership](leadership.md), [partner](partner.md),
 [analyst](analyst.md), [developer](developer.md),

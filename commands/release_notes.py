@@ -53,7 +53,7 @@ def _row(product, ws, issue):
     }
 
 
-def collect(cfg, since, version):
+def collect(cfg, since, version, author=True):
     """Done issues in the window, grouped by the workstream that claims them.
 
     Issues no selected workstream claims land under Unassigned.
@@ -96,7 +96,7 @@ def collect(cfg, since, version):
                 issue))
     if rows and comments.settings(cfg).get("enabled"):
         progress.start("Reading comments")
-    _attach_comments(cfg, rows, since)
+    _attach_comments(cfg, rows, since, author=author)
     _walk_epics(cfg, rows)
     progress.finish()
     return rows
@@ -129,7 +129,7 @@ def _walk_epics(cfg, rows):
                 row["epic_summary"] = info["summary"]
 
 
-def _attach_comments(cfg, rows, since):
+def _attach_comments(cfg, rows, since, author=True):
     """Comments on or after --since. A version with no date keeps the newest few."""
     if not rows:
         return
@@ -139,7 +139,7 @@ def _attach_comments(cfg, rows, since):
         groups.setdefault(row.get("workstream_abbrev") or "—", []).append(row)
     jira = cfg.get("jira") or {}
     for group in groups.values():
-        comments.attach(cfg, jira, group, cutoff)
+        comments.attach(cfg, jira, group, cutoff, author=author)
 
 
 def bullet_lines(rows, comment_budget=6000, level="pm", cfg=None):
@@ -365,11 +365,11 @@ def run(cfg, args):
         sys.exit("Pass --since YYYY-MM-DD, --version NAME, or both.\n"
                  "  pm release-notes --since 2026-08-01\n"
                  "  pm release-notes --version 2026.9")
-    print("Gathering done issues ...")
-    rows = collect(cfg, since, version)
-    budget = comments.settings(cfg)["section_chars"]
     from core import audience
     level = audience.level(cfg, args)
+    print("Gathering done issues ...")
+    rows = collect(cfg, since, version, author=audience.names_people(level))
+    budget = comments.settings(cfg)["section_chars"]
     _mark_partner(cfg, rows)
     bullets = bullet_lines(rows, budget, level, cfg=cfg)
     prose = draft(cfg, bullets, level) if rows else None

@@ -37,22 +37,24 @@ def _warm_pages(cfg):
     page_summaries.fill(cfg, collected)
 
 
-def _warm_report(cfg, levels):
+def _prepare_report(cfg, author):
+    """The same gather `pm report` does for one shape, without writing a file."""
     from commands import report as report_cmd
     from core import products as product_core
+    from core import registers
+    from core import window as window_core
     state_path = output.place(
         cfg, cfg["output"].get("state_file", "report_state.json"), None)
     previous = state.load_state(state_path)
-    prepared = []
-    from core import window as window_core
     window = window_core.resolve(cfg, None, default_start=None, projects=[])
-    from core import registers
     found_registers, skip_ids = registers.gather(cfg, window, previous)
+    prepared = []
     streams = cfg["_workstreams"]
     for index, ws in enumerate(streams, 1):
         label = progress.numbered(index, len(streams), f"{ws['name']} ({ws['abbrev']})")
-        row = report_cmd.prepare(cfg, ws, previous, window, skip_ids=skip_ids,
-                                progress_label=label)
+        row = report_cmd.prepare(
+            cfg, ws, previous, window, skip_ids=skip_ids,
+            progress_label=label, author=author)
         row["registers"] = found_registers
         report_cmd.stamp_register_entries(row)
         prepared.append((ws, row))
@@ -60,22 +62,47 @@ def _warm_report(cfg, levels):
     if report_cmd._will_read_product_pages(cfg):
         progress.start("Reading product pages")
     report_cmd._attach_product_pages(cfg, groups, prepared, window, skip_ids)
+    return prepared, groups
+
+
+def _infer_sections(cfg, prepared, names):
+    from commands import report as report_cmd
     sections = []
-    if "pm" in levels or "leadership" in levels:
-        model.announce(cfg["model"], len(prepared), "pm warm report")
-        for ws, row in prepared:
-            model.tick(cfg["model"], ws["abbrev"])
-            body = model.infer_report_section(
-                cfg["model"], cfg["output"]["audience"],
-                ws, row["items"], row["change_block"],
-                comment_budget=comments.settings(cfg)["section_chars"],
-                cfg=cfg, material=report_cmd.section_material(cfg, row))
-            sections.append((ws, body))
-    if "leadership" in levels and sections:
-        report_cmd._audience_summaries(cfg, groups, prepared, sections, "leadership")
-    if "partner" in levels:
-        report_cmd._audience_summaries(cfg, groups, prepared, sections or [
-            (ws, "") for ws, _row in prepared], "partner")
+    if not prepared:
+        return sections
+    model.announce(cfg["model"], len(prepared), "pm warm report")
+    for ws, row in prepared:
+        model.tick(cfg["model"], ws["abbrev"])
+        body = model.infer_report_section(
+            cfg["model"], cfg["output"]["audience"],
+            ws, row["items"], row["change_block"],
+            comment_budget=comments.settings(cfg)["section_chars"],
+            cfg=cfg, material=report_cmd.section_material(cfg, row, names=names))
+        sections.append((ws, body))
+    return sections
+
+
+def _warm_report(cfg, levels):
+    from commands import report as report_cmd
+    want_names = "pm" in levels
+    want_plain = any(level in levels for level in ("work", "leadership", "partner"))
+    plain = []
+    plain_prepared = []
+    plain_groups = []
+    if want_plain:
+        plain_prepared, plain_groups = _prepare_report(cfg, author=False)
+        plain = _infer_sections(cfg, plain_prepared, names=False)
+    if want_names:
+        # The named gather is what `pm report` sends. Its replies are cached
+        # on the way through; the leadership summary uses the nameless one.
+        named_prepared, _named_groups = _prepare_report(cfg, author=True)
+        _infer_sections(cfg, named_prepared, names=True)
+    if "leadership" in levels and plain:
+        report_cmd._audience_summaries(
+            cfg, plain_groups, plain_prepared, plain, "leadership")
+    if "partner" in levels and plain_prepared:
+        report_cmd._audience_summaries(
+            cfg, plain_groups, plain_prepared, plain, "partner")
 
 
 def _warm_inbox(cfg):

@@ -104,7 +104,8 @@ def _increment_lines(cfg, product):
     return lines
 
 
-def prepare(cfg, ws, previous, window=None, skip_ids=None, progress_label=None):
+def prepare(cfg, ws, previous, window=None, skip_ids=None, progress_label=None,
+            author=True):
     """Items and the change block `pm report` will send. Writes nothing."""
     prefix = ws["abbrev"]
     label = progress_label or f"{ws.get('name') or prefix} ({prefix})"
@@ -164,7 +165,8 @@ def prepare(cfg, ws, previous, window=None, skip_ids=None, progress_label=None):
         phase("reading comments")
     comments.attach(
         cfg, cfg.get("jira") or {}, jira_items,
-        comments.report_cutoff(prev_snapshot, comments.settings(cfg)))
+        comments.report_cutoff(prev_snapshot, comments.settings(cfg)),
+        author=author)
     new, changed, dropped = state.compute_changes(prev_snapshot, items)
     change_block = state.build_change_block(new, changed, dropped, first_run)
     epic_rows = epics.build(cfg, ws, items, window, (new, changed, dropped))
@@ -347,7 +349,7 @@ def team_pages(cfg, prepared, window, skip_ids):
     return team
 
 
-def section_material(cfg, row):
+def section_material(cfg, row, names=True):
     """The exact text `pm report` and `pm warm` send for one workstream."""
     from core import pages as page_core
     opts = page_core.settings(cfg)
@@ -388,6 +390,7 @@ def section_material(cfg, row):
         comment_budget=comments.settings(cfg)["section_chars"],
         page_budget=opts["section_chars"],
         register_entries=entries,
+        names=names,
     )
 
 
@@ -602,7 +605,7 @@ def run(cfg, args):
     for index, ws in enumerate(selected, 1):
         label = progress.numbered(index, total, f"{ws['name']} ({ws['abbrev']})")
         row = prepare(cfg, ws, previous, window, skip_ids=skip_ids,
-                      progress_label=label)
+                      progress_label=label, author=audience.names_people(who))
         row["registers"] = found_registers
         stamp_register_entries(row)
         if not row["first_run"]:
@@ -635,7 +638,8 @@ def run(cfg, args):
             cfg["model"], cfg["output"]["audience"],
             ws, row["items"], row["change_block"],
             comment_budget=comments.settings(cfg)["section_chars"],
-            cfg=cfg, material=section_material(cfg, row))
+            cfg=cfg, material=section_material(
+                cfg, row, names=audience.names_people(who)))
         body, removed = citations.resolve(body, citations.citation_map(row["items"]))
         if removed:
             print(f"  ({ws['abbrev']}: {removed} citation removed — not in the material)")
@@ -701,7 +705,7 @@ def run(cfg, args):
         report = report_render.render_pm(
             cfg, groups, prepared, sections, window, scope_note, who=who,
             team_pages=team)
-    if who == "pm":
+    if who in ("pm", "work"):
         try:
             from commands import metrics as metrics_cmd
             report = report.rstrip() + "\n\n" + metrics_cmd.render(metrics_cmd.gather(cfg, 8), 8)

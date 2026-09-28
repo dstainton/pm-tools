@@ -263,9 +263,9 @@ def _validate_audiences(cfg):
         return
     if not isinstance(block, dict):
         sys.exit("`audiences:` must be a mapping.")
-    if "default" in block and block["default"] not in ("pm", "leadership", "partner"):
-        sys.exit("`audiences.default` must be pm, leadership, or partner.")
-    for key in ("pm", "leadership", "partner"):
+    if "default" in block and block["default"] not in ("pm", "work", "leadership", "partner"):
+        sys.exit("`audiences.default` must be pm, work, leadership, or partner.")
+    for key in ("pm", "work", "leadership", "partner"):
         section = block.get(key)
         if section is None:
             continue
@@ -273,6 +273,33 @@ def _validate_audiences(cfg):
             sys.exit(f"`audiences.{key}` must be a mapping.")
     if "warm" in block and not isinstance(block["warm"], list):
         sys.exit("`audiences.warm` must be a list.")
+    if isinstance(block.get("warm"), list):
+        bad = [item for item in block["warm"] if item not in ("pm", "work", "leadership", "partner")]
+        if bad:
+            sys.exit(f"`audiences.warm` has unknown shape {bad[0]}.")
+
+
+def _validate_role(cfg):
+    role = cfg.get("role")
+    if role is None:
+        return
+    from core import audience
+    if role not in audience.ROLES:
+        names = ", ".join(audience.ROLES)
+        sys.exit(f"`role` must be one of: {names}.")
+
+
+def _validate_me(cfg):
+    block = cfg.get("me")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`me:` must be a mapping.")
+    summary = block.get("summary", "sprint")
+    if summary == "sprint":
+        return
+    if isinstance(summary, bool) or not isinstance(summary, int) or summary < 1:
+        sys.exit("`me.summary` must be sprint or a number of days.")
 
 
 def _validate_confluence_tree(cfg):
@@ -306,6 +333,8 @@ def validate(cfg):
     _validate_model_budget(cfg)
     _validate_definition_of_done("Config", cfg.get("definition_of_done"))
     _validate_audiences(cfg)
+    _validate_role(cfg)
+    _validate_me(cfg)
     _validate_confluence_tree(cfg)
     _validate_registers(cfg)
     queries.validate_config(cfg)

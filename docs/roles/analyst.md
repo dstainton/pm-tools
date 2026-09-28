@@ -69,10 +69,20 @@ pm coverage
 Open tickets no workstream claims, tickets two workstreams both claim, and
 Components nobody uses.
 
-## Planned
+## Your report
 
-`role: analyst` will make your default report the detailed one with
-people's names left out. `pm me` will be your own open work as a snapshot,
-and `pm me --sprint` that work over the open Sprint. A report about a
-colleague is the product manager's command. See the
-[plan](../ROLE_REPORTS_PLAN.md).
+```yaml
+role: analyst
+```
+
+`pm report --sprint` is then the detailed report with people's names left
+out. You share that shape with the developer and the service designer.
+
+```text
+pm me
+pm me --sprint
+```
+
+`pm me` is your own open work as a snapshot. `pm me --sprint` is that work
+over the open Sprint. A report about a colleague is the product manager's
+command. The design is in the [plan](../ROLE_REPORTS_PLAN.md).

@@ -4,9 +4,9 @@ You read the short report: one line per Epic, what is at risk, and whether
 the open work has a landing date. You do not need the refinement worksheet
 or the names of individual people.
 
-Today you still pass `--audience leadership` on each command. The
-[plan](../ROLE_REPORTS_PLAN.md) adds `role: leadership` so that flag can
-stay off.
+Put `role: leadership` in the settings file and the short report is the
+default. `--audience` still wins for one run. The leadership file leaves
+out assignees, comment authors, and decision owners.
 
 ## One team in the file
 
@@ -60,12 +60,13 @@ output:
   directory: "~/.pm-tools/out/aps"
 ```
 
-The settings flag goes after the command name. On Windows PowerShell:
+The settings flag can go before or after the command name. Pass it once.
+On Windows PowerShell, with `role: leadership` in each file:
 
 ```powershell
 pm doctor --config $HOME\.pm-tools\aps.yaml
-pm report --config $HOME\.pm-tools\aps.yaml --audience leadership --sprint
-pm report --config $HOME\.pm-tools\des.yaml --audience leadership --sprint
+pm --config $HOME\.pm-tools\aps.yaml report --sprint
+pm report --config $HOME\.pm-tools\des.yaml --sprint
 ```
 
 On macOS or Linux, `~/.pm-tools/aps.yaml` is the same path. `PM_CONFIG`
@@ -90,8 +91,12 @@ pm doctor --config ~/.pm-tools/des.yaml
 leadership file is `pm report`, `pm metrics`, `pm release-notes`, and
 `pm brief`.
 
-## Planned
+## The setting
 
-With `role: leadership` in each team's file, the same commands drop
-`--audience leadership`. The report will also stop naming decision owners
-and comment authors. See the [plan](../ROLE_REPORTS_PLAN.md).
+```yaml
+role: leadership
+```
+
+With that line, `pm report --sprint` is the short Epic report. Decision
+owners and comment authors stay off the page. The design is in the
+[plan](../ROLE_REPORTS_PLAN.md).

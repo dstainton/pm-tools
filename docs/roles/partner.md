@@ -52,8 +52,12 @@ A partner who only shares some of the products in a file should use
 does. Teams that do not share a Jira project need one settings file each.
 That pattern is written out on the leadership page.
 
-## Planned
+## The setting
 
-`role: partner` will make `--audience partner` the default for this
-install. The [plan](../ROLE_REPORTS_PLAN.md) also removes any person name
-that still reaches the file through a comment or a decision owner.
+```yaml
+role: partner
+```
+
+`pm report` is then the partner page. Comment authors and decision owners
+are left off before the partner pass removes any person name that still
+reached the prose. The design is in the [plan](../ROLE_REPORTS_PLAN.md).

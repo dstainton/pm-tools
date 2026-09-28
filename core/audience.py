@@ -1,4 +1,9 @@
-"""Who a report is for: product management, leadership, or partners."""
+"""Who a report is for, and which install role selects that shape.
+
+Shapes: pm (names people), work (the same detail without names), leadership,
+partner. `role` maps a person onto a shape. `--audience` overrides it for
+one run.
+"""
 
 import os
 import re
@@ -6,12 +11,23 @@ import re
 from core import output
 
 
-LEVELS = ("pm", "leadership", "partner")
+SHAPES = ("pm", "work", "leadership", "partner")
+LEVELS = SHAPES
+
+ROLES = {
+    "pm": "pm",
+    "leadership": "leadership",
+    "partner": "partner",
+    "analyst": "work",
+    "developer": "work",
+    "service-designer": "work",
+}
 
 DEFAULTS = {
     "default": "pm",
     "warm": ["pm"],
     "pm": {"name": "Product management"},
+    "work": {"name": "Team"},
     "leadership": {"name": "Leadership", "at_risk_due_days": 14, "max_docs_per_product": 5},
     "partner": {
         "name": "Partners",
@@ -39,13 +55,32 @@ def settings(cfg):
     return out
 
 
-def level(cfg, args):
+def names_people(shape):
+    """Only the product-management report names assignees and authors."""
+    return shape == "pm"
+
+
+def resolve_shape(cfg, args):
+    """`--audience`, else `role`, else `audiences.default`, else pm."""
     chosen = getattr(args, "audience", None) if args is not None else None
-    chosen = chosen or settings(cfg)["default"] or "pm"
-    if chosen not in LEVELS:
+    if not chosen:
+        role = cfg.get("role") if isinstance(cfg, dict) else None
+        role = role.strip() if isinstance(role, str) else ""
+        if role:
+            chosen = ROLES.get(role)
+            if chosen is None:
+                names = ", ".join(ROLES)
+                raise SystemExit(f"Unknown role {role}. Use one of: {names}.")
+        else:
+            chosen = settings(cfg)["default"] or "pm"
+    if chosen not in SHAPES:
         raise SystemExit(
-            f"Unknown audience {chosen}. Use one of: {', '.join(LEVELS)}.")
+            f"Unknown audience {chosen}. Use one of: {', '.join(SHAPES)}.")
     return chosen
+
+
+def level(cfg, args):
+    return resolve_shape(cfg, args)
 
 
 def display_name(cfg, who):

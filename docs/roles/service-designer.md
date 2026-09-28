@@ -17,9 +17,9 @@ The report includes changed Confluence pages, the decision, risk, and ADR
 registers, and the Epics. `--sprint` is the open Sprint and does not move
 the memory of the last report.
 
-Today this file still names assignees and page editors, because the default
-report is the product manager's. The [plan](../ROLE_REPORTS_PLAN.md) changes
-that for this role: the same detail, without the names.
+With `role: service-designer` in the settings file, this is the same detail
+without assignees, page editors, or comment authors. The design is in the
+[plan](../ROLE_REPORTS_PLAN.md).
 
 ## A design review
 
@@ -56,9 +56,17 @@ settings file of your own. Creating a second file is written out on the
 pm report --config ~/.pm-tools/service.yaml --sprint
 ```
 
-## Planned
+## Your report
 
-`role: service-designer` selects the detailed report with people's names
-left out. You share that shape with the analyst and the developer.
-`pm me` is your own open work as a snapshot, and it ignores role. See the
-[plan](../ROLE_REPORTS_PLAN.md).
+```yaml
+role: service-designer
+```
+
+That selects the detailed report with people's names left out. You share
+that shape with the analyst and the developer.
+
+```text
+pm me
+```
+
+`pm me` is your own open work as a snapshot, and it ignores role.
