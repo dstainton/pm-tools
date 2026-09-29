@@ -2,8 +2,12 @@
 
 The code upgrade depends on how pm-tools was installed. The config upgrade
 never replaces `~/.pm-tools/config.yaml`. It walks migrations until
-`config_version` matches the installed template, and it writes only when
-that result still validates.
+`config_version` matches the installed template, then adds every setting
+the template has and the file lacks, with the template's comment. It writes
+only when that result still validates. It then lists what the user may want
+to look at: new settings, defaults that changed since the last review, old
+names, and settings this version does not read. `pm setup --review` steps
+through that list.
 
 A pip or pipx install replaces the files on disk while this process still
 has the old migrations loaded. After that install succeeds, this command
@@ -17,9 +21,10 @@ starts `pm update --config-only` so the new code applies the new steps.
 This command does not load config first. A file that is one version behind
 may not pass validation until the migration has run.
 
-Optional Confluence tree keys (a shared space, a folder title, registers)
-are not inserted. An existing file keeps working. The template comments
-show the shape, and `pm setup --section confluence` can write the space.
+A block that needs the user's own details, such as SharePoint's tenant id,
+is listed and not inserted. Optional keys the template only shows in a
+comment (a shared Confluence space, registers, role) are not inserted
+either; `pm setup --section confluence` can write the space.
 """
 
 import difflib
@@ -32,6 +37,7 @@ import sys
 import yaml
 
 from core import config as config_core
+from core import config_template, terminal
 from core.migrations import (MigrationError, apply_migrations,
                              bundled_template_path, read_version,
                              template_version)
@@ -229,37 +235,97 @@ def redact(text):
     return _SECRET_RE.sub(r"\1<redacted>", text)
 
 
-def upgrade_config(path, dry_run=False, migrations=None, target=None):
-    """Migrate `path` up to `target`. Return True when the file changes."""
+def bring_up_to_date(text, template_text, migrations, target):
+    """Migrate, then add every setting the template has and `text` lacks.
+
+    Returns (text, fill) where fill is (added, needs_details, by_hand).
+    """
+    original = text
+    if read_version(text) < target:
+        text = apply_migrations(text, migrations, target)
+    text, _added, needs, by_hand = config_template.fill_missing(text, template_text)
+    added = config_template.newly_present(original, text, template_text)
+    return text, (added, needs, by_hand)
+
+
+def review_report(text, template_text, record, fill=((), (), ())):
+    """What the user should hear about, given a file after the update."""
+    added, needs, by_hand = fill
+    report = config_template.compare(text, template_text, record)
+    report.new = [p for p in report.new
+                  if not any(p[:len(n)] == tuple(n) for n in needs)]
+    report.added = list(added)
+    report.needs_details = [p for p in needs
+                            if config_template.unseen(p, template_text, record)]
+    report.by_hand = list(by_hand)
+    return report
+
+
+def upgrade_config(path, dry_run=False, migrations=None, target=None,
+                   template_path=None, args=None):
+    """Migrate `path` and fill in missing settings. True when the file changes."""
     from core.migrations import MIGRATIONS
     if migrations is None:
         migrations = MIGRATIONS
+    template_path = template_path or bundled_template_path()
     if target is None:
-        target = template_version()
+        target = template_version(template_path)
+    with open(template_path, "r", encoding="utf-8") as fh:
+        template_text = fh.read()
     with open(path, "r", encoding="utf-8") as fh:
         original = fh.read()
     version = read_version(original)
-    if version >= target:
-        print(f"Config is current (config_version {version}).")
-        return False
+    record = config_template.read_record(path)
+    first_record = record is None
+    if first_record:
+        record = config_template.assumed_record(original, template_text)
     try:
-        updated = apply_migrations(original, migrations, target)
+        updated, fill = bring_up_to_date(original, template_text, migrations, target)
     except MigrationError as err:
         sys.exit(f"Could not upgrade {path}: {err}\n"
                  "The file was not changed.")
+    changed = updated != original
+    report = review_report(updated, template_text, record, fill)
+
     if dry_run:
-        print(f"Would upgrade {path} from config_version {version} "
-              f"to {target}:")
-        diff = difflib.unified_diff(
-            redact(original).splitlines(), redact(updated).splitlines(),
-            fromfile=path, tofile=path, lineterm="")
-        print("\n".join(diff) or "(no textual change)")
+        if changed:
+            print(f"Would update {path}:")
+            diff = difflib.unified_diff(
+                redact(original).splitlines(), redact(updated).splitlines(),
+                fromfile=path, tofile=path, lineterm="")
+            print("\n".join(diff))
+        else:
+            print(f"Would not change {path}.")
+        _tell(report, template_text, updated, args, would=True)
         return False
-    if not _valid(updated):
-        return False
-    _atomic_write(path, updated)
-    print(f"Upgraded {path} to config_version {target}.")
-    return True
+
+    if changed:
+        if not _valid(updated):
+            return False
+        _atomic_write(path, updated)
+    if version < target:
+        print(f"Upgraded {path} to config_version {target}.")
+    elif changed:
+        print(f"Updated {path} (config_version {version}).")
+    else:
+        print(f"Config is current (config_version {version}).")
+    if first_record:
+        config_template.write_record(path, record)
+    _tell(report, template_text, updated, args)
+    return changed
+
+
+def _tell(report, template_text, text, args, would=False):
+    if report.empty():
+        print("It has every setting this version ships, and no shipped "
+              "default has changed since your last review.")
+        return
+    body = config_template.summary(report, template_text, config_template.load(text))
+    if would:
+        body = body.replace("Added ", "Would add ", 1)
+    terminal.show(body, args)
+    if config_template.pending(report):
+        print("Keep or change each of these, one at a time:  pm setup --review")
 
 
 def _valid(text):
@@ -306,4 +372,4 @@ def run(args):
         return
 
     path = user_config_path(getattr(args, "config", None))
-    upgrade_config(path, dry_run=dry_run)
+    upgrade_config(path, dry_run=dry_run, args=args)

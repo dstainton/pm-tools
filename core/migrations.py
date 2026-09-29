@@ -2,8 +2,10 @@
 
 Version 1 is the shape `pm init` copies. Nothing migrates into that shape:
 nobody has an older installed config. Later releases append to MIGRATIONS.
-A migration inserts missing keys and bumps `config_version`. It does not
-replace values that are already set.
+A migration bumps `config_version` and does not replace values that are
+already set. A new key does not need one: after the migrations,
+`core.config_template.fill_missing` adds every key the template has. A
+migration is for a key that moves, is renamed, or changes shape.
 """
 
 import os
