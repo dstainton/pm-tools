@@ -11,7 +11,7 @@ to inspect. Exit 1 when unclaimed open work exists.
 
 import sys
 
-from core import filters, queries, sources, workstreams
+from core import filters, queries, render as render_core, sources, workstreams
 
 
 def classify(issues, claims, component_names, named_components):
@@ -86,7 +86,7 @@ def inspect_project(cfg, project):
     return result
 
 
-def render(reports):
+def render(reports, links=False):
     lines = []
     for report in reports:
         project = report["project"]
@@ -97,7 +97,8 @@ def render(reports):
         if not unclaimed:
             lines.append("  None.")
         for issue in unclaimed:
-            lines.append(f"  {issue.get('key'):<8} {issue.get('summary') or ''}")
+            key = render_core.issue_cell(issue.get("key"), issue.get("url"), 8, links)
+            lines.append(f"  {key} {issue.get('summary') or ''}")
         lines.append("")
         overlap = report["overlap"]
         lines.append(f"Claimed by more than one workstream ({len(overlap)})")
@@ -106,7 +107,8 @@ def render(reports):
         for issue in overlap:
             owners = ", ".join(issue.get("workstreams") or [])
             lines.append(
-                f"  {issue.get('key'):<8} {issue.get('summary') or ''}  ({owners})")
+                f"  {render_core.issue_cell(issue.get('key'), issue.get('url'), 8, links)} "
+                f"{issue.get('summary') or ''}  ({owners})")
         lines.append("")
         unused = report["unused"]
         lines.append(f"Components no workstream names ({len(unused)})")
@@ -128,7 +130,8 @@ def run(cfg, args):
         from core import progress
         progress.start(f"Checking coverage in {project}")
         reports.append(inspect_project(cfg, project))
-    text = render(reports)
+    text = render(reports, links=render_core.terminal_links()
+                  and not render_core.plain_requested(args))
     print(text, end="")
     unclaimed = sum(len(report["unclaimed"]) for report in reports)
     if unclaimed:

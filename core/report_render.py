@@ -268,8 +268,10 @@ def needs_attention(groups, rows, profile, dependencies=None, today=None):
         if not key or key in seen_epics:
             return
         seen_epics.add(key)
-        label = epic.get("summary") or key
-        lines.append(f"- {key} {label} ({ws.get('abbrev') or ''}): {reason}".rstrip())
+        shown = _md_link(key, epic.get("url"))
+        if epic.get("summary"):
+            shown += f" {epic['summary']}"
+        lines.append(f"- {shown} ({ws.get('abbrev') or ''}): {reason}".rstrip())
 
     if mode in ("pm", "analyst", "developer", "service"):
         for product, streams in groups:
@@ -297,7 +299,7 @@ def needs_attention(groups, rows, profile, dependencies=None, today=None):
         if allowed and kind not in allowed:
             continue
         for entry in record.get("entries") or []:
-            title = entry.get("title") or "entry"
+            title = _md_link(entry.get("title") or "entry", entry.get("url"))
             if kind == "decision" and _decision_needed(entry):
                 if mode == "service" and not _page_hints(entry, profile.get("doc_hints") or ("experience", "service", "design")):
                     continue
@@ -328,7 +330,8 @@ def needs_attention(groups, rows, profile, dependencies=None, today=None):
                     if item.get("source") == "Jira":
                         continue
                     if _page_hints(item, profile.get("doc_hints") or ()):
-                        lines.append(f"- Service documentation changed: {item.get('title') or 'page'}")
+                        page = _md_link(item.get("title") or "page", item.get("url"))
+                        lines.append(f"- Service documentation changed: {page}")
 
     # Keep the first screen short. Later sections still have the detail.
     trimmed = []
@@ -839,7 +842,7 @@ def _leadership_sources(rows):
     return lines
 
 
-def _partner_input(rows, product_abbrev=None):
+def _partner_input(rows, product_abbrev=None, links=False):
     """Partner-visible decisions whose fields say the partner needs to act."""
     lines = []
     seen = set()
@@ -856,7 +859,7 @@ def _partner_input(rows, product_abbrev=None):
             if title in seen:
                 continue
             seen.add(title)
-            lines.append(f"- {title}")
+            lines.append(f"- {_md_link(title, entry.get('url'), links)}")
     return lines
 
 
@@ -903,7 +906,8 @@ def render_partner(cfg, groups, rows, summaries, window):
                     lines.append(f"| {feature} | {phrase} | {items} | {pct} |")
                 else:
                     lines.append(f"| {feature} | {phrase} | {items} |")
-        needed = _partner_input(rows, product.get("abbrev"))
+        needed = _partner_input(rows, product.get("abbrev"),
+                                links=bool(opts.get("include_confluence_links")))
         if needed:
             lines.append("")
             lines.append("Input needed")

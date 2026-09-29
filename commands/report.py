@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import audience, checklist, citations, comments, epics, output, pages as page_core, progress, registers, report_render, sources, model, state, workstreams
+from core import audience, checklist, citations, comments, epics, output, pages as page_core, progress, registers, report_render, sources, model, state, terminal, workstreams
 from core import products as product_core
 
 
@@ -510,6 +510,7 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
                 if page.get("ref"):
                     cite[page["ref"]] = (page.get("title") or page["ref"], page.get("url") or "")
             body, removed = citations.resolve(body, cite)
+            body = citations.link_keys(body, cite)
             if removed:
                 print(f"  ({product.get('abbrev')}: {removed} citation removed — not in the material)")
         else:
@@ -640,6 +641,19 @@ def _append_delivery(cfg, report, profile):
     return report.rstrip() + "\n\n" + extra
 
 
+def _known_issues(prepared):
+    """{key: (key, url)} for every Jira issue and Epic the report gathered."""
+    known = {}
+    for _ws, row in prepared:
+        for item in row.get("items") or []:
+            if item.get("source") == "Jira" and item.get("key") and item.get("url"):
+                known[item["key"]] = (item["key"], item["url"])
+        for epic in row.get("epics") or []:
+            if epic.get("key") and epic.get("url"):
+                known.setdefault(epic["key"], (epic["key"], epic["url"]))
+    return known
+
+
 def _register_records_from(prepared):
     for _ws, row in prepared:
         if row.get("registers"):
@@ -725,7 +739,9 @@ def run(cfg, args):
             cfg=cfg, material=section_material(
                 cfg, row, names=report_profiles.names_people(who)),
             section_roles=section_roles)
-        body, removed = citations.resolve(body, citations.citation_map(row["items"]))
+        cmap = citations.citation_map(row["items"])
+        body, removed = citations.resolve(body, cmap)
+        body = citations.link_keys(body, cmap)
         if removed:
             print(f"  ({ws['abbrev']}: {removed} citation removed — not in the material)")
             noun = "citation" if removed == 1 else "citations"
@@ -786,6 +802,8 @@ def run(cfg, args):
             team_pages=team, sources=report_profiles.sources_mode(who, args),
             dependencies=dependency_lines)
     report = _append_delivery(cfg, report, profile)
+    if privacy != "partner":
+        report = citations.link_keys(report, _known_issues(prepared))
     out_path = output.place(
         cfg, audience.output_name(cfg, who, dt.date.today().isoformat()),
         getattr(args, "out", None))
@@ -819,8 +837,11 @@ def run(cfg, args):
     hits = int((cfg.get("model") or {}).get("_cache_hits") or 0)
     print(f"{calls} model call(s), {hits} already cached.")
     print(f"\nDone. Report written to: {out_path}")
-    preview = "\n".join(report.splitlines()[:24])
-    print("\n" + preview)
+    shown, rest = terminal.preview(report)
+    print()
+    terminal.show(shown, args)
+    if rest:
+        print(f"\n({rest} more lines in the file.)")
     if getattr(args, "publish", False):
         from commands import publish as pub
         pub.publish_file(cfg, args, out_path,

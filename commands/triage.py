@@ -12,8 +12,8 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    comments as comment_core, conventions, paths, products as product_core, sources,
-    workstreams, writes,
+    comments as comment_core, conventions, paths, products as product_core, render as render_core,
+    sources, workstreams, writes,
 )
 
 
@@ -210,7 +210,7 @@ def gather(cfg):
     return actions, opts
 
 
-def render(actions):
+def render(actions, links=False):
     lines = [
         "Same queue as `pm today --all`. One number per issue.",
         f"TRIAGE ({len(actions)})",
@@ -226,7 +226,8 @@ def render(actions):
             current = loc
             lines.append(loc)
         lines.append(
-            f"  {action['n']:<2} {action['key']:<8} "
+            f"  {action['n']:<2} "
+            f"{render_core.issue_cell(action['key'], action.get('url'), 8, links)} "
             f"{sources.short(action['summary'], 52)}")
         lines.append(f"     {action['tags']}")
         lines.append(f"     → pm triage --apply {action['n']}     "
@@ -242,7 +243,8 @@ def run(cfg, args):
     })
     apply_n = getattr(args, "apply", None)
     if apply_n is None:
-        print(render(actions))
+        print(render(actions, links=render_core.terminal_links()
+                     and not render_core.plain_requested(args)))
         print(f"\nActions saved to {opts['state_file']}.")
         return
     action = next((a for a in actions if a["n"] == apply_n), None)

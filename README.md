@@ -397,6 +397,8 @@ pm schedule add warm --at 07:00
 | `pm update` | Installs the latest version and adds any new settings to your file. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
 
+Files are Markdown. The screen gets text instead: headings, lined-up tables, and a link on every Jira issue and Confluence page. Windows Terminal, VS Code, and most Mac and Linux terminals make the name clickable. The classic Windows console and a pipe show the address after the name, like `APS-10 <https://…/browse/APS-10>`. A table wider than the window becomes one labelled line per cell. `FORCE_HYPERLINK=1` or `0` overrides the guess about clickable links.
+
 `pm` and `pm help` list the commands for your role, when the settings file has one. `pm help all` lists every command. `pm <command> -h` shows how to run that command, including the required words and the flags. `pm help roles` explains the sets. `--advanced` is the same complete page.
 
 ### Options that work everywhere
@@ -407,7 +409,7 @@ pm schedule add warm --at 07:00
 | `--cached` | Reuse earlier results, even old ones. Handy when you are offline. |
 | `--refresh` | Ignore earlier results and fetch everything again. |
 | `--out FOLDER` | Save this run's files in a different folder. |
-| `--plain` | No colours or symbols. |
+| `--plain` | No colours, symbols, or clickable links. Tables become one labelled line per cell. |
 | `--config FILE` | Use a different settings file. The flag can go before or after the command name. Pass it once. |
 
 ---

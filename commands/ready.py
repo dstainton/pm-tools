@@ -22,7 +22,7 @@ import datetime as dt
 
 import sys
 
-from core import checklist, model, output, sources, workstreams
+from core import checklist, model, output, render, sources, terminal, workstreams
 from core import products as product_core
 from commands import lint, review
 
@@ -130,6 +130,7 @@ def label_gaps(done_issues, items):
             if item["label"].lower() not in present:
                 gaps.append({
                     "key": issue.get("key"),
+                    "url": issue.get("url") or "",
                     "summary": issue.get("summary") or "",
                     "label": item["label"],
                     "text": item["text"],
@@ -223,7 +224,7 @@ def build_markdown(cfg, results, deep, reminders=None, gaps=None):
                     note = (f" _(advisory: "
                             + ", ".join(a["criterion"] for a in v["advisory"])
                             + ")_")
-                lines.append(f"- **{v['key']}**: {title}{note}")
+                lines.append(f"- **{render.markdown_link(v['key'], v.get('url'))}**: {title}{note}")
             lines.append("")
 
     reminders = list(reminders or [])
@@ -243,7 +244,7 @@ def build_markdown(cfg, results, deep, reminders=None, gaps=None):
             lines.append("")
             for gap in gaps:
                 lines.append(
-                    f"- **{gap['key']}** lacks `{gap['label']}` "
+                    f"- **{render.markdown_link(gap['key'], gap.get('url'))}** lacks `{gap['label']}` "
                     f"({gap['text']})")
             lines.append("")
 
@@ -292,6 +293,11 @@ def _recent_throughput(cfg):
     return rates
 
 
+def _verdict_ref(verdict, issue=None):
+    url = verdict.get("url") or (issue or {}).get("url")
+    return render.markdown_link(verdict["key"], url)
+
+
 def render_plan(cfg, plan_rows, throughput=None):
     """What is ready to plan, grouped by Epic, beside recent throughput."""
     from core import blocked as blocked_core
@@ -307,10 +313,12 @@ def render_plan(cfg, plan_rows, throughput=None):
     refine = []
     by_epic = {}
     blocked_lines = []
+    sample = ""
     for ws, verdicts, issues in plan_rows:
         by_key = {issue.get("key"): issue for issue in issues}
         for verdict in verdicts:
             issue = by_key.get(verdict["key"]) or {}
+            sample = sample or verdict.get("url") or issue.get("url") or ""
             epic = issue.get("epic") or "No Epic"
             bucket = by_epic.setdefault(epic, {"ready": [], "not": [], "ws": ws})
             points = _points(issue)
@@ -326,7 +334,7 @@ def render_plan(cfg, plan_rows, throughput=None):
                 refine.append((verdict, reasons, ws))
             if blocked_core.is_blocked(issue, cfg):
                 blocked_lines.append(
-                    f"- {verdict['key']} {verdict.get('title') or ''} "
+                    f"- {_verdict_ref(verdict, issue)} {verdict.get('title') or ''} "
                     f"({ws.get('abbrev')}) is blocked")
     lines.append(f"Ready to plan: {ready_count} item(s), {ready_points:g} point(s).")
     lines.append("")
@@ -337,19 +345,22 @@ def render_plan(cfg, plan_rows, throughput=None):
         lines.append("")
     for epic, bucket in by_epic.items():
         ws = bucket["ws"]
-        lines.append(f"**{epic}** ({ws.get('abbrev')})")
+        shown = epic
+        if epic != "No Epic":
+            shown = render.markdown_link(epic, render.browse_url(cfg, epic, sample))
+        lines.append(f"**{shown}** ({ws.get('abbrev')})")
         lines.append("")
         if bucket["ready"]:
             lines.append("Ready:")
             for verdict, points in bucket["ready"]:
                 point_bit = f", {points:g} pt" if points else ""
-                lines.append(f"- {verdict['key']} {verdict.get('title') or ''}{point_bit}")
+                lines.append(f"- {_verdict_ref(verdict)} {verdict.get('title') or ''}{point_bit}")
             lines.append("")
         if bucket["not"]:
             lines.append("Needs refinement:")
             for verdict, reasons in bucket["not"]:
                 why = f" ({reasons})" if reasons else ""
-                lines.append(f"- {verdict['key']} {verdict.get('title') or ''}{why}")
+                lines.append(f"- {_verdict_ref(verdict)} {verdict.get('title') or ''}{why}")
             lines.append("")
     if blocked_lines:
         lines.append("### Open dependencies")
@@ -441,7 +452,7 @@ def run(cfg, args):
         plan = render_plan(cfg, plan_rows, _recent_throughput(cfg))
         with open(out_path, "a", encoding="utf-8") as fh:
             fh.write("\n" + plan)
-        print(plan)
+        terminal.show(plan, args)
     print(f"\nDone. Readiness report written to: {out_path}")
 
     fail_under = getattr(args, "fail_under", None)

@@ -23,7 +23,7 @@ movement window for one run.
 
 import datetime as dt
 
-from core import comments, output, sources, workstreams
+from core import comments, output, sources, terminal, workstreams
 
 
 def _fmt_when(when):
@@ -167,5 +167,5 @@ def run(cfg, args):
     print(f"\nDone. Daily Scrum written to: {out_path}")
 
     if getattr(args, "print", True):
-        print("\n" + "=" * 60 + "\n")
-        print(report)
+        print()
+        terminal.show(report, args)

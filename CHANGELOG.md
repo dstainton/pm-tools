@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.15.0 - 2026-09-29
+
+- Every Jira issue and Confluence page a report names is a link again.
+  0.14.0 left plain text in Needs attention (Epics, decisions, risks,
+  ADRs, service pages), blocker lines, `pm me`, `pm brief` (the change
+  block's `[APS-10]` tags, Epics, decision pages), `pm ready` (ready items,
+  Definition of Done gaps, the plan), `pm metrics` (aging work and the
+  Sprint review), `pm release-notes` (issues, Epics, decisions, further
+  reading), and the partner report's Input needed. A key the model writes
+  without brackets is linked when it is in the material. Partner pages
+  still link only when `include_jira_links` or `include_confluence_links`
+  is set. `pm review` links the key in the heading instead of "Open in
+  Jira".
+- The screen is no longer raw Markdown. `pm report` (its preview),
+  `brief`, `daily`, `me`, `metrics`, `ready --plan`, and `release-notes`
+  print headings, lined-up tables, and bullets. A link is clickable in
+  Windows Terminal, VS Code, and Unix terminals. The classic Windows
+  console (CMD or PowerShell outside Windows Terminal) and a pipe show the
+  address after the name. A table wider than the window, or any table
+  under `--plain`, becomes one labelled line per cell. Emoji are dropped
+  where the console cannot draw them. Files stay Markdown.
+- The classic Windows console gets colour only after it accepts
+  virtual-terminal mode, so an old console no longer shows escape codes.
+  `pm today`, `triage`, `coverage`, `lint`, and `refine` share that
+  detection. `FORCE_HYPERLINK=1` or `0` overrides the guess.
+
 ## 0.14.0 - 2026-09-28
 
 - A role chooses the report. Privacy stays separate. `analyst`,

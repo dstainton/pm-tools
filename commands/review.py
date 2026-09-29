@@ -20,7 +20,7 @@ call misfires, skip that batch rather than sink the run.
 
 import datetime as dt
 
-from core import output, sources, model, prompts, workstreams
+from core import output, render, sources, model, prompts, workstreams
 
 
 # ---------------------------------------------------------------------------
@@ -180,9 +180,7 @@ def build_markdown(cfg, aspect, results, any_errors):
             col1, col2 = label.get(f["aspect"], ("Problem", "Suggestion"))
             title = sources.short(iss.get("summary", ""), 100)
             url = iss.get("url", "")
-            lines.append(f"### {f['key']}: {title}")
-            if url:
-                lines.append(f"[Open in Jira]({url})")
+            lines.append(f"### {render.markdown_link(f['key'], url)}: {title}")
             lines.append("")
             lines.append(f"- **{col1}:** {f['problem']}")
             lines.append(f"- **{col2}:** {f['detail']}")

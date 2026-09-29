@@ -14,7 +14,7 @@ import statistics
 import sys
 
 from commands import lint, ready, review
-from core import decisions, model, prompts, sources, workstreams, writes
+from core import decisions, model, prompts, render, sources, workstreams, writes
 
 
 def _median_estimate(closed_points):
@@ -290,6 +290,8 @@ def run(cfg, args):
             extra = ""
             if issue["key"] in titles:
                 extra = f'  → "{titles[issue["key"]]}"'
-            print(f"  {issue['key']:<8} {rules}{extra}")
+            links = render.terminal_links() and not render.plain_requested(args)
+            key = render.issue_cell(issue["key"], issue.get("url"), 8, links)
+            print(f"  {key} {rules}{extra}")
         print(f"Drafts in {path}")
         print(f"Edit the file, then:  pm refine --apply -w {ws['abbrev']}")
