@@ -167,6 +167,12 @@ def render_line(text, caps=None):
     return _inline(text, caps or Caps())[1]
 
 
+def wrap_line(text, caps=None, indent=""):
+    """One line of inline Markdown, wrapped to the terminal under `indent`."""
+    caps = caps or Caps()
+    return "\n".join(_wrap(_tokens(text, caps), indent, indent, caps.width))
+
+
 def _wrap(tokens, first, rest, width):
     if not tokens:
         return [first.rstrip()]

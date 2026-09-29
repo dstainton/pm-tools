@@ -46,7 +46,9 @@ Commands:
     pm daily             Daily Scrum movement, comments from that window,
                          and work in progress (no model).
     pm update            Upgrade pm-tools, then migrate the config with
-                         the newly installed code. Never replaces it.
+                         the newly installed code. Adds settings it lacks
+                         and lists what changed. Never replaces it.
+    pm setup --review    Step through those new and changed settings.
 
 Common options (every command except init and update):
   --config PATH        Path to the config file, before or after the command
@@ -373,7 +375,8 @@ def build_parser():
         description="Fill in the config one step at a time. "
                     "--section model lists local servers and can install "
                     "Ollama or Lemonade. --section confluence records one "
-                    "shared space and the team page.")
+                    "shared space and the team page. --review steps through "
+                    "settings an update added or changed.")
     p_setup.add_argument("--path", default=None, help="Config file to edit")
     p_setup.add_argument("--section", default=None,
                          choices=["jira", "model", "workstreams", "confluence"],
@@ -403,6 +406,11 @@ def build_parser():
     p_setup.add_argument("--confluence-team-page", "--confluence-root",
                          dest="confluence_team_page", default=None,
                          help="Your team page title in that space, written when blank")
+    p_setup.add_argument("--review", action="store_true",
+                         help="Step through new settings, changed defaults, "
+                              "and old names in a config you already have")
+    p_setup.add_argument("--all", action="store_true",
+                         help="With --review, step through every setting")
     p_setup.add_argument("--yes", action="store_true",
                          help="Write the flags and do not prompt or install")
     p_setup.set_defaults(func=setup.run, needs_config=False)

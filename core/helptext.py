@@ -129,9 +129,9 @@ CATALOGUE = {
     },
     "setup": {
         "summary": "Fill in the settings file, one question at a time.",
-        "examples": ("pm setup", "pm setup --section model"),
-        "related": ("doctor", "init"),
-        "common": ("path", "section", "confluence_space", "confluence_root",
+        "examples": ("pm setup", "pm setup --section model", "pm setup --review"),
+        "related": ("doctor", "init", "update"),
+        "common": ("path", "section", "review", "confluence_space", "confluence_root",
                    "model_api_key", "yes"),
     },
     "products": {
@@ -159,9 +159,9 @@ CATALOGUE = {
         "common": ("audience",),
     },
     "update": {
-        "summary": "Upgrade pm-tools and migrate the config.",
-        "examples": ("pm update",),
-        "related": ("doctor",),
+        "summary": "Upgrade pm-tools, add new settings to the config, and list what changed.",
+        "examples": ("pm update", "pm update --dry-run"),
+        "related": ("setup", "doctor"),
         "common": ("dry_run",),
     },
     "init": {
