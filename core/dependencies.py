@@ -3,7 +3,7 @@
 Used by `pm today --all` and the product-management report. No new command.
 """
 
-from core import blocked, conventions, sources
+from core import blocked, conventions, render, sources
 
 
 def _blocked_by(link, cfg):
@@ -47,6 +47,7 @@ def collect(cfg, issues, limit=15):
             other = {
                 "key": link.get("key") or "",
                 "summary": link.get("summary") or "",
+                "url": render.browse_url(cfg, link.get("key")),
             }
             if not other["key"]:
                 continue
@@ -58,6 +59,7 @@ def collect(cfg, issues, limit=15):
             continue
         rows.append({
             "key": key,
+            "url": issue.get("url") or render.browse_url(cfg, key),
             "summary": issue.get("summary") or issue.get("title") or "",
             "workstream": issue.get("workstream") or "",
             "blocked_by": blocked_by,
@@ -73,15 +75,14 @@ def lines_for(rows, known_keys=None):
     known = set(known_keys or [])
     lines = []
     for row in rows or []:
+        this = render.markdown_link(row.get("key"), row.get("url"))
         for other in row.get("blocked_by") or []:
             where = ""
             if known and other.get("key") and other["key"] not in known:
                 where = " (outside this report)"
-            title = f" {other['summary']}" if other.get("summary") else ""
-            lines.append(
-                f"- {row['key']} is blocked by {other['key']}{title}{where}"
-            )
+            that = render.issue_link(other.get("key"), other.get("summary"), other.get("url"))
+            lines.append(f"- {this} is blocked by {that}{where}")
         for other in row.get("blocks") or []:
-            title = f" {other['summary']}" if other.get("summary") else ""
-            lines.append(f"- {row['key']} blocks {other['key']}{title}")
+            that = render.issue_link(other.get("key"), other.get("summary"), other.get("url"))
+            lines.append(f"- {this} blocks {that}")
     return lines

@@ -14,8 +14,8 @@ import sys
 
 from commands import today as today_cmd
 from core import (
-    checklist, comments, conventions, filters, model, output, paths, progress, prompts, queries, registers, sources, state,
-    workstreams, writes,
+    checklist, citations, comments, conventions, filters, model, output, paths, progress, prompts, queries, registers,
+    render, sources, state, terminal, workstreams, writes,
 )
 from core import products as product_core
 
@@ -192,7 +192,46 @@ def gather(cfg, audience_name, window=None, author=True):
     return sections, snapshot, last
 
 
-def _leadership_prep(section):
+def _sample_url(section):
+    return next((issue.get("url") for issue in section.get("issues") or []
+                 if issue.get("url")), "")
+
+
+def _epic_url(cfg, section, epic):
+    key = epic.get("key") if isinstance(epic, dict) else epic
+    if isinstance(epic, dict) and epic.get("url"):
+        return epic["url"]
+    if not citations.is_issue_key(key):
+        return ""
+    return render.browse_url(cfg, key, _sample_url(section))
+
+
+def _epic_ref(cfg, section, epic, summary=True):
+    """`[KEY](url) Summary` for an Epic dict, or a linked key on its own."""
+    if isinstance(epic, dict):
+        text = epic.get("summary") if summary else ""
+        return render.issue_link(epic.get("key"), text, _epic_url(cfg, section, epic))
+    return render.markdown_link(epic, _epic_url(cfg, section, epic)) or str(epic)
+
+
+def _issue_ref(issue):
+    return render.markdown_link(issue.get("key"), issue.get("url"))
+
+
+def _link_tags(cfg, section, text):
+    """`[APS-10]` tags in the change block become links to the issue."""
+    cmap = {}
+    for issue in section.get("issues") or []:
+        if issue.get("key"):
+            cmap[issue["key"]] = (issue["key"], issue.get("url")
+                                  or render.browse_url(cfg, issue["key"]))
+    for key in re.findall(r"\[([A-Z][A-Z0-9]+-\d+)\]", text or ""):
+        cmap.setdefault(key, (key, render.browse_url(cfg, key, _sample_url(section))))
+    linked, _removed = citations.resolve(text or "", cmap)
+    return linked
+
+
+def _leadership_prep(section, cfg=None):
     """Epic table, decisions the room must make, and counts owed per Epic."""
     lines = [
         "| Epic | Status | Progress | Signal | Target |",
@@ -206,7 +245,7 @@ def _leadership_prep(section):
         if signal == "At risk" and reason:
             signal = f"{signal} — {reason}"
         lines.append(
-            f"| {epic['key']} {epic.get('summary') or ''} | {epic.get('status') or ''} | "
+            f"| {_epic_ref(cfg, section, epic)} | {epic.get('status') or ''} | "
             f"{epic.get('children_done') or 0} / {epic.get('children_total') or 0} | "
             f"{signal} | {epic.get('due') or '—'} |"
         )
@@ -220,9 +259,9 @@ def _leadership_prep(section):
     if not decisions and not at_risk:
         lines.append("_Nothing waiting on this room._")
     for page in decisions:
-        lines.append(f"- {page.get('title') or 'page'}")
+        lines.append(f"- {render.markdown_link(page.get('title') or 'page', page.get('url'))}")
     for epic in at_risk:
-        lines.append(f"- {epic['key']} {epic.get('summary') or ''} is at risk.")
+        lines.append(f"- {_epic_ref(cfg, section, epic)} is at risk.")
     lines.append("")
     lines.append("### What you owe the room")
     lines.append("")
@@ -235,7 +274,7 @@ def _leadership_prep(section):
     for epic, kinds in by_epic.items():
         overdue = kinds.count("overdue")
         blocked = kinds.count("blocked")
-        lines.append(f"- {epic}: {overdue} overdue, {blocked} blocked.")
+        lines.append(f"- {_epic_ref(cfg, section, epic)}: {overdue} overdue, {blocked} blocked.")
     lines.append("")
     from core.report_render import SIGNAL_FOOTER
     lines.append(SIGNAL_FOOTER)
@@ -255,14 +294,15 @@ def _partner_prep(cfg, section):
             continue
         if not audience_core.partner_visible_epic(epic, {}, opts):
             continue
-        lines.append(f"**{epic.get('summary') or epic['key']}**")
+        name = epic.get("summary") or epic["key"]
+        lines.append(f"**{render.markdown_link(name, _epic_url(cfg, section, epic))}**")
         lines.append("")
         visible_keys.add(epic["key"])
         for item in epic.get("items") or []:
             labels = {str(label).lower() for label in item.get("labels") or []}
             if labels & excluded:
                 continue
-            lines.append(f"- {item.get('summary') or item.get('key')}")
+            lines.append(f"- {render.markdown_link(item.get('summary') or item.get('key'), item.get('url'))}")
             if item.get("key"):
                 visible_keys.add(item["key"])
         lines.append("")
@@ -274,7 +314,8 @@ def _partner_prep(cfg, section):
     if not owed:
         lines.append("_Nothing you owe this room._")
     for kind, issue in owed:
-        lines.append(f"- {issue.get('summary') or issue.get('key')} ({kind})")
+        name = issue.get("summary") or issue.get("key")
+        lines.append(f"- {render.markdown_link(name, issue.get('url'))} ({kind})")
     lines.append("")
     return lines
 
@@ -299,7 +340,7 @@ def render_prep(audience, sections, last, level="pm", cfg=None):
             lines.append(f"Product Goal: {goal}")
             lines.append("")
         if level == "leadership":
-            lines.extend(_leadership_prep(section))
+            lines.extend(_leadership_prep(section, cfg))
             from core import report_render
             if section.get("registers"):
                 report_render.append_registers(
@@ -310,11 +351,11 @@ def render_prep(audience, sections, last, level="pm", cfg=None):
             continue
         lines.append("### What changed")
         lines.append("")
-        lines.append(section["change"])
+        lines.append(_link_tags(cfg, section, section["change"]))
         notes = []
         for issue in section["issues"]:
             for line in issue.get("comments") or []:
-                notes.append(f"- {issue['key']} — {line}")
+                notes.append(f"- {_issue_ref(issue)} — {line}")
         if notes:
             lines.append("")
             lines.extend(notes)
@@ -337,7 +378,7 @@ def render_prep(audience, sections, last, level="pm", cfg=None):
                     lines.append(f"- {issue.get('summary')} ({kind})")
                 else:
                     lines.append(
-                        f"- {issue['key']}: {issue.get('summary')} "
+                        f"- {_issue_ref(issue)}: {issue.get('summary')} "
                         f"({kind} — {today_cmd.describe_action(kind, issue)})")
         lines.append("")
         lines.append("### What you need from the room")
@@ -346,7 +387,7 @@ def render_prep(audience, sections, last, level="pm", cfg=None):
             lines.append("_Nothing waiting on this room._")
         for kind, issue in needed:
             lines.append(
-                f"- {issue['key']}: {issue.get('summary')} "
+                f"- {_issue_ref(issue)}: {issue.get('summary')} "
                 f"({kind} — {today_cmd.describe_action(kind, issue)})")
         lines.append("")
         lines.append("### Risks")
@@ -427,7 +468,7 @@ def run_prep(cfg, args):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
     state.save_state(_state_path(cfg, audience), snapshot)
-    print(text)
+    terminal.show(text, args)
     print(f"\nDone. Brief written to: {path}")
     if getattr(args, "publish", False):
         from commands import publish as pub
@@ -530,7 +571,7 @@ def run_debrief(cfg, args):
     body = render_debrief(audience, notes, extracted)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(body)
-    print(body)
+    terminal.show(body, args)
     print(f"\nDone. Debrief written to: {out}")
     if not getattr(args, "apply", False):
         return

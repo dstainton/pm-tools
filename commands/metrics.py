@@ -12,7 +12,7 @@ import sys
 from core import metrics as core
 from core import output
 from core import products as product_core
-from core import progress, sources, statuses, workstreams
+from core import progress, render as render_core, sources, statuses, terminal, workstreams
 
 
 def _history(cfg, project, jql):
@@ -109,9 +109,11 @@ def render(groups, weeks):
                 continue
             lines.append(f"Aging in {row['workstream']} "
                          f"({len(row['aging'])} of {row['aging_total']})")
+            lines.append("")
             for item in row["aging"]:
+                key = render_core.markdown_link(item["key"], item.get("url"))
                 lines.append(
-                    f"  {item['key']:<8} {item['status']} {item['age']} days  "
+                    f"- {key} {item['status']}, {item['age']} days — "
                     f"{item['summary']}")
             lines.append("")
         weeks_row = rows[0]["throughput"] if rows else []
@@ -269,6 +271,10 @@ def _sprint_cards(rows, field, limit=12):
     return cards[:limit], len(cards)
 
 
+def _card_ref(card):
+    return render_core.markdown_link(card.get("key"), card.get("url"))
+
+
 def render_sprint(sprint_name, groups, cfg=None):
     """Sprint review: goal, forecast, what finished, and what did not."""
     title = sprint_name or "Open sprint"
@@ -314,10 +320,12 @@ def render_sprint(sprint_name, groups, cfg=None):
                 if epic not in epics:
                     epics.append(epic)
         if epics:
+            sample = next((card.get("url") for row in rows
+                           for card in (row.get("completed") or []) if card.get("url")), "")
             lines.append("Epics advanced")
             lines.append("")
             for epic in epics:
-                lines.append(f"- {epic}")
+                lines.append(f"- {render_core.markdown_link(epic, render_core.browse_url(cfg, epic, sample))}")
             lines.append("")
         done_cards, done_n = _sprint_cards(rows, "completed")
         open_cards, open_n = _sprint_cards(rows, "unfinished")
@@ -325,7 +333,7 @@ def render_sprint(sprint_name, groups, cfg=None):
             lines.append(f"Completed ({done_n})")
             lines.append("")
             for card in done_cards:
-                lines.append(f"- {card.get('key')} {card.get('summary') or ''}".rstrip())
+                lines.append(f"- {_card_ref(card)} {card.get('summary') or ''}".rstrip())
             if done_n > len(done_cards):
                 lines.append(f"- {done_n - len(done_cards)} more")
             lines.append("")
@@ -333,7 +341,7 @@ def render_sprint(sprint_name, groups, cfg=None):
             lines.append(f"Incomplete ({open_n})")
             lines.append("")
             for card in open_cards:
-                lines.append(f"- {card.get('key')} {card.get('summary') or ''}".rstrip())
+                lines.append(f"- {_card_ref(card)} {card.get('summary') or ''}".rstrip())
             if open_n > len(open_cards):
                 lines.append(f"- {open_n - len(open_cards)} more")
             lines.append("")
@@ -376,7 +384,7 @@ def run_sprint(cfg, args):
         getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    print(text)
+    terminal.show(text, args)
     print(f"\nDone. Sprint metrics written to: {path}")
 
 
@@ -409,5 +417,5 @@ def run(cfg, args):
         getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    print(text)
+    terminal.show(text, args)
     print(f"\nDone. Metrics written to: {path}")

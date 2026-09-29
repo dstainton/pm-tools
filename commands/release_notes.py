@@ -11,7 +11,7 @@ When the model is down, the command prints the bullets and says so.
 import datetime as dt
 import sys
 
-from core import comments, filters, model, output, prompts, queries, sources, workstreams
+from core import comments, filters, model, output, prompts, queries, render as render_core, sources, terminal, workstreams
 from core import products as product_core
 
 
@@ -142,7 +142,7 @@ def _attach_comments(cfg, rows, since, author=True):
         comments.attach(cfg, jira, group, cutoff, author=author)
 
 
-def bullet_lines(rows, comment_budget=6000, level="pm", cfg=None):
+def bullet_lines(rows, comment_budget=6000, level="pm", cfg=None, links=False):
     """Markdown bullets grouped by product, then workstream."""
     if not rows:
         return ["_No done issues in that window._", ""]
@@ -206,12 +206,19 @@ def bullet_lines(rows, comment_budget=6000, level="pm", cfg=None):
             multiple = len(buckets) > 1 or (buckets and buckets[0][0])
             for label, title, issues in buckets:
                 if multiple and (label or len(buckets) > 1):
-                    heading = f"{label} {title}".strip() if label else "Not under an Epic"
+                    if label and links:
+                        url = render_core.browse_url(cfg, label, issues[0].get("url"))
+                        heading = render_core.issue_link(label, title if title != label else "", url)
+                    else:
+                        heading = f"{label} {title}".strip() if label else "Not under an Epic"
                     lines.append(f"**{heading}**")
                     lines.append("")
                 for issue in issues:
                     if level == "partner" and not issue.get("show_keys"):
                         lines.append(f"- {issue['summary']}")
+                    elif links:
+                        key = render_core.markdown_link(issue["key"], issue.get("url"))
+                        lines.append(f"- {key}: {issue['summary']}")
                     else:
                         lines.append(f"- {issue['key']}: {issue['summary']}")
                 wrote = False
@@ -262,7 +269,7 @@ def render(since, version, rows, prose, comment_budget=6000, level="pm", extras=
         f"_{window}. The model does not choose which issues are included._",
         "",
     ]
-    bullets = bullet_lines(rows, comment_budget, level, cfg=cfg)
+    bullets = bullet_lines(rows, comment_budget, level, cfg=cfg, links=True)
     if prose:
         lines.append(prose)
         lines.append("")
@@ -320,7 +327,8 @@ def _extras(cfg, since, version, level, rows=None):
                     continue
                 if entry.get("change") not in ("new", "changed"):
                     continue
-                decisions.append(f"- {entry.get('title')}")
+                decisions.append(
+                    f"- {render_core.markdown_link(entry.get('title') or 'entry', entry.get('url'))}")
         if decisions:
             lines.extend(["## Decisions made in this release", ""] + decisions + [""])
     if since:
@@ -343,15 +351,25 @@ def _extras(cfg, since, version, level, rows=None):
         by_epic = {}
         for page in collected:
             by_epic.setdefault(page.get("epic") or "", []).append(page)
+        from core import audience
+        partner = audience.settings(cfg)["partner"] if level == "partner" else {}
+        jira_links = level != "partner" or bool(partner.get("include_jira_links"))
+        page_links = level != "partner" or bool(partner.get("include_confluence_links"))
+        sample = next((row.get("url") for row in rows or [] if row.get("url")), "")
         reading = []
         for key, pages in by_epic.items():
             stub = next((row for row in stubs if row.get("key") == key), None)
             title = (stub or {}).get("summary") or key or "Not under an Epic"
-            heading = f"**{key} {title}**".strip() if key else "**Not under an Epic**"
+            if key and jira_links:
+                url = render_core.browse_url(cfg, key, sample)
+                heading = f"**{render_core.issue_link(key, title if title != key else '', url)}**"
+            else:
+                heading = f"**{key} {title}**".strip() if key else "**Not under an Epic**"
             reading.append(heading)
             reading.append("")
             for page in pages:
-                reading.append(f"- {page.get('title')}")
+                name = page.get("title") or "page"
+                reading.append(f"- {render_core.markdown_link(name, page.get('url')) if page_links else name}")
             reading.append("")
         if reading:
             lines.extend(["## Further reading", ""] + reading)
@@ -388,5 +406,5 @@ def run(cfg, args):
         getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    print(text)
-    print(f"Done. Release notes written to: {path}")
+    terminal.show(text, args)
+    print(f"\nDone. Release notes written to: {path}")

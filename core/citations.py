@@ -70,5 +70,35 @@ def resolve(text, cmap):
     return _BRACKET.sub(repl, text or ""), removed
 
 
+_MD_LINK = re.compile(r"\[[^\]\n]*\]\([^)\s]*\)|`[^`\n]*`|https?://\S+")
+_BARE_KEY = re.compile(r"(?<![\w/#\[-])([A-Z][A-Z0-9]+-\d+)(?![\w\]-])")
+
+
+def link_keys(text, cmap):
+    """Link a bare issue key that is in cmap. Existing links stay as they are.
+
+    The model sometimes writes APS-10 without brackets. A key that is not in
+    the material stays text, because nothing says it exists.
+    """
+    def link_plain(chunk):
+        def repl(match):
+            key = match.group(1)
+            label, url = cmap.get(key) or ("", "")
+            if not url or label != key:
+                return key
+            return f"[{key}]({url})"
+        return _BARE_KEY.sub(repl, chunk)
+
+    out = []
+    pos = 0
+    source = text or ""
+    for match in _MD_LINK.finditer(source):
+        out.append(link_plain(source[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(link_plain(source[pos:]))
+    return "".join(out)
+
+
 def is_issue_key(value):
     return bool(_KEY.match(str(value or "")))

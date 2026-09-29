@@ -167,6 +167,7 @@ def aging_wip(issues, today=None, limit=8, epic_types=("Epic",)):
         age = (today - started).days
         rows.append({
             "key": issue.get("key"),
+            "url": issue.get("url") or "",
             "summary": issue.get("summary") or "",
             "status": issue.get("status"),
             "age": age,
@@ -271,6 +272,7 @@ def sprint_snapshot(issues, sprint, epic_types=("Epic",)):
             continue
         card = {
             "key": issue.get("key") or "",
+            "url": issue.get("url") or "",
             "summary": issue.get("summary") or "",
             "epic": issue.get("epic") or issue.get("parent") or "",
             "points": issue.get("story_points") or 0,

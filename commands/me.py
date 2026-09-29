@@ -8,7 +8,7 @@ is still open in that stretch. Neither run moves the weekly-report memory.
 import datetime as dt
 import sys
 
-from core import blocked, comments, output, queries, sources, workstreams
+from core import blocked, citations, comments, output, queries, render, sources, terminal, workstreams
 from core import window as window_core
 
 
@@ -100,8 +100,20 @@ def _overdue(issue, today):
     return day < today
 
 
+def _key(issue):
+    return render.markdown_link(issue.get("key"), issue.get("url"))
+
+
+def _epic_heading(cfg, epic, rows):
+    """An Epic key links to the Epic. The placeholder heading stays text."""
+    if not citations.is_issue_key(epic):
+        return epic
+    sample = next((row.get("url") for row in rows if row.get("url")), "")
+    return render.markdown_link(epic, render.browse_url(cfg, epic, sample))
+
+
 def _line(issue, today, sprint_name, in_sprint):
-    bits = [issue.get("key") or "", issue.get("summary") or ""]
+    bits = [_key(issue), issue.get("summary") or ""]
     detail = [issue.get("issuetype") or "", issue.get("status") or ""]
     if in_sprint and sprint_name:
         detail.append(sprint_name)
@@ -137,9 +149,8 @@ def _write(cfg, args, name, text):
     path = output.place(cfg, name, getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    print(text)
-    if not text.endswith("\n"):
-        print()
+    terminal.show(text, args)
+    print()
     print(f"Written to {path}")
 
 
@@ -190,7 +201,7 @@ def render_snapshot(cfg, issues, person, today, sprint):
         lines.append(f"## {block['title']}")
         lines.append("")
         for epic, rows in block["epics"].items():
-            lines.append(f"### {epic}")
+            lines.append(f"### {_epic_heading(cfg, epic, rows)}")
             lines.append("")
             for issue in rows:
                 lines.append(_line(issue, today, sprint_name, issue.get("key") in in_sprint))
@@ -233,10 +244,10 @@ def render_summary(cfg, open_issues, finished, person, window, today):
             lines.append(f"### {block['title']}")
             lines.append("")
             for epic, rows in block["epics"].items():
-                lines.append(f"#### {epic}")
+                lines.append(f"#### {_epic_heading(cfg, epic, rows)}")
                 lines.append("")
                 for issue in rows:
-                    lines.append(f"- {issue.get('key')} — {issue.get('summary') or ''}")
+                    lines.append(f"- {_key(issue)} — {issue.get('summary') or ''}")
                 lines.append("")
     else:
         lines.append("_Nothing finished in this window._")
@@ -250,7 +261,7 @@ def render_summary(cfg, open_issues, finished, person, window, today):
     lines.append("")
     if updated:
         for issue in updated:
-            lines.append(f"- {issue.get('key')} — {issue.get('summary') or ''} "
+            lines.append(f"- {_key(issue)} — {issue.get('summary') or ''} "
                          f"({issue.get('status') or ''})")
     else:
         lines.append("_Nothing still open was updated in this window._")
@@ -261,13 +272,13 @@ def render_summary(cfg, open_issues, finished, person, window, today):
         lines.append("_Nothing open._")
     else:
         for issue in open_issues:
-            lines.append(f"- {issue.get('key')} — {issue.get('summary') or ''} "
+            lines.append(f"- {_key(issue)} — {issue.get('summary') or ''} "
                          f"({issue.get('status') or ''})")
     lines.append("")
     notes = []
     for issue in list(finished) + list(open_issues):
         for line in issue.get("comments") or []:
-            notes.append(f"- {issue.get('key')} — {line}")
+            notes.append(f"- {_key(issue)} — {line}")
     if notes:
         lines.append("## Comments")
         lines.append("")

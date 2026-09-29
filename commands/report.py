@@ -11,7 +11,7 @@ narrowed if --workstream was given.
 import datetime as dt
 import sys
 
-from core import audience, checklist, citations, comments, epics, output, pages as page_core, progress, registers, report_render, sources, model, state, workstreams
+from core import audience, checklist, citations, comments, epics, output, pages as page_core, progress, registers, report_render, sources, model, state, terminal, workstreams
 from core import products as product_core
 
 
@@ -510,6 +510,7 @@ def _audience_summaries(cfg, groups, prepared, sections, who):
                 if page.get("ref"):
                     cite[page["ref"]] = (page.get("title") or page["ref"], page.get("url") or "")
             body, removed = citations.resolve(body, cite)
+            body = citations.link_keys(body, cite)
             if removed:
                 print(f"  ({product.get('abbrev')}: {removed} citation removed — not in the material)")
         else:
@@ -725,7 +726,9 @@ def run(cfg, args):
             cfg=cfg, material=section_material(
                 cfg, row, names=report_profiles.names_people(who)),
             section_roles=section_roles)
-        body, removed = citations.resolve(body, citations.citation_map(row["items"]))
+        cmap = citations.citation_map(row["items"])
+        body, removed = citations.resolve(body, cmap)
+        body = citations.link_keys(body, cmap)
         if removed:
             print(f"  ({ws['abbrev']}: {removed} citation removed — not in the material)")
             noun = "citation" if removed == 1 else "citations"
@@ -819,8 +822,11 @@ def run(cfg, args):
     hits = int((cfg.get("model") or {}).get("_cache_hits") or 0)
     print(f"{calls} model call(s), {hits} already cached.")
     print(f"\nDone. Report written to: {out_path}")
-    preview = "\n".join(report.splitlines()[:24])
-    print("\n" + preview)
+    shown, rest = terminal.preview(report)
+    print()
+    terminal.show(shown, args)
+    if rest:
+        print(f"\n({rest} more lines in the file.)")
     if getattr(args, "publish", False):
         from commands import publish as pub
         pub.publish_file(cfg, args, out_path,

@@ -239,8 +239,12 @@ class ReleaseNoteTests(unittest.TestCase):
         }]
         text = release_notes.render("2026-08-01", None, rows, None)
         self.assertIn("The model was skipped.", text)
-        self.assertIn("APS-10: Publish the status endpoint", text)
+        self.assertIn(
+            "[APS-10](https://example/browse/APS-10): Publish the status endpoint", text)
         self.assertIn("## Integration Platform (IP)", text)
+        prompt = "\n".join(release_notes.bullet_lines(rows))
+        self.assertIn("APS-10: Publish the status endpoint", prompt)
+        self.assertNotIn("](", prompt)
 
     def test_since_must_be_a_date(self):
         with self.assertRaises(SystemExit):
