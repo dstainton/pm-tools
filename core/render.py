@@ -17,18 +17,91 @@ def plain_requested(args=None):
     return bool(getattr(args, "plain", False)) if args is not None else False
 
 
-def terminal_links(stream=None):
-    """True when this terminal can turn an OSC 8 sequence into a click."""
-    stream = stream if stream is not None else sys.stdout
+def _isatty(stream):
     try:
         return bool(stream.isatty())
     except (AttributeError, ValueError):
         return False
 
 
+_VT_ENABLED = {}
+
+
+def virtual_terminal(stream=None):
+    """True when escape sequences reach a terminal that understands them.
+
+    A pipe, a file, and TERM=dumb do not. On Windows the console has to be
+    switched into virtual-terminal mode first. Windows 10 and later allow
+    that for CMD and PowerShell; an older console refuses and gets text.
+    """
+    stream = stream if stream is not None else sys.stdout
+    if not _isatty(stream):
+        return False
+    if os.environ.get("TERM") == "dumb":
+        return False
+    if sys.platform != "win32":
+        return True
+    if os.environ.get("WT_SESSION") or os.environ.get("TERM_PROGRAM"):
+        return True
+    return _enable_windows_vt(stream)
+
+
+def _enable_windows_vt(stream):
+    handle_id = -12 if stream is sys.stderr else -11
+    if handle_id in _VT_ENABLED:
+        return _VT_ENABLED[handle_id]
+    enabled = False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(handle_id)
+        mode = wintypes.DWORD()
+        if handle and kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            wanted = mode.value | 0x0004           # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            enabled = bool(kernel32.SetConsoleMode(handle, wanted))
+    except (AttributeError, OSError, ImportError, ValueError):
+        enabled = False
+    _VT_ENABLED[handle_id] = enabled
+    return enabled
+
+
+def terminal_links(stream=None):
+    """True when this terminal can turn an OSC 8 sequence into a click.
+
+    Windows Terminal (which hosts PowerShell and CMD), VS Code, and the
+    usual Linux and macOS terminals do. The classic Windows console window
+    does not, so it gets the address as text. FORCE_HYPERLINK=1 or 0
+    overrides the guess. A pipe or a file never gets the sequence.
+    """
+    stream = stream if stream is not None else sys.stdout
+    forced = os.environ.get("FORCE_HYPERLINK")
+    if forced is not None and forced.strip() != "":
+        return forced.strip() not in ("0", "false", "no")
+    if not virtual_terminal(stream):
+        return False
+    if sys.platform != "win32":
+        return True
+    if os.environ.get("WT_SESSION"):
+        return True
+    if os.environ.get("TERM_PROGRAM") in ("vscode", "WezTerm"):
+        return True
+    return os.environ.get("ConEmuANSI") == "ON"
+
+
+def terminal_emoji(stream=None):
+    """False on the classic Windows console, whose fonts draw boxes."""
+    if not virtual_terminal(stream):
+        return False
+    if sys.platform != "win32":
+        return True
+    return bool(os.environ.get("WT_SESSION") or os.environ.get("TERM_PROGRAM"))
+
+
 def terminal_width(stream=None):
     """Column count when stdout is a terminal. None means do not reflow."""
-    if not terminal_links(stream):
+    stream = stream if stream is not None else sys.stdout
+    if not _isatty(stream):
         return None
     try:
         columns = shutil.get_terminal_size().columns
@@ -55,6 +128,26 @@ def markdown_link(key, url):
     if not url or not key:
         return key
     return f"[{key}]({url})"
+
+
+def browse_url(cfg, key, sample=None):
+    """The Jira page for `key`, from jira.base_url or another issue's url."""
+    key = str(key or "").strip()
+    if not key:
+        return ""
+    base = (((cfg or {}).get("jira") or {}).get("base_url") or "").rstrip("/")
+    if not base and sample and "/browse/" in str(sample):
+        base = str(sample).split("/browse/")[0]
+    return f"{base}/browse/{key}" if base else ""
+
+
+def issue_link(key, summary="", url="", sep=" "):
+    """`[KEY](url) summary`. The key stays the link text."""
+    shown = markdown_link(key, url)
+    summary = (summary or "").strip()
+    if not summary:
+        return shown
+    return f"{shown}{sep}{summary}" if shown else summary
 
 
 def severity_mark(severity, plain=False):

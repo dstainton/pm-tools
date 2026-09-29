@@ -260,8 +260,9 @@ def build_parser():
     common.add_argument("--refresh", action="store_true",
                         help="Ignore cached Jira fetches and model replies")
     common.add_argument("--plain", action="store_true",
-                        help="No colour, glyphs, or terminal links. "
-                             "One labelled fact per line. NO_COLOR does this too.")
+                        help="No colour, glyphs, or clickable links; a link "
+                             "shows its address. One labelled fact per line. "
+                             "NO_COLOR does this too.")
     common.add_argument("--out", default=None, metavar="DIR",
                         help="Write this run's files under DIR instead of "
                              "output.directory")

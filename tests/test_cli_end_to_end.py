@@ -971,7 +971,11 @@ class BriefTests(CliTestCase):
         out = self.run_pm("brief", "--for", "standup", "--product", "IP", "-w", "SDX")
         self.assertIn("Brief — standup", out)
         self.assertIn("first time with this audience", out)
-        self.assertIn("APS-10 — ", out)
+        # A pipe is not a terminal: the key is followed by its address.
+        self.assertIn(f"APS-10 <{self.jira.url}/browse/APS-10> — ", out)
+        self.assertNotIn("## ", out)
+        brief_file = self.read_output(r"brief_standup_.*\.md")
+        self.assertIn(f"[APS-10]({self.jira.url}/browse/APS-10) — ", brief_file)
         self.assertIn("Waiting on the certificate review.", out)
         self.assertNotIn("Old note from last quarter.", out)
         self.assertTrue(os.path.exists(

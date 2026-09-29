@@ -360,8 +360,11 @@ def run(cfg, args):
         print(f"  {render_core.count_phrase(len(issues), 'issue')} checked — "
               f"{render_core.count_phrase(len(findings), 'finding')}.")
         for fnd in findings[:8]:
-            print(f"  {render_core.severity_mark(fnd['severity'])} · "
-                  f"{fnd['rule']} · {fnd['key']} {fnd['message']}")
+            key = render_core.issue_cell(
+                fnd["key"], fnd.get("url"), 0,
+                render_core.terminal_links() and not render_core.plain_requested(args))
+            print(f"  {render_core.severity_mark(fnd['severity'], render_core.plain_requested(args))} · "
+                  f"{fnd['rule']} · {key} {fnd['message']}")
         results.append((ws, findings))
 
     if hidden and not show_all:

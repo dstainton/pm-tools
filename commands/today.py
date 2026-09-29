@@ -457,27 +457,15 @@ _GOAL_INDENT = "    "
 
 
 def terminal_links(stream=None):
-    """True when this terminal can turn an OSC 8 sequence into a click.
-
-    Windows Terminal, which hosts PowerShell, does. A pipe or a file cannot,
-    so those stay plain text.
-    """
-    stream = stream if stream is not None else sys.stdout
-    try:
-        return bool(stream.isatty())
-    except (AttributeError, ValueError):
-        return False
+    """True when this terminal can turn an OSC 8 sequence into a click."""
+    from core import render
+    return render.terminal_links(stream)
 
 
 def terminal_width(stream=None):
     """Column count when stdout is a terminal. None means do not reflow."""
-    if not terminal_links(stream):
-        return None
-    try:
-        columns = shutil.get_terminal_size().columns
-    except OSError:
-        return None
-    return columns if columns and columns > 20 else None
+    from core import render
+    return render.terminal_width(stream)
 
 
 def _hyperlink(label, url):
@@ -659,8 +647,10 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
         lines.append("DEPENDENCIES")
         if not dependencies:
             lines.append("  No blocker links on the blocked items in this list.")
+        from core import terminal
+        caps = terminal.Caps(links=links)
         for line in dependencies:
-            lines.append(f"  {line}")
+            lines.append(f"  {terminal.render_line(line, caps)}")
         lines.append("")
     return "\n".join(lines)
 
