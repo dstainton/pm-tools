@@ -325,9 +325,9 @@ def validate(cfg):
     options, membership settings — is caught here, with a message that names
     the fix.
     """
+    _validate_membership(cfg)
     _validate_products(cfg)
     _validate_workstreams(cfg)
-    _validate_membership(cfg)
     _validate_ready(cfg)
     _validate_blocked(cfg)
     _validate_model_budget(cfg)

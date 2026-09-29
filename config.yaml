@@ -8,9 +8,10 @@
 #  that copy. Tip: instead of pasting tokens, set them as environment variables
 #  and reference them with ${ENV:VAR_NAME}. See the README.
 #
-#  config_version is the shape of this file. `pm update` raises it when a
-#  newer pm-tools needs a new setting. Do not copy this file over a config
-#  you have already filled in.
+#  config_version is the shape of this file. `pm update` adds every setting
+#  a newer template has and your file lacks, and lists defaults that changed.
+#  `pm setup --review` steps through those one at a time. Do not copy this
+#  file over a config you have already filled in.
 # ============================================================================
 
 config_version: 7
@@ -54,6 +55,10 @@ model:
   # The per-call timeout above still applies to each request.
   total_timeout: 3600
   enable_thinking: false
+  # While thinking is off, each prompt starts with /no_think so a Qwen3
+  # hybrid template skips its think block. Set false for a server that
+  # shows the token to the model as text.
+  no_think_suffix: true
 
 # ----------------------------------------------------------------------------
 #  1b. Local servers `pm setup` probes, and which model size fits this machine
@@ -236,6 +241,8 @@ lint:
   require_acceptance_criteria: true
   # Require a story-point estimate on in-scope stories?
   require_estimate: true
+  # Which issue types need that estimate.
+  estimate_types: [story]
 
 # ----------------------------------------------------------------------------
 #  5b. Review (used by `pm review`) — model-based judgement checks
@@ -295,6 +302,12 @@ daily:
 #  So an issue is in a workstream when EITHER it carries one of the
 #  workstream's Components itself, OR it sits under something that does.
 membership:
+  # What names a workstream on an issue: component (the workstream's
+  # `components`), label (its `labels`), or field (its `field_values` in
+  # the custom field below).
+  by: component
+  # The custom field id, such as customfield_10050, when by is field.
+  field: ""
   # Issue type(s) that act as the workstream anchor.
   epic_types: [Epic]
   # Children with no Component of their own inherit their parent's workstream.
@@ -334,6 +347,7 @@ scopes:
   ready:         {sprint: open, status: open}
   daily_moved:   {updated_within_days: 1}       # --days overrides this
   daily_wip:     {status: in-progress}
+  refine_history: {status: done, types: [Story]}   # examples `pm refine` learns from
 
 # ----------------------------------------------------------------------------
 #  5g. Cache — Jira fetches (five minutes) and model replies (seven days)
@@ -621,6 +635,7 @@ audiences:
   warm: [pm]
   pm:
     name: "Product management"
+  # The detailed report with people's names left out.
   work:
     name: "Team"
   leadership:
