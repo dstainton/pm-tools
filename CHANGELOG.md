@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.16.0 - 2026-09-29
+
+- `pm update` adds every setting the template has and your file lacks,
+  with its default and its comment, even when `config_version` has not
+  changed. Before, only keys with a migration were added, so
+  `audiences.work` never reached a config written before it existed. Your
+  own values, comments, and order are kept. A block that needs your
+  details (SharePoint, or Confluence when the file has none) is listed and
+  not added. Products, workstreams, and registers are never touched.
+- `pm update` then says what changed: the settings it added, shipped
+  defaults that changed since your last review (for example `model.name`
+  from `qwen-local` to `qwen3:4b`, and the old `~/.pm` paths), old names
+  that still work (`confluence.root_title`), and settings this version no
+  longer reads (`lint.vague_title_terms`). `--dry-run` shows the same list
+  and the diff.
+- `pm setup --review` steps through that list. For each item, Enter keeps
+  it, `d` takes the new default, or you type a value; `q` stops and saves.
+  A new block is one question. Every answer is validated before it is
+  kept. `--all` steps through every setting. Outside a terminal it lists
+  the items and writes nothing.
+- A small record next to the config (`config.reviewed.json`) holds the
+  defaults you have reviewed. `pm init` writes it; the first `pm update`
+  on an older config writes the record that config implies.
+- The template now shows `model.no_think_suffix`, `lint.estimate_types`,
+  `membership.by`, `membership.field`, and `scopes.refine_history`, which
+  were read but not listed.
+- A bad `membership.by` value now names the fix instead of stopping with
+  a traceback.
+
 ## 0.15.0 - 2026-09-29
 
 - Every Jira issue and Confluence page a report names is a link again.

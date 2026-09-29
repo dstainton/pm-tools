@@ -36,7 +36,8 @@ A token can be `${ENV:SOME_VAR}` instead of a literal. Confluence, SharePoint,
 and Teams stay off until you want them. `pm setup --section confluence` records
 the shared space (its name or key) and your team page, then shows the product
 and workstream folders it found under the team page. A space set on a
-workstream, with no page, still reads that whole space. `pm update` does not insert those keys.
+workstream, with no page, still reads that whole space. `pm update` does not
+insert those keys, because the template only shows them in a comment.
 
 ```text
 pm doctor
@@ -48,8 +49,10 @@ components. It does not rewrite the file. `pm today` is the first real use.
 
 If `~/.pm-tools/config.yaml` already exists, `pm init` leaves it alone. Later
 releases are installed with `pm update`, which upgrades the program and then
-migrates the config with that new program. It adds new keys without
-replacing the file. One run is enough.
+migrates the config with that new program. It adds every setting the new
+template has and your file lacks, without replacing the file, and lists
+defaults that changed. One run is enough. `pm setup --review` then steps
+through those changes one at a time.
 
 ## Local model
 

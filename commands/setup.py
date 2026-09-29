@@ -445,6 +445,14 @@ def _discover_models(text, args, interactive):
 def run(args):
     section = getattr(args, "section", None)
     interactive = _tty() and not getattr(args, "yes", False)
+    if getattr(args, "all", False) and not getattr(args, "review", False):
+        sys.exit("--all goes with --review:  pm setup --review --all")
+    if getattr(args, "review", False):
+        if section:
+            sys.exit("Choose one of --review or --section.")
+        from commands import setup_review
+        setup_review.run(args, _dest(args), interactive)
+        return
     if not interactive and not any([
             getattr(args, "site", None), getattr(args, "email", None),
             getattr(args, "token_env", None), getattr(args, "token", None),

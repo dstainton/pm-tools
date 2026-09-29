@@ -109,19 +109,22 @@ class UpdateCommandTests(unittest.TestCase):
             self.assertIn("pm update", out.getvalue())
 
     def test_update_leaves_a_current_config_byte_for_byte(self):
+        with open(migrations.bundled_template_path(), encoding="utf-8") as fh:
+            current = fh.read().replace("<YOUR_JIRA_API_TOKEN>", "secret-token")
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "config.yaml")
             with open(path, "w", encoding="utf-8") as fh:
-                fh.write(LIVE)
+                fh.write(current)
             with open(path, "rb") as fh:
                 before = fh.read()
             out = StringIO()
             with patch("sys.stdout", out):
-                update.upgrade_config(path, migrations=[], target=1)
+                update.upgrade_config(path)
             with open(path, "rb") as fh:
                 self.assertEqual(fh.read(), before)
             self.assertIn(b"secret-token", before)
             self.assertIn("current", out.getvalue())
+            self.assertIn("every setting", out.getvalue())
             self.assertNotIn("secret-token", out.getvalue())
 
     def test_dry_run_redacts_the_token_and_does_not_write(self):

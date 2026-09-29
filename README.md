@@ -394,7 +394,8 @@ pm schedule add warm --at 07:00
 | `pm workstreams` | Lists, adds, removes, or checks workstreams. |
 | `pm schedule` | Runs commands at set times, for example `pm today` at 08:30. Only commands that read are allowed. |
 | `pm warm` | Prepares AI answers ahead of time. |
-| `pm update` | Installs the latest version and adds any new settings to your file. |
+| `pm update` | Installs the latest version, adds any new settings to your file, and lists what changed. |
+| `pm setup --review` | Steps through new settings, changed defaults, and old names, one at a time. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
 
 Files are Markdown. The screen gets text instead: headings, lined-up tables, and a link on every Jira issue and Confluence page. Windows Terminal, VS Code, and most Mac and Linux terminals make the name clickable. The classic Windows console and a pipe show the address after the name, like `APS-10 <https://…/browse/APS-10>`. A table wider than the window becomes one labelled line per cell. `FORCE_HYPERLINK=1` or `0` overrides the guess about clickable links.
@@ -453,9 +454,37 @@ folder you are in, then `~/.pm-tools/config.yaml`.
 pm update
 ```
 
-This installs the latest version, then adds any new settings to your file.
-Your existing settings and comments are kept. `pm update --dry-run` shows
-what would change without changing anything.
+This installs the latest version, then adds every setting the new version
+ships that your file does not have yet, each with its default and its
+comment. Your existing settings and comments are kept. A block that needs
+your own details, such as SharePoint's tenant id, is listed rather than
+added. `pm update --dry-run` shows what would change without changing
+anything.
+
+`pm update` then lists what you may want to look at:
+
+- the settings it added
+- shipped defaults that changed since you last reviewed, and whether your
+  file still has the old default or a value you chose
+- old names that still work, such as `confluence.root_title`
+- settings this version no longer reads
+
+To go through that list one item at a time, run:
+
+```text
+pm setup --review
+```
+
+For each item, Enter keeps what the file has, `d` takes the new default,
+or you can type a value. A new block of several settings is one question.
+`q` stops and saves the answers so far. Every answer is checked before it
+is kept. `pm setup --review --all` steps through every setting, not only
+the changes.
+
+`pm update` and `pm setup --review` keep a small record of the defaults you
+have seen next to your config (`config.reviewed.json`). That is how a
+default that changed is told apart from a value you chose. Delete it to
+review every change again.
 
 ---
 

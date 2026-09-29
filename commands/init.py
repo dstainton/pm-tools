@@ -17,6 +17,7 @@ import os
 import shutil
 import sys
 
+from core import config_template
 from core.migrations import bundled_template_path
 from core.paths import config_file
 
@@ -48,6 +49,8 @@ def run(args):
 
     os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
     shutil.copyfile(template, dest)
+    with open(template, "r", encoding="utf-8") as fh:
+        config_template.write_record(dest, config_template.full_record(fh.read()))
 
     print(f"Created a starter config at:\n  {dest}\n")
     print("Next steps:")
