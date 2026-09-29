@@ -437,7 +437,13 @@ def render_prep(audience, sections, last, level="pm", cfg=None):
             report_render.append_registers(
                 lines, records, level, "",
                 lambda scope: True)
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    if level == "partner":
+        return text
+    known = {issue["key"]: (issue["key"], issue["url"])
+             for section in sections for issue in section.get("issues") or []
+             if issue.get("key") and issue.get("url")}
+    return citations.link_keys(text, known)
 
 
 def run_prep(cfg, args):

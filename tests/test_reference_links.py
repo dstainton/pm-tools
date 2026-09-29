@@ -125,15 +125,20 @@ class CommandMarkdownTests(unittest.TestCase):
     def test_brief_links_change_tags_and_epics(self):
         section = {
             "product": {"name": "Integration Platform", "abbrev": "IP"},
-            "change": "New this week:\n  - [APS-10] APS-10: Rotate\n  - [APS-77] Gone",
+            "change": "New this week:\n  - [APS-10] Rotate\n  - [APS-77] Gone",
             "issues": [{"key": "APS-10", "url": f"{BASE}/browse/APS-10"}],
             "needs": [], "risks": [], "pages": [], "registers": [],
             "epics": [{"key": "APS-1", "summary": "Secure exchange", "status": "In progress",
                        "signal": "At risk", "children_done": 1, "children_total": 4}],
         }
         cfg = {"jira": {"base_url": BASE}}
+        section["risks"] = [{"title": "Runbook", "url": "https://example/pages/7",
+                             "summary": "See APS-10 for the endpoint."}]
         text = brief.render_prep("Standup", [section], None, "pm", cfg=cfg)
-        self.assertIn(f"[APS-10]({BASE}/browse/APS-10) APS-10: Rotate", text)
+        section["risks"] = []
+        self.assertIn(f"[APS-10]({BASE}/browse/APS-10) Rotate", text)
+        self.assertIn(f"- [Runbook](https://example/pages/7) — See [APS-10]({BASE}/browse/APS-10) "
+                      "for the endpoint.", text)
         self.assertIn(f"[APS-77]({BASE}/browse/APS-77) Gone", text)
         text = brief.render_prep("Board", [section], None, "leadership", cfg=cfg)
         self.assertIn(f"| [APS-1]({BASE}/browse/APS-1) Secure exchange |", text)

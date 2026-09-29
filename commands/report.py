@@ -641,6 +641,19 @@ def _append_delivery(cfg, report, profile):
     return report.rstrip() + "\n\n" + extra
 
 
+def _known_issues(prepared):
+    """{key: (key, url)} for every Jira issue and Epic the report gathered."""
+    known = {}
+    for _ws, row in prepared:
+        for item in row.get("items") or []:
+            if item.get("source") == "Jira" and item.get("key") and item.get("url"):
+                known[item["key"]] = (item["key"], item["url"])
+        for epic in row.get("epics") or []:
+            if epic.get("key") and epic.get("url"):
+                known.setdefault(epic["key"], (epic["key"], epic["url"]))
+    return known
+
+
 def _register_records_from(prepared):
     for _ws, row in prepared:
         if row.get("registers"):
@@ -789,6 +802,8 @@ def run(cfg, args):
             team_pages=team, sources=report_profiles.sources_mode(who, args),
             dependencies=dependency_lines)
     report = _append_delivery(cfg, report, profile)
+    if privacy != "partner":
+        report = citations.link_keys(report, _known_issues(prepared))
     out_path = output.place(
         cfg, audience.output_name(cfg, who, dt.date.today().isoformat()),
         getattr(args, "out", None))

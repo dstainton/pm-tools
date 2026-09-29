@@ -333,7 +333,7 @@ def to_terminal(markdown, caps=None):
     return "\n".join(out) + "\n" if out else ""
 
 
-def preview(markdown, limit=24):
+def preview(markdown, limit=40):
     """The first `limit` lines, never stopping inside a table."""
     lines = (markdown or "").splitlines()
     cut = min(limit, len(lines))
