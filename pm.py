@@ -375,11 +375,13 @@ def build_parser():
         description="Fill in the config one step at a time. "
                     "--section model lists local servers and can install "
                     "Ollama or Lemonade. --section confluence records one "
-                    "shared space and the team page. --review steps through "
-                    "settings an update added or changed.")
+                    "shared space, the team page, or one folder. "
+                    "--section registers adds one register. --review steps "
+                    "through settings an update added or changed.")
     p_setup.add_argument("--path", default=None, help="Config file to edit")
     p_setup.add_argument("--section", default=None,
-                         choices=["jira", "model", "workstreams", "confluence"],
+                         choices=["jira", "model", "workstreams", "confluence",
+                                  "registers"],
                          help="Fix one section")
     p_setup.add_argument("--site", default=None, help="Jira site, e.g. dpdd")
     p_setup.add_argument("--email", default=None, help="Atlassian email")
@@ -406,6 +408,26 @@ def build_parser():
     p_setup.add_argument("--confluence-team-page", "--confluence-root",
                          dest="confluence_team_page", default=None,
                          help="Your team page title in that space, written when blank")
+    p_setup.add_argument("--workstream", default=None,
+                         help="With --section confluence, the workstream folder to set")
+    p_setup.add_argument("--product", default=None,
+                         help="With --section confluence, the product folder to set. "
+                              "With --section registers, the product the register belongs to")
+    p_setup.add_argument("--confluence-page", default=None,
+                         help="Folder title to write on that product or workstream")
+    p_setup.add_argument("--drop-content-type", default=None,
+                         help="Remove one rejected type from confluence.content_types")
+    p_setup.add_argument("--register-type", default=None,
+                         choices=["decision", "risk", "adr"],
+                         help="Register type to add or update")
+    p_setup.add_argument("--register-name", default=None,
+                         help="Register name to add or update")
+    p_setup.add_argument("--register-title", default=None,
+                         help="Summary page title, when page id is not set")
+    p_setup.add_argument("--under", default=None,
+                         help="Page the register title sits under")
+    p_setup.add_argument("--page-id", default=None,
+                         help="Confluence page id of the register summary")
     p_setup.add_argument("--review", action="store_true",
                          help="Step through new settings, changed defaults, "
                               "and old names in a config you already have")

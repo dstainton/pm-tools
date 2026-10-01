@@ -122,17 +122,19 @@ CATALOGUE = {
         "common": (),
     },
     "doctor": {
-        "summary": "Check the settings, Jira, and the model.",
-        "examples": ("pm doctor",),
+        "summary": "Check the settings, Jira, and the model. A warn or FAIL line names the command.",
+        "examples": ("pm doctor", "pm doctor --discover-fields"),
         "related": ("setup",),
         "common": ("discover_fields",),
     },
     "setup": {
         "summary": "Fill in the settings file, one question at a time.",
-        "examples": ("pm setup", "pm setup --section model", "pm setup --review"),
+        "examples": ("pm setup", "pm setup --section model",
+                     "pm setup --section confluence --workstream SDX",
+                     "pm setup --section registers"),
         "related": ("doctor", "init", "update"),
         "common": ("path", "section", "review", "confluence_space", "confluence_root",
-                   "model_api_key", "yes"),
+                   "workstream", "confluence_page", "register_name", "yes"),
     },
     "products": {
         "summary": "List products, or add and remove them.",

@@ -1,7 +1,7 @@
 # Going further
 
 - Workstreams are Jira Components. `pm setup` proposes one workstream per Component. `pm workstreams check` shows what that membership sees.
-- `pm doctor` names the fix. A blank model or a blank field is `pm setup --section model` or `--section jira`. `--section model` probes the servers in `local_models` and, when none answer, can install Ollama or Lemonade after you type `yes`.
+- `pm doctor` names the fix under each warn or FAIL line. A blank model is `pm setup --section model`, a blank field is `pm doctor --discover-fields`, a Confluence folder is `pm setup --section confluence --workstream SDX`, and a register is `pm setup --section registers`. The command shows the lines and asks once. `--section model` probes the servers in `local_models` and, when none answer, can install Ollama or Lemonade after you type `yes`.
 - `pm warm` fills the model cache in this order: review, page summaries (including changed register entries), the report, then the inbox. `pm warm --pages` is the right grain for Confluence: one summary per page version, not per report. `--audience pm,leadership` warms both levels. `work` can sit in that list too. When `pm` and a nameless shape are warmed together, each prompt is cached on its own.
 - `pages.excerpt_chars` is the budget for a Confluence page. Issue details stay short. A decision page is not cut to 180 characters.
 - `pm metrics` suppresses a landing date until three items have finished in the window.

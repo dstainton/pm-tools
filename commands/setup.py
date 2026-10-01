@@ -60,7 +60,11 @@ def _flags_help():
         "--model-name qwen3:8b\n"
         "  pm setup --section confluence --confluence-space \"POSM Chapter\" "
         "--confluence-team-page \"API Program Services (APS) Team\"\n"
-        "One section later:  pm setup --section jira|model|workstreams|confluence\n"
+        "One section later:  pm setup --section jira|model|workstreams|confluence|registers\n"
+        "  pm setup --section confluence --workstream SDX --confluence-page \"Secure Data Exchange\"\n"
+        "  pm setup --section confluence --drop-content-type blogpost\n"
+        "  pm setup --section registers --register-type risk --register-name \"IP risks\" "
+        "--register-title Risks --under \"Integration Platform\" --product IP\n"
         "A non-interactive run never installs Ollama or Lemonade."
     )
 
@@ -74,8 +78,13 @@ def _confluence_hint():
         "workstream is found by itself. Set confluence_page on a product or\n"
         "workstream when the title is different, or pass --confluence-page\n"
         "to pm products add / pm workstreams add.\n"
-        "A space on its own still reads that whole space. Registers are\n"
-        "edited in the config; the template has a commented example."
+        "A space on its own still reads that whole space.\n"
+        "One folder:  pm setup --section confluence --workstream SDX\n"
+        "  or  pm setup --section confluence --product IP --confluence-page \"Title\"\n"
+        "A rejected content type:  pm setup --section confluence "
+        "--drop-content-type blogpost\n"
+        "Registers are optional:  pm setup --section registers\n"
+        "Leave the prompts blank to keep registers off."
     )
 
 
@@ -311,6 +320,348 @@ def apply_confluence_settings(text, args):
     return text, notes
 
 
+def _list_key(kind):
+    return "products" if kind == "product" else "workstreams"
+
+
+def _loaded(text):
+    import yaml
+    loaded = yaml.safe_load(text) or {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _row(loaded, kind, abbrev):
+    for row in loaded.get(_list_key(kind)) or []:
+        if isinstance(row, dict) and str(row.get("abbrev") or "").lower() == str(abbrev).lower():
+            return row
+    return None
+
+
+def _locate_quiet(loaded, kind, row):
+    """The folder for this entry, or {} when Confluence cannot be read."""
+    from core import confluence_tree
+    block = loaded.get("confluence") if isinstance(loaded.get("confluence"), dict) else {}
+    if not all(_real(block.get(key)) for key in ("base_url", "email", "api_token")):
+        return {}
+    cfg = {
+        "confluence": block,
+        "products": [p for p in loaded.get("products") or [] if isinstance(p, dict)],
+        "workstreams": [w for w in loaded.get("workstreams") or [] if isinstance(w, dict)],
+    }
+    try:
+        if kind == "product":
+            return confluence_tree.locate_product(cfg, row) or {}
+        return confluence_tree.locate_workstream(cfg, row) or {}
+    except Exception as exc:                                  # noqa: BLE001
+        print(f"  Could not read Confluence ({exc}).")
+        return {}
+
+
+def plan_folder(row, located, located_without_space, space_is_team=False):
+    """What to change for one product or workstream folder.
+
+    `delete-space` drops `confluence_space` when that key makes the entry
+    read the shared space and a folder is already named for it, or when a
+    page title has to replace that whole-space read. `set-page` asks for
+    `confluence_page`. A private space is left in place.
+    """
+    if row.get("confluence_cql"):
+        return []
+    if (row.get("confluence_space") and not located.get("ancestor_id")
+            and located_without_space.get("ancestor_id")):
+        return ["delete-space"]
+    if located.get("ancestor_id") and not located.get("missing"):
+        return []
+    if not located and not located_without_space:
+        return ["set-page"]
+    actions = ["set-page"]
+    if space_is_team and row.get("confluence_space"):
+        actions.append("delete-space")
+    return actions
+
+
+def apply_folder_actions(text, kind, abbrev, actions, page_title):
+    """Apply a folder plan. Returns (text, notes, preview)."""
+    notes, preview = [], []
+    list_key = _list_key(kind)
+    if "delete-space" in actions:
+        text, status = config_edit.delete_entry_scalar(
+            text, list_key, abbrev, "confluence_space")
+        notes.append(f"{list_key} {abbrev} confluence_space {status}")
+        if status == "removed":
+            preview.append(f"{list_key} {abbrev}: remove confluence_space")
+    if "set-page" in actions and page_title:
+        text, status = config_edit.set_entry_scalar(
+            text, list_key, abbrev, "confluence_page", page_title, overwrite=True)
+        notes.append(f"{list_key} {abbrev} confluence_page {status}")
+        if status == "written":
+            preview.append(f'{list_key} {abbrev} confluence_page: "{page_title}"')
+    return text, notes, preview
+
+
+def _confirm_write(args, preview):
+    """True when the preview should be written. A pipe needs --yes."""
+    if not preview:
+        print("Nothing to write.")
+        return False
+    print("Would write:")
+    for line in preview:
+        print(f"  {line}")
+    if getattr(args, "yes", False):
+        return True
+    if not _tty():
+        print("Re-run with --yes to write this.")
+        return False
+    reply = _ask("Write this? [y/N] ")
+    if reply.lower() in ("y", "yes"):
+        return True
+    print("Cancelled. Nothing was written.")
+    return False
+
+
+def _run_folder(args, dest, text):
+    """Set one folder title, or remove a whole-space key, then return."""
+    kind = "workstream" if getattr(args, "workstream", None) else "product"
+    abbrev = getattr(args, "workstream", None) or getattr(args, "product", None)
+    loaded = _loaded(text)
+    row = _row(loaded, kind, abbrev)
+    if row is None:
+        sys.exit(f"No {kind} {abbrev}.")
+    located = _locate_quiet(loaded, kind, row)
+    trial = dict(row)
+    trial.pop("confluence_space", None)
+    without = _locate_quiet(loaded, kind, trial) if row.get("confluence_space") else {}
+    shared = str((loaded.get("confluence") or {}).get("space") or "")
+    own = str(row.get("confluence_space") or "")
+    space_is_team = bool(own and shared and own.lower() == shared.lower())
+    if located.get("space") and shared and str(located["space"]).lower() == shared.lower():
+        space_is_team = True
+    actions = plan_folder(row, located, without, space_is_team=space_is_team)
+    if not actions and not getattr(args, "confluence_page", None):
+        title = located.get("title") or abbrev
+        print(f"{kind} {abbrev} already has a folder ({title}). Nothing to write.")
+        return
+    if getattr(args, "confluence_page", None):
+        if "set-page" not in actions:
+            actions.append("set-page")
+    page = getattr(args, "confluence_page", None)
+    if "set-page" in actions and not page:
+        if not _tty():
+            print(f"Pass the folder title:\n"
+                  f"  pm setup --section confluence --{kind} {abbrev} "
+                  f"--confluence-page \"Title\" --yes")
+            return
+        page = _ask(f"{kind} {abbrev} folder title (blank to skip): ")
+        if not page:
+            print("Skipped. Nothing was written.")
+            return
+    updated, notes, preview = apply_folder_actions(text, kind, abbrev, actions, page)
+    if updated == text:
+        print("Nothing to write.")
+        for note in notes:
+            print(f"  {note}")
+        return
+    if not _confirm_write(args, preview):
+        return
+    _write(dest, updated)
+    print(f"Updated {dest}")
+    for note in notes:
+        print(f"  {note}")
+
+
+def _run_drop_type(args, dest, text):
+    """Drop one rejected Confluence content type from the list that holds it."""
+    name = str(getattr(args, "drop_content_type", "") or "").strip()
+    if not name:
+        return False
+    updated, status, key = text, "absent", ""
+    for key in ("content_types", "title_only_types"):
+        updated, status = config_edit.drop_flow_item(text, "confluence", key, name)
+        if status != "absent":
+            break
+    if status == "refused":
+        sys.exit(f"confluence.content_types would be empty. Leave {name} or "
+                 f"set another type first.")
+    if status == "missing":
+        sys.exit("No confluence: block to edit.")
+    if status == "absent":
+        sys.exit(f"{name} is not in confluence.content_types or title_only_types.")
+    preview = [f"confluence.{key}: drop {name}"]
+    if not _confirm_write(args, preview):
+        return True
+    _write(dest, updated)
+    print(f"Updated {dest}")
+    print(f"  confluence.{key} removed {name}")
+    return True
+
+
+def _register_lines(entry, indent="  "):
+    def quoted(value):
+        return '"' + str(value).replace('"', '\\"') + '"'
+
+    lines = [f"{indent}- type: {entry['type']}",
+             f"{indent}  name: {quoted(entry['name'])}"]
+    if entry.get("page_id"):
+        lines.append(f"{indent}  page_id: {quoted(entry['page_id'])}")
+    if entry.get("title"):
+        lines.append(f"{indent}  title: {quoted(entry['title'])}")
+    if entry.get("under"):
+        lines.append(f"{indent}  under: {quoted(entry['under'])}")
+    if entry.get("product"):
+        lines.append(f"{indent}  product: {entry['product']}")
+    if entry.get("workstream"):
+        lines.append(f"{indent}  workstream: {entry['workstream']}")
+    return lines
+
+
+def _register_from_args(args):
+    scope_product = getattr(args, "product", None)
+    scope_stream = getattr(args, "workstream", None)
+    if scope_product and scope_stream:
+        sys.exit("A register sets product or workstream, not both.")
+    return {
+        "type": (getattr(args, "register_type", None) or "").strip().lower(),
+        "name": (getattr(args, "register_name", None) or "").strip(),
+        "title": (getattr(args, "register_title", None) or "").strip(),
+        "under": (getattr(args, "under", None) or "").strip(),
+        "page_id": str(getattr(args, "page_id", None) or "").strip(),
+        "product": (scope_product or "").strip(),
+        "workstream": (scope_stream or "").strip(),
+    }
+
+
+def _scope_field(text, abbrev):
+    """`workstream` or `product`, matching an abbrev already in the config."""
+    loaded = _loaded(text)
+    target = str(abbrev).lower()
+    for row in loaded.get("workstreams") or []:
+        if isinstance(row, dict) and str(row.get("abbrev") or "").lower() == target:
+            return "workstream"
+    return "product"
+
+
+def _known_register(text, entry):
+    """Copy type and scope from a register with this name. Page fields stay blank."""
+    if not entry["name"]:
+        return
+    loaded = _loaded(text)
+    for reg in loaded.get("registers") or []:
+        if not isinstance(reg, dict):
+            continue
+        if str(reg.get("name") or "").lower() != entry["name"].lower():
+            continue
+        if not entry["type"] and reg.get("type"):
+            entry["type"] = str(reg["type"])
+        if not entry["product"] and reg.get("product"):
+            entry["product"] = str(reg["product"])
+        if not entry["workstream"] and reg.get("workstream"):
+            entry["workstream"] = str(reg["workstream"])
+        return
+
+
+def _ask_register(text, entry):
+    """Fill a blank register from prompts. An empty type leaves registers off."""
+    if not entry["type"]:
+        entry["type"] = _ask("Type (decision, risk, or adr, blank to skip): ").lower()
+    if not entry["type"]:
+        return False
+    if not entry["name"]:
+        entry["name"] = _ask("Name: ")
+    _known_register(text, entry)
+    if not entry["page_id"] and not entry["title"]:
+        entry["page_id"] = _ask("Page id (blank to use a title): ")
+    if not entry["page_id"] and not entry["title"]:
+        entry["title"] = _ask("Title: ")
+    if entry["title"] and not entry["under"]:
+        entry["under"] = _ask("Page it sits under (blank if the title is unique): ")
+    if not entry["product"] and not entry["workstream"]:
+        scope = _ask("Product or workstream abbrev (blank for the portfolio): ")
+        if scope:
+            entry[_scope_field(text, scope)] = scope
+    return True
+
+
+def apply_register(text, entry):
+    """Add a register, or fill page_id / title / under on one with the same name.
+
+    Returns (text, notes, preview).
+    """
+    from core import config as config_core
+    notes, preview = [], []
+    loaded = _loaded(text)
+    existing = [reg for reg in loaded.get("registers") or []
+                if isinstance(reg, dict)
+                and str(reg.get("name") or "").lower() == entry["name"].lower()]
+    if existing:
+        updated = text
+        for field in ("page_id", "title", "under", "type"):
+            if not entry.get(field):
+                continue
+            updated, status = config_edit.set_named_scalar(
+                updated, "registers", entry["name"], field, entry[field], overwrite=True)
+            notes.append(f"registers {entry['name']} {field} {status}")
+            if status == "written":
+                preview.append(f"registers {entry['name']} {field}: {entry[field]}")
+        if entry.get("product") or entry.get("workstream"):
+            field = "product" if entry.get("product") else "workstream"
+            updated, status = config_edit.set_named_scalar(
+                updated, "registers", entry["name"], field, entry[field], overwrite=True)
+            notes.append(f"registers {entry['name']} {field} {status}")
+            if status == "written":
+                preview.append(f"registers {entry['name']} {field}: {entry[field]}")
+    else:
+        updated = config_edit.append_mapping(
+            text, "registers", _register_lines(entry), create=True, before_key="prompts")
+        notes.append(f"registers {entry['name']} added")
+        preview.extend(_register_lines(entry))
+    check = _loaded(updated)
+    config_core._validate_registers(check)
+    return updated, notes, preview
+
+
+def _register_usage():
+    return (
+        "Registers are optional. Leave them off, or pass:\n"
+        "  pm setup --section registers --register-type risk "
+        "--register-name \"IP risks\" --register-title Risks "
+        "--under \"Integration Platform\" --product IP --yes\n"
+        "  pm setup --section registers --register-type adr "
+        "--register-name ADRs --page-id 234567 --workstream SDX --yes"
+    )
+
+
+def _run_registers(args, dest, text):
+    entry = _register_from_args(args)
+    _known_register(text, entry)
+    incomplete = not entry["type"] or not entry["name"] or not (entry["page_id"] or entry["title"])
+    if _tty() and not getattr(args, "yes", False) and incomplete:
+        if not entry["type"] and not entry["name"]:
+            print("Registers are optional. Leave the first prompt blank to keep them off.")
+        if not _ask_register(text, entry):
+            print("Left registers unchanged.")
+            return
+    if not entry["type"] or not entry["name"] or not (entry["page_id"] or entry["title"]):
+        print(_register_usage())
+        return
+    if entry["type"] not in ("decision", "risk", "adr"):
+        sys.exit("Register type must be decision, risk, or adr.")
+    try:
+        updated, notes, preview = apply_register(text, entry)
+    except Exception as exc:                                  # noqa: BLE001
+        sys.exit(f"Could not write the register: {exc}")
+    if updated == text:
+        print("Nothing to write.")
+        for note in notes:
+            print(f"  {note}")
+        return
+    if not _confirm_write(args, preview):
+        return
+    _write(dest, updated)
+    print(f"Updated {dest}")
+    for note in notes:
+        print(f"  {note}")
+
+
 def _catalog(text):
     import yaml
     loaded = yaml.safe_load(text) or {}
@@ -472,6 +823,18 @@ def run(args):
         sys.exit(f"No config at {dest}.")
 
     text = _read(dest)
+    if section == "registers":
+        _run_registers(args, dest, text)
+        return
+    if getattr(args, "drop_content_type", None):
+        _run_drop_type(args, dest, text)
+        return
+    if section == "confluence" and (getattr(args, "workstream", None)
+                                    or getattr(args, "product", None)):
+        if getattr(args, "workstream", None) and getattr(args, "product", None):
+            sys.exit("Pass --workstream or --product, not both.")
+        _run_folder(args, dest, text)
+        return
     ask_jira = section in (None, "jira", "workstreams", "confluence")
     if interactive and ask_jira and getattr(args, "open_browser", True):
         print(f"Opening the API token page:\n  {TOKEN_PAGE}")
