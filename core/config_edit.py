@@ -115,11 +115,11 @@ def add_list_entry(text, key, entry, render, before_key=None, create=False):
     return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
 
 
-def set_entry_scalar(text, key, abbrev, field, value):
+def set_entry_scalar(text, key, abbrev, field, value, overwrite=False):
     """Set one scalar on a products or workstreams entry when it is missing or empty.
 
     Returns (text, status) where status is `written`, `kept`, or `missing`.
-    A value that is already set is left alone.
+    A value that is already set is left alone, unless `overwrite` is set.
     """
     lines = text.splitlines()
     start, end = find_block(lines, key)
@@ -135,7 +135,9 @@ def set_entry_scalar(text, key, abbrev, field, value):
             if not match:
                 continue
             raw = match.group(2).strip().strip("\"'")
-            if raw:
+            if raw and not overwrite:
+                return text, "kept"
+            if raw == str(value):
                 return text, "kept"
             comment = match.group(3) or ""
             lines[index] = f"{match.group(1)}{field}: {quoted}{comment}"
@@ -209,6 +211,119 @@ def set_jira_field_if_blank(text, key, value):
     indent = "  "
     lines.insert(end, f'{indent}{key}: "{value}"')
     return "\n".join(lines) + "\n", "written"
+
+
+def delete_entry_scalar(text, key, abbrev, field):
+    """Remove one scalar line from a products or workstreams entry.
+
+    Returns (text, status) where status is `removed`, `absent`, or `missing`.
+    """
+    lines = text.splitlines()
+    start, end = find_block(lines, key)
+    if start is None:
+        return text, "missing"
+    pattern = re.compile(rf"^(\s*){re.escape(field)}:\s*")
+    for found, first, last in items(lines, start, end):
+        if not found or found.lower() != str(abbrev).lower():
+            continue
+        for index in range(first, last + 1):
+            if pattern.match(lines[index]):
+                del lines[index]
+                return "\n".join(lines) + "\n", "removed"
+        return text, "absent"
+    return text, "missing"
+
+
+def drop_flow_item(text, block, key, item):
+    """Remove one word from `key: [a, b]` inside a top-level block.
+
+    Returns (text, status): `removed`, `absent`, `missing`, or `refused`
+    when `content_types` would be left empty.
+    """
+    lines = text.splitlines()
+    start, end = find_block(lines, block)
+    if start is None:
+        return text, "missing"
+    wanted = str(item).strip()
+    pattern = re.compile(rf"^(\s*){re.escape(key)}:\s*\[(.*)\](\s+#.*)?$")
+    for index in range(start + 1, end):
+        match = pattern.match(lines[index])
+        if not match:
+            continue
+        parts = [part.strip().strip("\"'") for part in match.group(2).split(",")
+                 if part.strip()]
+        if wanted not in parts:
+            return text, "absent"
+        if key == "content_types" and len(parts) == 1:
+            return text, "refused"
+        kept = [part for part in parts if part != wanted]
+        comment = match.group(3) or ""
+        lines[index] = f"{match.group(1)}{key}: [{', '.join(kept)}]{comment}"
+        return "\n".join(lines) + "\n", "removed"
+    return text, "missing"
+
+
+def _name_of(lines, first, last):
+    for index in range(first, last + 1):
+        match = re.match(r"""^\s*name:\s*(.*?)(\s+#.*)?$""", lines[index])
+        if match:
+            return match.group(1).strip().strip("\"'")
+    return ""
+
+
+def set_named_scalar(text, key, name, field, value, overwrite=False):
+    """Set one scalar on the list entry whose `name:` matches.
+
+    Returns (text, status) where status is `written`, `kept`, or `missing`.
+    """
+    lines = text.splitlines()
+    start, end = find_block(lines, key)
+    if start is None:
+        return text, "missing"
+    target = str(name).strip().lower()
+    pattern = re.compile(rf"^(\s*){re.escape(field)}:\s*(.*?)(\s+#.*)?$")
+    quoted = _yaml_double(value)
+    for _label, first, last in items(lines, start, end):
+        if _name_of(lines, first, last).lower() != target:
+            continue
+        for index in range(first, last + 1):
+            match = pattern.match(lines[index])
+            if not match:
+                continue
+            raw = match.group(2).strip().strip("\"'")
+            if raw and not overwrite:
+                return text, "kept"
+            if raw == str(value):
+                return text, "kept"
+            comment = match.group(3) or ""
+            lines[index] = f"{match.group(1)}{field}: {quoted}{comment}"
+            return "\n".join(lines) + "\n", "written"
+        indent = "    "
+        for index in range(first, last + 1):
+            body = re.match(r"^(\s+)\S", lines[index])
+            if body and not lines[index].lstrip().startswith("-"):
+                indent = body.group(1)
+                break
+        lines.insert(last + 1, f"{indent}{field}: {quoted}")
+        return "\n".join(lines) + "\n", "written"
+    return text, "missing"
+
+
+def append_mapping(text, key, rendered, create=False, before_key=None):
+    """Append one rendered mapping to a top-level list."""
+    if create:
+        text = ensure_block(text, key, before_key=before_key)
+    lines = text.splitlines()
+    start, end = find_block(lines, key)
+    if start is None:
+        raise ValueError(f"no top-level `{key}:` list found in the config")
+    existing = items(lines, start, end)
+    insert_at = end
+    while insert_at - 1 > start and (not lines[insert_at - 1].strip()
+                                     or lines[insert_at - 1].lstrip().startswith("#")):
+        insert_at -= 1
+    block = ([""] + list(rendered)) if existing else list(rendered)
+    return "\n".join(lines[:insert_at] + block + lines[insert_at:]) + "\n"
 
 
 def remove_list_entry(text, key, abbrev):

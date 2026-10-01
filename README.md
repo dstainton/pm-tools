@@ -94,8 +94,9 @@ pm doctor
 ```
 
 `pm doctor` tests your login, your project, your settings, and the AI
-model, and tells you how to fix anything that is wrong. It does not change
-your file.
+model. A warning names the command for that line. That command writes the
+one setting after showing you the line. `pm doctor` does not change
+your file unless you pass `--discover-fields --yes` to fill blank field ids.
 
 To redo one part of setup later:
 
@@ -103,6 +104,8 @@ To redo one part of setup later:
 pm setup --section jira
 pm setup --section model
 pm setup --section confluence
+pm setup --section confluence --workstream SDX
+pm setup --section registers
 ```
 
 ### Keeping your token out of the file

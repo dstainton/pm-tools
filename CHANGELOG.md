@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `pm doctor` prints the command for each warn or FAIL line, and lists
+  those commands again at the end. `ok` lines are unchanged. A disabled
+  cache says to set `cache.enabled: true` and does not write it.
+- `pm setup --section confluence --workstream SDX` (or `--product`) writes
+  that folder, or removes `confluence_space` when the key makes the
+  workstream read the whole shared space. `--drop-content-type` removes a
+  type the site rejected. `--section registers` adds one register, or
+  updates the page on an existing one. Each write shows the lines and
+  asks once. A pipe needs `--yes`.
 - PowerShell and CMD link the reference itself. A Jira key such as
   `APS-4958`, a Confluence page title, and a SharePoint file name are the
   clickable link. The address is not printed beside the name. A pipe and

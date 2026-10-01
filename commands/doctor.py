@@ -31,14 +31,36 @@ from core import sources
 from core import workstreams as ws_core
 
 
-def _status_line(label, detail, status):
-    """Keep the status word in column 66. A long path wraps underneath."""
+_fixes = []
+
+
+def reset_fixes():
+    """Drop commands recorded by an earlier check. `run` calls this."""
+    _fixes.clear()
+
+
+def _remember(command):
+    if command and command not in _fixes:
+        _fixes.append(command)
+
+
+def _status_line(label, detail, status, fix="", note=""):
+    """Keep the status word in column 66. A long path wraps underneath.
+
+    `fix` is the command for a warn or FAIL. `note` is a sentence when the
+    finding is not a setting this command should write.
+    """
     detail = " ".join(str(detail or "").split())
     if len(detail) <= 48:
         print(f"  {label:<16}{detail:<48} {status}")
-        return
-    print(f"  {label:<16}{'':<48} {status}")
-    print(f"  {'':<16}{detail}")
+    else:
+        print(f"  {label:<16}{'':<48} {status}")
+        print(f"  {'':<16}{detail}")
+    if status in ("warn", "FAIL") and fix:
+        print(f"  {'':<16}Run: {fix}")
+        _remember(fix)
+    elif note:
+        print(f"  {'':<16}{note}")
 
 
 def _ok(label, detail):
@@ -46,14 +68,23 @@ def _ok(label, detail):
     return 0
 
 
-def _warn(label, detail):
-    _status_line(label, detail, "warn")
+def _warn(label, detail, fix="", note=""):
+    _status_line(label, detail, "warn", fix=fix, note=note)
     return 0
 
 
-def _fail(label, detail):
-    _status_line(label, detail, "FAIL")
+def _fail(label, detail, fix="", note=""):
+    _status_line(label, detail, "FAIL", fix=fix, note=note)
     return 1
+
+
+def _print_fixes():
+    if not _fixes:
+        return
+    print("")
+    print("To address these:")
+    for command in _fixes:
+        print(f"  {command}")
 
 
 def _projects_in_play(cfg):
@@ -94,8 +125,8 @@ def _check_version(cfg):
     if not isinstance(have, int):
         have = 0
     if have < installed:
-        return _fail("config version",
-                     f"{have} is behind {installed} — run pm update")
+        return _fail("config version", f"{have} is behind {installed}",
+                     fix="pm update")
     return _ok("config version", str(have))
 
 
@@ -111,7 +142,8 @@ def _check_jira(cfg):
     try:
         me = sources.fetch_myself(cfg["jira"])
     except Exception as err:                       # noqa: BLE001
-        return _fail("jira", f"cannot connect ({err})"), None
+        return _fail("jira", f"cannot connect ({err})",
+                     fix="pm setup --section jira"), None
     name = me.get("displayName") or me.get("emailAddress") or "connected"
     return _ok("jira", f"connected as {name}"), me
 
@@ -129,7 +161,7 @@ def _check_projects(cfg):
             _ = err
     detail = " · ".join(bits) if bits else "(no project configured)"
     if problems:
-        return _fail("projects", detail)
+        return _fail("projects", detail, fix="pm setup --section jira")
     return _ok("projects", detail)
 
 
@@ -144,20 +176,21 @@ def _check_custom_fields(cfg, fields):
         ("epic / parent", jira.get("epic_link_field") or "parent", False),
     ]
 
-    def emit(fn, detail):
+    def emit(fn, detail, fix=""):
         nonlocal first, problems
         label = "custom fields" if first else ""
         first = False
-        problems += fn(label, detail)
+        problems += fn(label, detail, fix=fix) if fix else fn(label, detail)
 
     for name, field_id, required in pairs:
+        fix = "" if field_id == "parent" else "pm doctor --discover-fields"
         if not field_id:
-            emit(_fail if required else _warn, f"{name} (not configured)")
+            emit(_fail if required else _warn, f"{name} (not configured)", fix=fix)
             continue
         if field_id == "parent" or _field_by_id(fields, field_id):
             emit(_ok, f"{name} {field_id}")
             continue
-        emit(_fail if required else _warn, f"{name} {field_id}  MISSING")
+        emit(_fail if required else _warn, f"{name} {field_id}  MISSING", fix=fix)
     return problems
 
 
@@ -203,21 +236,24 @@ def _check_membership(cfg):
 
     if unclaimed:
         bits.append(f"unclaimed {unclaimed}")
-        _warn("membership", " · ".join(bits))
+        _warn("membership", " · ".join(bits), fix="pm coverage")
         return problems
     if problems:
-        return _fail("membership", " · ".join(bits) or "could not count")
+        return _fail("membership", " · ".join(bits) or "could not count",
+                     fix="pm workstreams check")
     return _ok("membership", " · ".join(bits) or "no workstreams")
 
 
 def _check_model(cfg):
     model_cfg = cfg.get("model") or {}
     if not model_cfg.get("endpoint"):
-        return _warn("model", "no model.endpoint configured")
+        return _warn("model", "no model.endpoint configured",
+                     fix="pm setup --section model")
     ok, detail = model_core.ping(model_cfg)
     name = model_cfg.get("name") or "model"
     text = f"{name} {detail}"
-    return _ok("model", text) if ok else _warn("model", text)
+    return _ok("model", text) if ok else _warn(
+        "model", text, fix="pm setup --section model")
 
 
 def _check_cache(cfg):
@@ -228,7 +264,9 @@ def _check_cache(cfg):
     if model_path:
         detail += f"; model {model_count} {model_state}"
     if state == "disabled":
-        return _warn("cache", detail)
+        return _warn(
+            "cache", detail,
+            note="Set cache.enabled: true to turn it back on. This check does not write it.")
     return _ok("cache", detail)
 
 
@@ -248,7 +286,7 @@ def _check_statuses(cfg):
             bits.append(f"{project} {detail}")
     text = " · ".join(bits)
     if fallback:
-        return _warn("statuses", text)
+        return _warn("statuses", text + " — nothing to write", fix="pm doctor")
     return _ok("statuses", text)
 
 
@@ -374,34 +412,46 @@ def _query_report(cfg, only=None):
     return 0
 
 
+def _shell_arg(value):
+    text = str(value)
+    if not text or re.search(r"[\s\"']", text):
+        return '"' + text.replace('"', '\\"') + '"'
+    return text
+
+
 def _check_confluence(cfg):
     import datetime as dt
     from core import confluence_tree, filters, pages
     team = _check_team_page(cfg)
     for ws in cfg.get("workstreams") or []:
         abbrev = ws.get("abbrev") or "?"
+        folder = f"pm setup --section confluence --workstream {_shell_arg(abbrev)}"
         located = confluence_tree.locate_workstream(cfg, ws)
         space = located.get("space") or ""
         if located.get("missing"):
             named = ws.get("confluence_page") or ws.get("confluence_page_id")
-            print(f"  confluence      {abbrev} page {named} was not found          warn")
+            _warn("confluence", f"{abbrev} page {named} was not found", fix=folder)
             continue
         if not space and not ws.get("confluence_cql"):
             product = confluence_tree.product_of(cfg, ws)
             if team and product and confluence_tree.locate_product(cfg, product).get("ancestor_id"):
-                print(f"  confluence      {abbrev}: no folder under the team page is named "
-                      f"for it, so its pages are listed under product "
-                      f"{product.get('abbrev')}  ok")
+                _ok("confluence",
+                    f"{abbrev}: no folder under the team page is named for it, "
+                    f"so its pages are listed under product {product.get('abbrev')}")
             elif team:
-                print(f"  confluence      {abbrev}: no folder under the team page is named "
-                      f"for it. Set confluence_page  warn")
+                _warn("confluence",
+                      f"{abbrev}: no folder under the team page is named for it",
+                      fix=folder)
             else:
-                print(f"  confluence      {abbrev} has no confluence_space or confluence_page  warn")
+                _warn("confluence",
+                      f"{abbrev} has no confluence_space or confluence_page",
+                      fix="pm setup --section confluence")
             continue
         if (team and not located.get("ancestor_id") and not ws.get("confluence_cql")
                 and space == confluence_tree.team_space(cfg)):
-            print(f"  confluence      {abbrev} reads all of {space}, including other "
-                  f"teams. Remove confluence_space to use its folder  warn")
+            _warn("confluence",
+                  f"{abbrev} reads all of {space}, including other teams",
+                  fix=folder)
         try:
             opts = pages.page_settings(cfg)
             types = list(opts["content_types"]) + list(opts["title_only_types"])
@@ -414,16 +464,19 @@ def _check_confluence(cfg):
                     accepted.append(content_type)
                 except Exception as err:  # noqa: BLE001
                     if "400" in str(err):
-                        print(f"  confluence      {abbrev} type {content_type} was rejected — "
-                              f"edit confluence.content_types          warn")
+                        _warn("confluence",
+                              f"{abbrev} type {content_type} was rejected",
+                              fix="pm setup --section confluence "
+                                  f"--drop-content-type {_shell_arg(content_type)}")
                     else:
-                        print(f"  confluence      {abbrev} type {content_type}: {err}          warn")
+                        _warn("confluence", f"{abbrev} type {content_type}: {err}",
+                              fix="pm doctor")
             cql = filters.build_cql(ws, cfg, scope="space", types=accepted or types)
             found = sources.fetch_confluence_results(cfg, cql, since=since, limit=5) if cql else []
-            print(f"  confluence      {abbrev} {_where(located, space)}: "
-                  f"{len(found)} page(s) in 7 days  ok")
+            _ok("confluence",
+                f"{abbrev} {_where(located, space)}: {len(found)} page(s) in 7 days")
         except Exception as err:  # noqa: BLE001
-            print(f"  confluence      {abbrev} {err}                              warn")
+            _warn("confluence", f"{abbrev} {err}", fix="pm doctor")
     for product in cfg.get("products") or []:
         if not isinstance(product, dict):
             continue
@@ -432,16 +485,18 @@ def _check_confluence(cfg):
         if not named and not team:
             continue
         located = confluence_tree.locate_product(cfg, product)
+        folder = f"pm setup --section confluence --product {_shell_arg(label)}"
         if named and (located.get("missing") or not located.get("ancestor_id")):
-            print(f"  confluence      product {label} page {named} was not found   warn")
+            _warn("confluence", f"product {label} page {named} was not found", fix=folder)
             continue
         if not located.get("ancestor_id"):
             if confluence_tree.can_match(product):
-                print(f"  confluence      product {label}: no folder under the team page "
-                      f"is named for it. Set confluence_page  warn")
+                _warn("confluence",
+                      f"product {label}: no folder under the team page is named for it",
+                      fix=folder)
             continue
-        print(f"  confluence      product {label} "
-              f"{_where(located, located.get('space') or '')}  ok")
+        _ok("confluence",
+            f"product {label} {_where(located, located.get('space') or '')}")
 
 
 def _where(located, space):
@@ -462,18 +517,20 @@ def _check_team_page(cfg):
     raw = str((cfg.get("confluence") or {}).get("space") or "")
     space = confluence_tree.team_space(cfg)
     if not space:
-        print(f'  confluence      space "{raw}" was not found. Use the space key  warn')
+        _warn("confluence", f'space "{raw}" was not found. Use the space key',
+              fix="pm setup --section confluence")
         return False
     if raw != space:
-        print(f'  confluence      space "{raw}" is {space}  ok')
+        _ok("confluence", f'space "{raw}" is {space}')
     root = confluence_tree.team_root_id(cfg)
     label = confluence_tree.team_page_title(cfg) or confluence_tree.team_page_setting_id(cfg)
     if not root:
-        print(f'  confluence      team page "{label}" was not found in {space}  warn')
+        _warn("confluence", f'team page "{label}" was not found in {space}',
+              fix="pm setup --section confluence")
         return False
     below = confluence_tree.children(cfg, space, root)
-    print(f'  confluence      team page "{label}": {len(below)} page(s) and folder(s) '
-          f"directly under it  ok")
+    _ok("confluence",
+        f'team page "{label}": {len(below)} page(s) and folder(s) directly under it')
     return True
 
 
@@ -481,19 +538,24 @@ def _check_registers(cfg):
     from core import registers
     raw = cfg.get("registers") or []
     if not raw:
-        print("  registers       none configured                              warn")
+        _warn("registers",
+              "none configured. Optional — leave them off if you do not keep one",
+              fix="pm setup --section registers")
         return
     for reg in registers.settings(cfg):
         root = registers.resolve_root(cfg, reg)
         name = reg.get("name") or reg.get("type")
+        command = ("pm setup --section registers --register-name "
+                   + _shell_arg(name))
         if root is None:
-            print(f"  registers       {name}: summary page not found — set page_id, "
-                  f"or title with under  warn")
+            _warn("registers",
+                  f"{name}: summary page not found. Set page_id, or title with under",
+                  fix=command)
             continue
         try:
             listed = registers.list_entries(cfg, reg, root["page_id"])
         except Exception as err:  # noqa: BLE001
-            print(f"  registers       {name}: {root.get('title')} ({err})          warn")
+            _warn("registers", f"{name}: {root.get('title')} ({err})", fix="pm doctor")
             continue
         field = reg.get("status_field") or "Status"
         with_status = 0
@@ -502,14 +564,16 @@ def _check_registers(cfg):
             storage = ((raw.get("body") or {}).get("storage") or {}).get("value") or ""
             if registers.properties(storage, [field]).get(field):
                 with_status += 1
-        print(f"  registers       {name}: {root.get('title')} — {len(listed)} entries, "
-              f"{with_status} with {field}          ok")
+        _ok("registers",
+            f"{name}: {root.get('title')} — {len(listed)} entries, "
+            f"{with_status} with {field}")
 
 
 def run(cfg, args):
     prompt_id = getattr(args, "prompts", None)
     if prompt_id is not None:
         sys.exit(_prompt_report(cfg, prompt_id))
+    reset_fixes()
     print("pm doctor\n")
     problems = 0
     problems += _check_version(cfg)
@@ -526,6 +590,7 @@ def run(cfg, args):
         status, _me = _check_jira(cfg)
         if status:
             print("\nStopped here — fix Jira credentials and run again.")
+            _print_fixes()
             sys.exit(1)
         sys.exit(_query_report(cfg, args.queries))
 
@@ -533,6 +598,7 @@ def run(cfg, args):
     problems += status
     if status:
         print("\nStopped here — fix Jira credentials and run again.")
+        _print_fixes()
         sys.exit(1)
 
     problems += _check_projects(cfg)
@@ -540,7 +606,8 @@ def run(cfg, args):
     try:
         fields = sources.fetch_fields(cfg["jira"])
     except Exception as err:                       # noqa: BLE001
-        problems += _fail("custom fields", f"could not list fields ({err})")
+        problems += _fail("custom fields", f"could not list fields ({err})",
+                          fix="pm doctor")
         fields = []
     else:
         problems += _check_custom_fields(cfg, fields)
@@ -558,8 +625,9 @@ def run(cfg, args):
         else:
             print("\nCannot discover fields — the field list did not load.")
 
+    _print_fixes()
     print("")
     if problems:
-        print(f"{problems} check(s) failed. The FAIL lines name the fix.")
+        print(f"{problems} check(s) failed. The lines above name the command.")
         sys.exit(1)
     print("Setup looks good.")
