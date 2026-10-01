@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- PowerShell and CMD link the reference itself. A Jira key such as
+  `APS-4958`, a Confluence page title, and a SharePoint file name are the
+  clickable link. The address is not printed beside the name. A pipe and
+  `--plain` still show the address after the name.
+
 ## 0.16.0 - 2026-09-29
 
 - `pm update` adds every setting the template has and your file lacks,

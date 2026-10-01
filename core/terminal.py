@@ -2,9 +2,11 @@
 
 Files keep Markdown. What a command prints is text a terminal can show:
 headings without hashes, aligned tables, bullets, and links the reader can
-open. A terminal that understands OSC 8 gets a clickable label. Anything
-else gets the label and then the address in angle brackets, which Windows
-Terminal, VS Code, and most Unix terminals also open on click.
+open. The reference is the link: a Jira key, a Confluence title, or a
+SharePoint file name. PowerShell, CMD, Windows Terminal, VS Code, and Unix
+terminals get that label as an OSC 8 link, with no address beside it. A
+pipe, ``--plain``, and a console that refuses virtual-terminal mode get
+the label and then the address in angle brackets.
 
 A table wider than the terminal becomes one labelled line per cell, and so
 does every table under `--plain` or `NO_COLOR`.
