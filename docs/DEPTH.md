@@ -6,5 +6,5 @@
 - `pages.excerpt_chars` is the budget for a Confluence page. Issue details stay short. A decision page is not cut to 180 characters.
 - `pm metrics` suppresses a landing date until three items have finished in the window.
 - `--plain`, or the environment variable `NO_COLOR`, drops glyphs and terminal links, and prints each table row as labelled lines. A link then shows its address after the name.
-- Screen output is not Markdown. `core/terminal.py` turns a report into terminal text. OSC 8 links go to Windows Terminal (`WT_SESSION`), VS Code, ConEmu, and Unix terminals. The classic Windows console gets escape codes only when it accepts virtual-terminal mode, and it gets addresses instead of OSC 8. `TERM=dumb` and a pipe get plain text. `FORCE_HYPERLINK` overrides the link guess.
+- Screen output is not Markdown. `core/terminal.py` turns a report into terminal text. A Jira key, a Confluence page title, and a SharePoint file name are the link. OSC 8 goes to PowerShell, CMD, Windows Terminal, VS Code, and Unix terminals once the console accepts virtual-terminal mode. The address is not printed beside the name. `TERM=dumb`, a pipe, and `--plain` show the address after the name. `FORCE_HYPERLINK` overrides the link guess.
 - An ended Sprint is printed under `ENDED SPRINT`, not as the current Sprint Goal.

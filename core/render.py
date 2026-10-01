@@ -1,7 +1,9 @@
 """Shared screen and Markdown rendering.
 
-Issue keys are the link text, in the terminal and in Markdown. Severity
-is a word. `--plain` and `NO_COLOR` drop glyphs and OSC 8 sequences.
+The reference is the link text, in the terminal and in Markdown: a Jira
+key, a Confluence page title, or a SharePoint file name. The address is
+not printed beside it when the terminal can open OSC 8. Severity is a
+word. `--plain` and `NO_COLOR` drop glyphs and OSC 8 sequences.
 """
 
 import os
@@ -67,26 +69,21 @@ def _enable_windows_vt(stream):
 
 
 def terminal_links(stream=None):
-    """True when this terminal can turn an OSC 8 sequence into a click.
+    """True when the reference itself can be the link.
 
-    Windows Terminal (which hosts PowerShell and CMD), VS Code, and the
-    usual Linux and macOS terminals do. The classic Windows console window
-    does not, so it gets the address as text. FORCE_HYPERLINK=1 or 0
-    overrides the guess. A pipe or a file never gets the sequence.
+    OSC 8 makes the label clickable and does not print the address beside
+    it. PowerShell, CMD, Windows Terminal, VS Code, and the usual Unix
+    terminals get the sequence once virtual-terminal processing is on. A
+    console that ignores OSC 8 still shows the label. A pipe, a file, and
+    TERM=dumb never get the sequence. FORCE_HYPERLINK=1 or 0 overrides the
+    guess. Callers drop the sequence for ``--plain`` and ``NO_COLOR``, and
+    then print the address after the name.
     """
     stream = stream if stream is not None else sys.stdout
     forced = os.environ.get("FORCE_HYPERLINK")
     if forced is not None and forced.strip() != "":
         return forced.strip() not in ("0", "false", "no")
-    if not virtual_terminal(stream):
-        return False
-    if sys.platform != "win32":
-        return True
-    if os.environ.get("WT_SESSION"):
-        return True
-    if os.environ.get("TERM_PROGRAM") in ("vscode", "WezTerm"):
-        return True
-    return os.environ.get("ConEmuANSI") == "ON"
+    return virtual_terminal(stream)
 
 
 def terminal_emoji(stream=None):

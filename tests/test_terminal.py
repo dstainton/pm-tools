@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 import unittest
 from argparse import Namespace
 from unittest.mock import patch
@@ -138,14 +139,37 @@ class DetectionTests(unittest.TestCase):
             caps = terminal.capabilities(None, _Tty())
         self.assertTrue(caps.styles and caps.links and caps.emoji)
 
-    def test_classic_console_gets_addresses_not_osc8(self):
+    def test_powershell_links_the_reference_itself(self):
+        """PowerShell and CMD accept virtual-terminal mode, so the name is the link."""
         render._VT_ENABLED.clear()
         with self._env(), patch("sys.platform", "win32"), \
                 patch.object(render, "_enable_windows_vt", return_value=True):
             caps = terminal.capabilities(None, _Tty())
-        self.assertTrue(caps.styles)
-        self.assertFalse(caps.links)
+        self.assertTrue(caps.styles and caps.links)
         self.assertFalse(caps.emoji)
+        text = terminal.to_terminal(
+            "- [APS-4958](https://x.test/browse/APS-4958) no-estimate\n"
+            "- [Rotation cadence](https://x.test/wiki/pages/1001)\n"
+            "- [runbook.docx](https://contoso.sharepoint.com/sites/team/runbook.docx)\n",
+            caps)
+        self.assertIn(render.hyperlink(
+            "APS-4958", "https://x.test/browse/APS-4958"), text)
+        self.assertIn(render.hyperlink(
+            "Rotation cadence", "https://x.test/wiki/pages/1001"), text)
+        self.assertIn(render.hyperlink(
+            "runbook.docx",
+            "https://contoso.sharepoint.com/sites/team/runbook.docx"), text)
+        visible = re.sub(r"\033\]8;;.*?\033\\", "", text)
+        self.assertIn("APS-4958 no-estimate", visible)
+        self.assertIn("Rotation cadence", visible)
+        self.assertIn("runbook.docx", visible)
+        self.assertNotIn("http", visible)
+        self.assertNotIn("<", visible)
+        shown = render.issue_cell(
+            "APS-4958", "https://x.test/browse/APS-4958", 8, caps.links)
+        self.assertTrue(shown.startswith(render.hyperlink(
+            "APS-4958", "https://x.test/browse/APS-4958")))
+        self.assertNotIn("<http", shown)
 
     def test_an_old_console_without_vt_gets_plain_text(self):
         with self._env(), patch("sys.platform", "win32"), \
