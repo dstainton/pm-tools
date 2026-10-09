@@ -2,7 +2,7 @@
 
 Deterministic. No inference model used. Per product and workstream: throughput,
 story points, cycle time, aging work in progress, sprint scope change,
-forecast accuracy, and a landing range from the weekly rate.
+forecast accuracy, and a landing date plus or minus the weekly-rate spread.
 """
 
 import datetime as dt
@@ -90,39 +90,66 @@ def _fmt_date(value, today=None):
     return fiscal.format_day(value, with_year=value.year != today.year)
 
 
-def _fmt_pair(early, late, today):
-    """Two dates. The year is shown when the pair is not entirely in `today`'s year."""
-    show_year = (early.year != late.year or early.year != today.year
-                 or late.year != today.year)
-    return (f"{fiscal.format_day(early, with_year=show_year)} – "
-            f"{fiscal.format_day(late, with_year=show_year)}")
+def _count_text(value):
+    """A whole number when it is within 0.05 of one, otherwise one decimal."""
+    nearest = round(value)
+    if abs(value - nearest) <= 0.05:
+        return str(int(nearest))
+    return f"{value:.1f}"
+
+
+def _sprint_clause(shown, band, today, cadence, open_ended):
+    """Sprints from today at the open sprint's length, plus or minus the same band."""
+    if not cadence or cadence <= 0 or not shown:
+        return ""
+    centre = (shown - today).days / cadence
+    if open_ended:
+        noun = "sprint" if abs(centre - 1) <= 0.05 else "sprints"
+        return f" · {_count_text(centre)} {noun} or more"
+    half = band / cadence
+    if half <= 0.05:
+        noun = "sprint" if abs(centre - 1) <= 0.05 else "sprints"
+        return f" · {_count_text(centre)} {noun}"
+    return f" · {_count_text(centre)} ± {_count_text(half)} sprints"
 
 
 def _landing_cell(row, year_end, today):
-    """A date range, with the fiscal quarter each end falls in."""
+    """The mean landing date, plus or minus the spread, and the same window in sprints.
+
+    The day band is the larger of the two gaps from the mean date to the
+    fast and slow dates, so the stated range covers both. When the slow
+    rate is not positive, the cell is the mean date or later.
+    """
     span = row.get("landing")
     if not span:
         return "—"
     if isinstance(span, (dt.date, dt.datetime, str)):
-        early = _as_date(span)
-        late = early
+        shown = _as_date(span)
+        early = late = shown
         open_ended = False
     else:
         early = _as_date(span.get("early"))
         late = _as_date(span.get("late"))
-        open_ended = bool(span.get("open_ended"))
-    if not early:
+        shown = _as_date(span.get("mid")) or early
+        open_ended = bool(span.get("open_ended")) or late is None
+    if not shown:
         return "—"
-    if open_ended or late is None:
-        text = f"{_fmt_date(early, today)} or later"
-        ref = fiscal.span_label(early, early, year_end)
-    elif late == early:
-        text = _fmt_date(early, today)
-        ref = fiscal.span_label(early, early, year_end)
+    if open_ended:
+        band = 0
+        text = f"{_fmt_date(shown, today)} or later"
+        ref = fiscal.span_label(shown, shown, year_end)
     else:
-        text = _fmt_pair(early, late, today)
-        ref = fiscal.span_label(early, late, year_end)
-    return f"{text} ({ref})"
+        band = 0
+        if early and late:
+            band = max(abs((shown - early).days), abs((late - shown).days))
+        if band > 0:
+            text = f"{_fmt_date(shown, today)} ± {band} d"
+        else:
+            text = _fmt_date(shown, today)
+        ref = fiscal.span_label(early or shown, late or shown, year_end)
+    clause = _sprint_clause(
+        shown, band, today, row.get("cadence_days"), open_ended)
+    return f"{text} ({ref}){clause}"
 
 
 def _window_start(groups, weeks, today):
@@ -148,13 +175,14 @@ def _fiscal_line(year_end, today):
     close = fiscal.next_year_end(today, year_end)
     period = fiscal.period_containing(today, year_end)
     ended = fiscal.format_day(close, with_year=True)
-    return (f"_FY{close.year} ends {ended}. "
+    return (f"_{fiscal.year_tag(close.year)} ends {ended}. "
             f"This quarter is {fiscal.period_phrase(period)}._")
 
 
 def _landing_note():
-    return ("_Landing is the weekly rate, one standard deviation faster and "
-            "slower. It is a projection, not a commitment. "
+    return ("_Landing is the mean date, plus or minus one standard deviation "
+            "of the weekly rate, and the same window in sprints at the open "
+            "sprint's length. It is a projection, not a commitment. "
             "It is shown after three items finish in the window._")
 
 
@@ -263,8 +291,8 @@ def render_pulse(groups, weeks, year_end="03-31", today=None):
         "## Delivery pulse",
         "",
         "_Done per week, story points per week, median cycle time, and open count. "
-        "A landing range is the weekly rate, one standard deviation either side, "
-        "not a commitment. "
+        "A landing date is the mean weekly rate, plus or minus one standard "
+        "deviation, and the same window in sprints. It is not a commitment. "
         "Full detail: `pm metrics`._",
         "",
         _fiscal_line(year_end, today),

@@ -51,6 +51,20 @@ class ArithmeticTests(unittest.TestCase):
         self.assertEqual(sum(b["done"] for b in buckets), 2)
         self.assertTrue(any(b["done"] == 1 for b in buckets))
 
+    def test_cadence_days_is_the_open_sprint_length(self):
+        self.assertEqual(metrics.cadence_days(
+            {"start": "2026-09-28", "end": "2026-10-12"}), 14)
+        self.assertIsNone(metrics.cadence_days({"start": "2026-09-28"}))
+        self.assertIsNone(metrics.cadence_days(
+            {"start": "2026-10-12", "end": "2026-09-28"}))
+        bundle = metrics.summarise_stream(
+            [], weeks=4,
+            sprints=[{"start": "2026-09-28", "end": "2026-10-12"}],
+            today=dt.date(2026, 10, 9))
+        self.assertEqual(bundle["cadence_days"], 14)
+        bare = metrics.summarise_stream([], weeks=4, today=dt.date(2026, 10, 9))
+        self.assertIsNone(bare["cadence_days"])
+
     def test_landing_date(self):
         today = dt.date(2026, 9, 3)
         when = metrics.landing_date(8, 2.0, today=today)

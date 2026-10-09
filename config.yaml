@@ -410,7 +410,7 @@ triage:
 metrics:
   weeks: 8
   # Month-day the fiscal year ends. The fiscal year is the year of the next
-  # year-end, so 31 Mar 2027 is FY2027. The year-end day is still that year.
+  # year-end, so 31 Mar 2027 is F27. The year-end day is still that year.
   # Quarter 1 starts the next day. Each quarter is three calendar months
   # and ends on the last day of the third month.
   year_end: "03-31"

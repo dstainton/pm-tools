@@ -10,7 +10,10 @@ from core import config, fiscal, metrics
 class FiscalYearTests(unittest.TestCase):
     def test_the_fiscal_year_is_the_year_of_the_next_year_end(self):
         self.assertEqual(fiscal.fiscal_year(dt.date(2026, 10, 9), "03-31"), 2027)
+        self.assertEqual(fiscal.year_tag(2027), "F27")
+        self.assertEqual(fiscal.year_tag(2007), "F07")
         period = fiscal.period_containing(dt.date(2026, 10, 9), "03-31")
+        self.assertEqual(fiscal.period_label(period), "F27 Q3")
         self.assertEqual(period["quarter"], 3)
         self.assertEqual(period["start"], dt.date(2026, 10, 1))
         self.assertEqual(period["end"], dt.date(2026, 12, 31))
@@ -35,6 +38,9 @@ class FiscalYearTests(unittest.TestCase):
         self.assertEqual(opened["year"], 2028)
         self.assertEqual(opened["quarter"], 1)
         self.assertEqual(opened["start"], dt.date(2027, 4, 1))
+        self.assertEqual(
+            fiscal.span_label(dt.date(2027, 3, 1), dt.date(2027, 4, 2), "03-31"),
+            "F27 Q4 – F28 Q1")
 
     def test_a_january_year_end_still_uses_three_calendar_months(self):
         periods = fiscal.quarters(2027, "01-31")
@@ -78,6 +84,7 @@ class ReportTextTests(unittest.TestCase):
             "scope_change": {"added": 1},
             "accuracy": {"done": 10, "forecast": 16},
             "aging": [],
+            "cadence_days": 14,
         }
         return today, [({"name": "Integration Platform", "abbrev": "IP"}, [row])]
 
@@ -91,16 +98,17 @@ class ReportTextTests(unittest.TestCase):
         text = metrics_cmd.render(groups, 8, year_end="03-31", today=today)
         self.assertIn("no inference model used", text)
         self.assertNotIn("no model", text)
-        self.assertIn("FY2027 ends 31 Mar 2027", text)
-        self.assertIn("FY2027 Q3 (1 Oct – 31 Dec 2026)", text)
-        self.assertIn("FY2027 Q2–Q3", text)
+        self.assertIn("F27 ends 31 Mar 2027", text)
+        self.assertIn("F27 Q3 (1 Oct – 31 Dec 2026)", text)
+        self.assertIn("F27 Q2–Q3", text)
         self.assertIn("Points / week", text)
         self.assertIn("Open pts", text)
         self.assertIn("5.0", text)
         self.assertIn("21", text)
-        self.assertIn("23 Oct – 20 Nov (FY2027 Q3)", text)
+        self.assertIn("6 Nov ± 14 d (F27 Q3) · 2 ± 1 sprints", text)
         self.assertIn("SDX pts", text)
-        self.assertIn("FY2027 Q2", text)
+        self.assertIn("F27 Q2", text)
+        self.assertNotIn("FY2027", text)
 
     def test_an_unbounded_landing_says_or_later(self):
         today, groups = self._groups({
@@ -110,7 +118,20 @@ class ReportTextTests(unittest.TestCase):
             "open_ended": True,
         })
         text = metrics_cmd.render(groups, 8, year_end="03-31", today=today)
-        self.assertIn("16 Oct or later (FY2027 Q3)", text)
+        self.assertIn("6 Nov or later (F27 Q3) · 2 sprints or more", text)
+
+    def test_landing_without_a_sprint_omits_the_sprint_clause(self):
+        today, groups = self._groups({
+            "early": dt.date(2026, 10, 23),
+            "late": dt.date(2026, 11, 20),
+            "mid": dt.date(2026, 11, 6),
+            "open_ended": False,
+        })
+        groups[0][1][0]["cadence_days"] = None
+        text = metrics_cmd.render(groups, 8, year_end="03-31", today=today)
+        self.assertIn(
+            "| SDX | 2.0 | 5.0 | 6 / 10 d | 8 | 21 | 6 Nov ± 14 d (F27 Q3) | 1 | 10 / 16 |",
+            text)
 
     def test_daily_and_lint_say_no_inference_model_used(self):
         daily_text = daily.build_markdown({}, [], 1, "workstream")

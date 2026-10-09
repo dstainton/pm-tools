@@ -336,6 +336,15 @@ def story_points(issue):
     return points
 
 
+def cadence_days(sprint):
+    """Length of one sprint in days, from its planned start to its planned end."""
+    start = _when_date((sprint or {}).get("start"))
+    end = _when_date((sprint or {}).get("end"))
+    if not start or not end or end <= start:
+        return None
+    return (end - start).days
+
+
 def landing_date(open_count, weekly_rate, today=None):
     """Calendar date: remaining items at one weekly rate."""
     today = today or dt.date.today()
@@ -408,5 +417,6 @@ def summarise_stream(issues, weeks, sprints=None, today=None, epic_types=("Epic"
         "open_points": sum(story_points(i) for i in open_items),
         "landing": (landing_span(len(open_items), counts, today=today)
                     if done_total >= 3 else None),
+        "cadence_days": cadence_days(sprint),
         "sprint": (sprint or {}).get("name"),
     }

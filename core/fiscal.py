@@ -116,7 +116,7 @@ def period_containing(day, year_end):
     for period in quarters(year, year_end):
         if period["start"] <= day <= period["end"]:
             return period
-    raise ValueError(f"{day.isoformat()} is not inside FY{year}.")
+    raise ValueError(f"{day.isoformat()} is not inside {year_tag(year)}.")
 
 
 def format_day(day, with_year=False):
@@ -126,23 +126,28 @@ def format_day(day, with_year=False):
     return text
 
 
+def year_tag(year):
+    """`F27` for fiscal 2027. The two digits are the year of the next year-end."""
+    return f"F{int(year) % 100:02d}"
+
+
 def period_label(period):
-    return f"FY{period['year']} Q{period['quarter']}"
+    return f"{year_tag(period['year'])} Q{period['quarter']}"
 
 
 def period_phrase(period):
-    """`FY2027 Q3 (1 Oct – 31 Dec 2026)`."""
+    """`F27 Q3 (1 Oct – 31 Dec 2026)`."""
     start = format_day(period["start"], with_year=period["start"].year != period["end"].year)
     end = format_day(period["end"], with_year=True)
     return f"{period_label(period)} ({start} – {end})"
 
 
 def span_label(start, end, year_end):
-    """`FY2027 Q3`, `FY2027 Q2–Q3`, or `FY2027 Q4 – FY2028 Q1`."""
+    """`F27 Q3`, `F27 Q2–Q3`, or `F27 Q4 – F28 Q1`."""
     first = period_containing(start, year_end)
     last = period_containing(end, year_end)
     if first["year"] == last["year"] and first["quarter"] == last["quarter"]:
         return period_label(first)
     if first["year"] == last["year"]:
-        return f"FY{first['year']} Q{first['quarter']}–Q{last['quarter']}"
+        return f"{year_tag(first['year'])} Q{first['quarter']}–Q{last['quarter']}"
     return f"{period_label(first)} – {period_label(last)}"
