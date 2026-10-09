@@ -48,7 +48,7 @@ def build_markdown(cfg, results, days, group_by):
     lines = [
         "# Daily Scrum",
         f"_Movement {window}, and work in progress now. "
-        f"Generated {today} — facts from Jira, no model._",
+        f"Generated {today} — facts from Jira — no inference model used._",
         "",
     ]
 

@@ -51,11 +51,66 @@ class ArithmeticTests(unittest.TestCase):
         self.assertEqual(sum(b["done"] for b in buckets), 2)
         self.assertTrue(any(b["done"] == 1 for b in buckets))
 
+    def test_cadence_days_is_the_open_sprint_length(self):
+        self.assertEqual(metrics.cadence_days(
+            {"start": "2026-09-28", "end": "2026-10-12"}), 14)
+        self.assertIsNone(metrics.cadence_days({"start": "2026-09-28"}))
+        self.assertIsNone(metrics.cadence_days(
+            {"start": "2026-10-12", "end": "2026-09-28"}))
+        bundle = metrics.summarise_stream(
+            [], weeks=4,
+            sprints=[{"start": "2026-09-28", "end": "2026-10-12"}],
+            today=dt.date(2026, 10, 9))
+        self.assertEqual(bundle["cadence_days"], 14)
+        bare = metrics.summarise_stream([], weeks=4, today=dt.date(2026, 10, 9))
+        self.assertIsNone(bare["cadence_days"])
+
     def test_landing_date(self):
         today = dt.date(2026, 9, 3)
         when = metrics.landing_date(8, 2.0, today=today)
         self.assertEqual(when, dt.date(2026, 10, 1))
         self.assertIsNone(metrics.landing_date(8, 0, today=today))
+
+    def test_landing_span_is_one_standard_deviation_either_side(self):
+        import statistics
+        today = dt.date(2026, 9, 3)
+        counts = [1, 2, 3, 2, 1, 2, 3, 2]
+        spread = statistics.stdev(counts)
+        span = metrics.landing_span(8, counts, today=today)
+        self.assertEqual(span["mid"], dt.date(2026, 10, 1))
+        self.assertEqual(span["early"], metrics.landing_date(8, 2 + spread, today=today))
+        self.assertEqual(span["late"], metrics.landing_date(8, 2 - spread, today=today))
+        self.assertLess(span["early"], span["late"])
+        self.assertFalse(span["open_ended"])
+
+    def test_a_flat_rate_has_one_landing_date(self):
+        today = dt.date(2026, 9, 3)
+        span = metrics.landing_span(8, [2, 2, 2, 2], today=today)
+        self.assertEqual(span["early"], span["late"])
+        self.assertEqual(span["early"], dt.date(2026, 10, 1))
+        self.assertFalse(span["open_ended"])
+
+    def test_a_spread_wider_than_the_rate_has_no_late_date(self):
+        today = dt.date(2026, 9, 3)
+        span = metrics.landing_span(8, [0, 0, 0, 8, 0, 0, 0, 0], today=today)
+        self.assertIsNone(span["late"])
+        self.assertTrue(span["open_ended"])
+        self.assertIsNotNone(span["early"])
+
+    def test_story_points_and_the_landing_range_are_on_the_bundle(self):
+        today = dt.date(2026, 9, 3)
+        done = [
+            issue("A", points=5, transitions=[tr(3, "In Progress", "Done", today=today)]),
+            issue("B", points=3, transitions=[tr(10, "In Progress", "Done", today=today)]),
+            issue("C", points=2, transitions=[tr(20, "In Progress", "Done", today=today)]),
+        ]
+        open_item = issue("D", status="In Progress", category="indeterminate", points=8)
+        bundle = metrics.summarise_stream(done + [open_item], weeks=4, today=today)
+        self.assertEqual(bundle["open"], 1)
+        self.assertEqual(bundle["open_points"], 8)
+        self.assertGreater(bundle["weekly_points"], 0)
+        self.assertEqual(bundle["landing"]["mid"],
+                         metrics.landing_date(1, bundle["weekly_rate"], today=today))
 
     def test_sprint_scope_change(self):
         today = dt.date(2026, 9, 3)

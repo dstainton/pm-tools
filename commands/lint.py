@@ -192,7 +192,7 @@ def build_markdown(cfg, results):
     today = dt.date.today().isoformat()
     lines = [
         "# Product Backlog Lint",
-        f"_Deterministic checks run on {today}. No model involved — every "
+        f"_Deterministic checks run on {today}. No inference model used — every "
         "finding is a rule, not an opinion._",
         "",
     ]

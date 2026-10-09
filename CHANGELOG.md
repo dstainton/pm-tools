@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `pm metrics` shows story points and the fiscal year and quarter. The
+  year-end defaults to 31 March (`metrics.year_end: "03-31"`). The fiscal
+  year is the year of the next year-end, written F27 for fiscal 2027.
+  Quarter 1 starts the next day, and each quarter is three calendar months.
+- Landing is the mean date, plus or minus one standard deviation of the
+  weekly rate, and the same window in sprints at the open sprint's length.
+  When the slow rate is not positive, the report says that date or later.
+  The projection stays hidden until three items finish in the window.
+- Reports that used to say "no model" now say "no inference model used".
 - `pm doctor` prints the command for each warn or FAIL line, and lists
   those commands again at the end. `ok` lines are unchanged. A disabled
   cache says to set `cache.enabled: true` and does not write it.

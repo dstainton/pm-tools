@@ -110,7 +110,7 @@ What breaks, silently:
   `Rejected at review`.
 - A status named `Ready for Dev` is in flight to the team and invisible here.
 
-The header on the output reads `_Deterministic ... no model._`. It is
+The header on the output reads `_Facts from the changelog — no inference model used._`. It is
 deterministic. It is not necessarily right.
 
 **Fix — not inference.** Jira's changelog item for a status change carries
@@ -481,7 +481,7 @@ killable, and off by default.
    and which (if any) fell back to name matching.
 
 Everything here makes a deterministic command *more* deterministic. No command
-gains a model call. `pm metrics` keeps its `no model` header and starts
+gains a model call. `pm metrics` keeps its `no inference model used` header and starts
 deserving it.
 
 ## Tranche 3b — honest lint, and the model cache
