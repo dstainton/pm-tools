@@ -17,7 +17,7 @@ Commands:
                          role chooses pm, work, leadership, or partner.
                          --audience overrides that for one run. Comments since
                          that shape's last report.
-    pm lint              Deterministic Product Backlog checks (no model).
+    pm lint              Deterministic Product Backlog checks (no inference model used).
     pm triage            Queue of things waiting on a decision from you.
                          A mention quotes the comment.
     pm refine            BA queue: draft titles, criteria, estimates.
@@ -44,7 +44,7 @@ Commands:
                          Order: review, page summaries, report, inbox.
     pm ready             Team working agreement: pass/fail per ticket.
     pm daily             Daily Scrum movement, comments from that window,
-                         and work in progress (no model).
+                         and work in progress (no inference model used).
     pm update            Upgrade pm-tools, then migrate the config with
                          the newly installed code. Adds settings it lacks
                          and lists what changed. Never replaces it.

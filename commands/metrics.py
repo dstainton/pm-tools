@@ -1,14 +1,15 @@
 """`pm metrics` — portfolio health from the changelog.
 
-Deterministic. No model. Per product and workstream: throughput, cycle time,
-aging work in progress, sprint scope change, forecast accuracy, and a plain
-landing date at the current rate.
+Deterministic. No inference model used. Per product and workstream: throughput,
+story points, cycle time, aging work in progress, sprint scope change,
+forecast accuracy, and a landing range from the weekly rate.
 """
 
 import datetime as dt
 import json
 import sys
 
+from core import fiscal
 from core import metrics as core
 from core import output
 from core import products as product_core
@@ -21,12 +22,18 @@ def _history(cfg, project, jql):
     return statuses.annotate(issues, index)
 
 
-def settings(cfg, args):
+def year_end_of(cfg):
+    """The configured month-day, or 31 March."""
     block = cfg.get("metrics") if isinstance(cfg.get("metrics"), dict) else {}
-    weeks = getattr(args, "weeks", None)
+    return fiscal.canonical(block.get("year_end") or "03-31")
+
+
+def settings(cfg, args=None):
+    block = cfg.get("metrics") if isinstance(cfg.get("metrics"), dict) else {}
+    weeks = getattr(args, "weeks", None) if args is not None else None
     if weeks is None:
         weeks = block.get("weeks", 8)
-    return {"weeks": max(1, int(weeks or 8))}
+    return {"weeks": max(1, int(weeks or 8)), "year_end": year_end_of(cfg)}
 
 
 def gather(cfg, weeks, today=None):
@@ -62,47 +69,128 @@ def gather(cfg, weeks, today=None):
     return out
 
 
-def _fmt_date(value):
+def _as_date(value):
+    if not value:
+        return None
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    try:
+        return dt.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _fmt_date(value, today=None):
+    today = today or dt.date.today()
+    value = _as_date(value)
     if not value:
         return "—"
-    if isinstance(value, dt.datetime):
-        value = value.date()
-    if not isinstance(value, dt.date):
-        try:
-            value = dt.date.fromisoformat(str(value)[:10])
-        except ValueError:
-            return str(value)
-    if value.year != dt.date.today().year:
-        return value.strftime(f"{value.day} %b %Y")
-    return value.strftime(f"{value.day} %b")
+    return fiscal.format_day(value, with_year=value.year != today.year)
 
 
-def render(groups, weeks):
+def _fmt_pair(early, late, today):
+    """Two dates. The year is shown when the pair is not entirely in `today`'s year."""
+    show_year = (early.year != late.year or early.year != today.year
+                 or late.year != today.year)
+    return (f"{fiscal.format_day(early, with_year=show_year)} – "
+            f"{fiscal.format_day(late, with_year=show_year)}")
+
+
+def _landing_cell(row, year_end, today):
+    """A date range, with the fiscal quarter each end falls in."""
+    span = row.get("landing")
+    if not span:
+        return "—"
+    if isinstance(span, (dt.date, dt.datetime, str)):
+        early = _as_date(span)
+        late = early
+        open_ended = False
+    else:
+        early = _as_date(span.get("early"))
+        late = _as_date(span.get("late"))
+        open_ended = bool(span.get("open_ended"))
+    if not early:
+        return "—"
+    if open_ended or late is None:
+        text = f"{_fmt_date(early, today)} or later"
+        ref = fiscal.span_label(early, early, year_end)
+    elif late == early:
+        text = _fmt_date(early, today)
+        ref = fiscal.span_label(early, early, year_end)
+    else:
+        text = _fmt_pair(early, late, today)
+        ref = fiscal.span_label(early, late, year_end)
+    return f"{text} ({ref})"
+
+
+def _window_start(groups, weeks, today):
+    for _product, rows in groups:
+        for row in rows:
+            buckets = row.get("throughput") or []
+            if buckets and buckets[0].get("start"):
+                found = _as_date(buckets[0]["start"])
+                if found:
+                    return found
+    return core.week_start(today) - dt.timedelta(weeks=max(weeks, 1) - 1)
+
+
+def _facts_line(groups, weeks, year_end, today):
+    start = _window_start(groups, weeks, today)
+    ref = fiscal.span_label(start, today, year_end)
+    noun = "week" if weeks == 1 else "weeks"
+    return (f"_Last {weeks} {noun} ({ref}). "
+            f"Facts from the changelog — no inference model used._")
+
+
+def _fiscal_line(year_end, today):
+    close = fiscal.next_year_end(today, year_end)
+    period = fiscal.period_containing(today, year_end)
+    ended = fiscal.format_day(close, with_year=True)
+    return (f"_FY{close.year} ends {ended}. "
+            f"This quarter is {fiscal.period_phrase(period)}._")
+
+
+def _landing_note():
+    return ("_Landing is the weekly rate, one standard deviation faster and "
+            "slower. It is a projection, not a commitment. "
+            "It is shown after three items finish in the window._")
+
+
+def render(groups, weeks, year_end="03-31", today=None):
+    today = today or dt.date.today()
+    year_end = fiscal.canonical(year_end)
     lines = [
-        f"# Delivery metrics",
-        f"_Last {weeks} week{'s' if weeks != 1 else ''}. Facts from the "
-        f"changelog — no model._",
+        "# Delivery metrics",
+        _facts_line(groups, weeks, year_end, today),
+        _fiscal_line(year_end, today),
+        _landing_note(),
         "",
     ]
     for product, rows in groups:
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Done / week | Cycle (med / p85) | "
-                     "Open | Landing | Scope added | Forecast pts |")
-        lines.append("|-----------|------------:|------------------:|----:|"
-                     "--------:|------------:|-------------:|")
+        lines.append("| Workstream | Done / week | Points / week | "
+                     "Cycle (med / p85) | Open | Open pts | Landing | "
+                     "Scope added | Forecast pts |")
+        lines.append("|-----------|------------:|--------------:|"
+                     "------------------:|-----:|---------:|--------:|"
+                     "------------:|-------------:|")
         for row in rows:
             cycle = row["cycle"]
             cycle_txt = ("—" if not cycle["n"]
                          else f"{cycle['median']} / {cycle['p85']} d")
             rate = f"{row['weekly_rate']:.1f}"
-            landing = _fmt_date(row.get("landing"))
+            points = f"{row.get('weekly_points') or 0:.1f}"
+            landing = _landing_cell(row, year_end, today)
             added = row["scope_change"]["added"]
             acc = row["accuracy"]
             forecast = f"{acc['done']:.0f} / {acc['forecast']:.0f}"
             lines.append(
-                f"| {row['workstream']} | {rate} | {cycle_txt} | "
-                f"{row['open']} | {landing} | {added} | {forecast} |")
+                f"| {row['workstream']} | {rate} | {points} | {cycle_txt} | "
+                f"{row['open']} | {row.get('open_points') or 0:.0f} | "
+                f"{landing} | {added} | {forecast} |")
         lines.append("")
         for row in rows:
             if not row["aging"]:
@@ -119,76 +207,112 @@ def render(groups, weeks):
         weeks_row = rows[0]["throughput"] if rows else []
         if weeks_row:
             lines.append("Throughput by week")
-            header = "| Week | " + " | ".join(r["workstream"] for r in rows) + " |"
+            names = []
+            for row in rows:
+                names.append(row["workstream"])
+                names.append(f"{row['workstream']} pts")
+            header = "| Week | Quarter | " + " | ".join(names) + " |"
             lines.append(header)
-            lines.append("|------|" + "|".join(["------:"] * len(rows)) + "|")
+            lines.append("|------|---------|" + "|".join(["------:"] * len(names)) + "|")
             for i, bucket in enumerate(weeks_row):
-                cells = [bucket["week"]]
+                day = _as_date(bucket.get("end")) or _as_date(bucket.get("start")) or today
+                cells = [bucket["week"], fiscal.period_label(
+                    fiscal.period_containing(day, year_end))]
                 for row in rows:
                     cells.append(str(row["throughput"][i]["done"]))
+                    cells.append(f"{row['throughput'][i].get('points') or 0:.0f}")
                 lines.append("| " + " | ".join(cells) + " |")
             lines.append("")
     return "\n".join(lines)
 
 
-def render_headline(groups, weeks):
-    """Leadership delivery table: rate, cycle, open, scope, and a projection."""
+def render_headline(groups, weeks, year_end="03-31", today=None):
+    """Leadership delivery table: rate, points, cycle, open, and a projection."""
+    today = today or dt.date.today()
+    year_end = fiscal.canonical(year_end)
     lines = ["## Delivery", ""]
-    lines.append(
-        "_Landing is a projection from recent throughput, not a commitment._"
-    )
+    lines.append(_fiscal_line(year_end, today))
+    lines.append(_landing_note())
     lines.append("")
     for product, rows in groups:
         lines.append(f"### {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Done / week | Cycle (median) | Open | "
-                     "Scope added | Landing (projection) |")
-        lines.append("|------------|------------:|---------------:|-----:|"
-                     "------------:|----------------------|")
+        lines.append("| Workstream | Done / week | Points / week | "
+                     "Cycle (median) | Open | Open pts | "
+                     "Landing (projection) |")
+        lines.append("|------------|------------:|--------------:|"
+                     "---------------:|-----:|---------:|"
+                     "----------------------|")
         for row in rows:
             cycle = row["cycle"]
             cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
-            landing = _fmt_date(row.get("landing"))
-            added = (row.get("scope_change") or {}).get("added")
-            added_txt = "—" if added is None else str(added)
+            landing = _landing_cell(row, year_end, today)
             lines.append(
-                f"| {row['workstream']} | {row['weekly_rate']:.1f} | {cycle_txt} | "
-                f"{row['open']} | {added_txt} | {landing} |")
+                f"| {row['workstream']} | {row['weekly_rate']:.1f} | "
+                f"{row.get('weekly_points') or 0:.1f} | {cycle_txt} | "
+                f"{row['open']} | {row.get('open_points') or 0:.0f} | {landing} |")
         lines.append("")
     return "\n".join(lines)
 
 
-def render_pulse(groups, weeks):
+def render_pulse(groups, weeks, year_end="03-31", today=None):
     """Short delivery note for a report. Full tables stay on `pm metrics`."""
+    today = today or dt.date.today()
+    year_end = fiscal.canonical(year_end)
     lines = [
         "## Delivery pulse",
         "",
-        "_Done per week, median cycle time, and open count. "
-        "A landing date is a projection from recent throughput, not a commitment. "
+        "_Done per week, story points per week, median cycle time, and open count. "
+        "A landing range is the weekly rate, one standard deviation either side, "
+        "not a commitment. "
         "Full detail: `pm metrics`._",
         "",
+        _fiscal_line(year_end, today),
+        "",
     ]
-    lines.append("| Workstream | Done / week | Cycle (median) | Open | "
-                 "Landing (projection) |")
-    lines.append("|------------|------------:|---------------:|-----:|"
-                 "----------------------|")
+    lines.append("| Workstream | Done / week | Points / week | "
+                 "Cycle (median) | Open | Open pts | Landing (projection) |")
+    lines.append("|------------|------------:|--------------:|"
+                 "---------------:|-----:|---------:|----------------------|")
     for _product, rows in groups:
         for row in rows:
             cycle = row["cycle"]
             cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
-            landing = _fmt_date(row.get("landing")) if row.get("landing") else "—"
+            landing = _landing_cell(row, year_end, today)
             lines.append(
-                f"| {row['workstream']} | {row['weekly_rate']:.1f} | {cycle_txt} | "
-                f"{row['open']} | {landing} |")
+                f"| {row['workstream']} | {row['weekly_rate']:.1f} | "
+                f"{row.get('weekly_points') or 0:.1f} | {cycle_txt} | "
+                f"{row['open']} | {row.get('open_points') or 0:.0f} | {landing} |")
     lines.append("")
     return "\n".join(lines)
 
 
-def render_sprint_context(sprint_name, groups):
+def _sprint_fiscal_line(groups, year_end):
+    start = end = None
+    for _product, rows in groups:
+        for row in rows:
+            found = _as_date(row.get("start"))
+            finish = _as_date(row.get("end"))
+            if found and (start is None or found < start):
+                start = found
+            if finish and (end is None or finish > end):
+                end = finish
+    if not start:
+        return ""
+    ref = fiscal.span_label(start, end or start, year_end)
+    return f"_{ref}._"
+
+
+def render_sprint_context(sprint_name, groups, year_end="03-31"):
     """Sprint delivery for a developer report. No portfolio forecast."""
+    year_end = fiscal.canonical(year_end)
     lines = ["## This sprint", ""]
     if sprint_name:
         lines.append(f"_{sprint_name}_")
+        lines.append("")
+    fiscal_line = _sprint_fiscal_line(groups, year_end)
+    if fiscal_line:
+        lines.append(fiscal_line)
         lines.append("")
     lines.append("| Workstream | Forecast at start | Delivered | Added | "
                  "Carried in | Unfinished |")
@@ -275,8 +399,14 @@ def _card_ref(card):
     return render_core.markdown_link(card.get("key"), card.get("url"))
 
 
-def render_sprint(sprint_name, groups, cfg=None):
+def render_sprint(sprint_name, groups, cfg=None, year_end=None):
     """Sprint review: goal, forecast, what finished, and what did not."""
+    if year_end is None and isinstance(cfg, dict):
+        try:
+            year_end = year_end_of(cfg)
+        except ValueError:
+            year_end = "03-31"
+    year_end = fiscal.canonical(year_end or "03-31")
     title = sprint_name or "Open sprint"
     goal = ""
     for _product, rows in groups:
@@ -288,11 +418,15 @@ def render_sprint(sprint_name, groups, cfg=None):
             break
     lines = [
         f"# {title}",
-        "_Sprint review. Forecast, delivered work, scope added after the "
-        "start, and work still open. Facts from the changelog. "
+        "_Sprint review. Forecast, delivered, and added figures are story points. "
+        "Facts from the changelog — no inference model used. "
         "A forecast is not a commitment._",
         "",
     ]
+    fiscal_line = _sprint_fiscal_line(groups, year_end)
+    if fiscal_line:
+        lines.append(fiscal_line)
+        lines.append("")
     if goal:
         lines.append(f"Sprint Goal: {goal}")
         lines.append("")
@@ -378,7 +512,7 @@ def run_sprint(cfg, args):
             json.dump(payload, fh, indent=2, default=str)
         print(f"\nDone. Sprint metrics written to: {path}")
         return
-    text = render_sprint(sprint_name, groups, cfg=cfg)
+    text = render_sprint(sprint_name, groups, cfg=cfg, year_end=year_end_of(cfg))
     path = output.place(
         cfg, f"sprint_metrics_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))
@@ -411,7 +545,12 @@ def run(cfg, args):
             json.dump(payload, fh, indent=2, default=str)
         print(f"\nDone. Metrics written to: {path}")
         return
-    text = render_headline(groups, opts["weeks"]) if who == "leadership" else render(groups, opts["weeks"])
+    today = dt.date.today()
+    if who == "leadership":
+        text = render_headline(
+            groups, opts["weeks"], year_end=opts["year_end"], today=today)
+    else:
+        text = render(groups, opts["weeks"], year_end=opts["year_end"], today=today)
     path = output.place(
         cfg, f"metrics_{dt.date.today().isoformat()}.md",
         getattr(args, "out", None))

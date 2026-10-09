@@ -1,6 +1,7 @@
 """Deterministic delivery metrics from Jira changelogs.
 
-No model. Every number is arithmetic on status (and sprint) transitions.
+No inference model used. Every number is arithmetic on status (and sprint)
+transitions.
 """
 
 import datetime as dt
@@ -126,9 +127,7 @@ def throughput_by_week(issues, weeks, today=None):
         if not bucket:
             continue
         bucket["done"] += 1
-        points = issue.get("story_points")
-        if isinstance(points, (int, float)) and points > 0:
-            bucket["points"] += points
+        bucket["points"] += story_points(issue)
     return buckets
 
 
@@ -247,9 +246,7 @@ def sprint_snapshot(issues, sprint, epic_types=("Epic",)):
     for issue in issues or []:
         if _is_epic_type(issue, epic_types):
             continue
-        points = issue.get("story_points")
-        if isinstance(points, bool) or not isinstance(points, (int, float)) or points <= 0:
-            points = 0
+        points = story_points(issue)
         finished = done_on(issue)
         created = _when_date(issue.get("created"))
         if start and finished and finished < start:
@@ -299,6 +296,9 @@ def sprint_snapshot(issues, sprint, epic_types=("Epic",)):
         "unfinished": unfinished,
         "carried_out": carried_out,
         "epics": epics,
+        "start": start.isoformat() if start else None,
+        "end": (_when_date(sprint.get("end")).isoformat()
+                if _when_date(sprint.get("end")) else None),
     }
 
 
@@ -328,8 +328,16 @@ def forecast_accuracy(issues, sprint):
     return {"forecast": forecast, "done": done, "items": in_sprint}
 
 
+def story_points(issue):
+    """Story points on one issue. Zero when the field is blank or not a number."""
+    points = (issue or {}).get("story_points")
+    if isinstance(points, bool) or not isinstance(points, (int, float)) or points <= 0:
+        return 0
+    return points
+
+
 def landing_date(open_count, weekly_rate, today=None):
-    """Plain calendar date: remaining items at the current weekly rate."""
+    """Calendar date: remaining items at one weekly rate."""
     today = today or dt.date.today()
     if not weekly_rate or weekly_rate <= 0 or open_count <= 0:
         return None
@@ -337,28 +345,68 @@ def landing_date(open_count, weekly_rate, today=None):
     return today + dt.timedelta(days=int(round(weeks * 7)))
 
 
+def landing_span(open_count, weekly_counts, today=None):
+    """Early and late landing dates from the spread of weekly throughput.
+
+    The middle date is the mean rate. One standard deviation faster is the
+    early date, and one standard deviation slower is the late date. When the
+    slow rate is not positive, `open_ended` is true and there is no late date.
+    """
+    today = today or dt.date.today()
+    counts = list(weekly_counts or [])
+    if open_count <= 0 or not counts:
+        return None
+    rate = sum(counts) / len(counts)
+    if rate <= 0:
+        return None
+    spread = statistics.stdev(counts) if len(counts) > 1 else 0.0
+    early = landing_date(open_count, rate + spread, today=today)
+    mid = landing_date(open_count, rate, today=today)
+    slow = rate - spread
+    if slow > 0:
+        late = landing_date(open_count, slow, today=today)
+        open_ended = False
+    else:
+        late = None
+        open_ended = spread > 0
+    if late and early and late < early:
+        early, late = late, early
+    return {
+        "early": early,
+        "late": late,
+        "mid": mid,
+        "open_ended": open_ended,
+        "stdev": round(spread, 2),
+    }
+
+
 def summarise_stream(issues, weeks, sprints=None, today=None, epic_types=("Epic",)):
     """One workstream's metrics bundle."""
     today = today or dt.date.today()
     sprints = sprints or []
     buckets = throughput_by_week(issues, weeks, today=today)
-    rate = (sum(b["done"] for b in buckets) / weeks) if weeks else 0
+    counts = [b["done"] for b in buckets]
+    rate = (sum(counts) / weeks) if weeks else 0
+    points_rate = (sum(b["points"] for b in buckets) / weeks) if weeks else 0
     open_items = [i for i in issues
                   if not _is_epic_type(i, epic_types)
                   and (i.get("status_category") or "").lower() != "done"
                   and not is_done_name(i.get("status"))]
     aging, aging_total = aging_wip(issues, today=today, epic_types=epic_types)
     sprint = sprints[0] if sprints else None
+    done_total = sum(counts)
     return {
         "throughput": buckets,
         "weekly_rate": round(rate, 2),
+        "weekly_points": round(points_rate, 2),
         "cycle": cycle_summary(issues),
         "aging": aging,
         "aging_total": aging_total,
         "scope_change": sprint_scope_change(issues, sprint),
         "accuracy": forecast_accuracy(issues, sprint),
         "open": len(open_items),
-        "landing": (landing_date(len(open_items), rate, today=today)
-                    if sum(b["done"] for b in buckets) >= 3 else None),
+        "open_points": sum(story_points(i) for i in open_items),
+        "landing": (landing_span(len(open_items), counts, today=today)
+                    if done_total >= 3 else None),
         "sprint": (sprint or {}).get("name"),
     }

@@ -623,16 +623,23 @@ def _append_delivery(cfg, report, profile):
         return report
     try:
         from commands import metrics as metrics_cmd
+        opts = metrics_cmd.settings(cfg)
+        today = dt.date.today()
         if mode == "headline":
             progress.start("Measuring delivery")
-            extra = metrics_cmd.render_headline(metrics_cmd.gather(cfg, 8), 8)
+            extra = metrics_cmd.render_headline(
+                metrics_cmd.gather(cfg, opts["weeks"]), opts["weeks"],
+                year_end=opts["year_end"], today=today)
         elif mode == "sprint":
             progress.start("Measuring the open sprint")
             sprint_name, groups = metrics_cmd.gather_sprint(cfg)
-            extra = metrics_cmd.render_sprint_context(sprint_name, groups)
+            extra = metrics_cmd.render_sprint_context(
+                sprint_name, groups, year_end=opts["year_end"])
         elif mode == "pulse":
             progress.start("Measuring delivery")
-            extra = metrics_cmd.render_pulse(metrics_cmd.gather(cfg, 8), 8)
+            extra = metrics_cmd.render_pulse(
+                metrics_cmd.gather(cfg, opts["weeks"]), opts["weeks"],
+                year_end=opts["year_end"], today=today)
         else:
             return report
     except Exception as exc:                              # noqa: BLE001

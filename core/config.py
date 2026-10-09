@@ -13,7 +13,7 @@ import sys
 import yaml
 
 from core import (
-    conventions, filters, products as product_core, prompts, queries,
+    conventions, filters, fiscal, products as product_core, prompts, queries,
     workstreams as ws_core,
 )
 from core.paths import HOME
@@ -85,7 +85,7 @@ SECTION_DEFAULTS = {
         "in_sprint_untouched_days": 3,
         "overdue": True,
     },
-    "metrics": {"weeks": 8},
+    "metrics": {"weeks": 8, "year_end": "03-31"},
     "comments": {
         "enabled": True,
         "max_per_issue": 3,
@@ -318,6 +318,19 @@ def _validate_confluence_tree(cfg):
         sys.exit("`confluence.skip` must be a list of page titles or page ids.")
 
 
+def _validate_metrics(cfg):
+    block = cfg.get("metrics")
+    if block is None:
+        return
+    if not isinstance(block, dict):
+        sys.exit("`metrics:` must be a mapping.")
+    if block.get("year_end") not in (None, ""):
+        try:
+            fiscal.canonical(block.get("year_end"))
+        except ValueError as err:
+            sys.exit(str(err))
+
+
 def validate(cfg):
     """Check the whole config before a single Jira call is made.
 
@@ -340,6 +353,7 @@ def validate(cfg):
     queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)
     prompts.validate_config(cfg)
+    _validate_metrics(cfg)
     _validate_conventions(cfg)
     _apply_convention_prompts(cfg)
 

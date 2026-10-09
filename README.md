@@ -383,7 +383,7 @@ pm schedule add warm --at 07:00
 |---|---|
 | `pm report` | The update for your role. Product management opens on what needs attention. Analyst, developer, and service designer each get a different report. Leadership stays short. Partner stays safe to send outside the team. `--audience` overrides the role for one run. `--sources full` adds the source tables. |
 | `pm brief --for "NAME"` | Meeting preparation for one group, including the documents that role cares about. `--debrief notes.md` turns your meeting notes into decisions and actions. |
-| `pm metrics` | How much the team finishes each week, how long work takes, and a projected finish date. `pm metrics --sprint` is the Sprint review. |
+| `pm metrics` | How much the team finishes each week, in items and story points, how long work takes, and a projected finish range for the fiscal quarter. `pm metrics --sprint` is the Sprint review. |
 | `pm release-notes` | Finished work since a date (`--since`) or in a release (`--version`). |
 | `pm publish FILE` | Sends a report to Confluence or Microsoft Teams, after you confirm. |
 
