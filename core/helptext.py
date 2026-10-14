@@ -88,6 +88,12 @@ CATALOGUE = {
         "related": ("coverage", "lint"),
         "common": ("project", "out", "refresh"),
     },
+    "discover": {
+        "summary": "Review configured products and workstreams, without Jira requests.",
+        "examples": ("pm discover", "pm discover --export"),
+        "related": ("products", "workstreams", "assess"),
+        "common": ("product", "workstream", "project", "export", "out"),
+    },
     "coverage": {
         "summary": "Work that no workstream claims.",
         "examples": ("pm coverage",),
@@ -194,7 +200,7 @@ CATALOGUE = {
 
 INTENTS = (
     ("Start the day", ("today", "do", "daily", "me", "note")),
-    ("Shape the backlog", ("assess", "ready", "refine", "lint", "show", "inbox", "triage")),
+    ("Shape the backlog", ("discover", "assess", "ready", "refine", "lint", "show", "inbox", "triage")),
     ("Report", ("report", "brief", "metrics", "release-notes")),
 )
 
