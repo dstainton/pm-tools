@@ -44,6 +44,8 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 ## Phase 2: Classification and ownership (Later)
 
+**Discovery design proposal (not approved for implementation):** [docs/PHASE2-DISCOVERY.md](docs/PHASE2-DISCOVERY.md). The proposed first slice establishes product and workstream knowledge before issue classification. Owner review and scoped authorization are required before any code changes.
+
 **Outcome:** Unclaimed and ambiguously owned work can be reviewed efficiently.
 
 - Explain candidate workstream assignments using Epic relationships, existing configuration, fields, and optionally model-assisted content analysis.
