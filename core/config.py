@@ -350,6 +350,11 @@ def validate(cfg):
     _validate_me(cfg)
     _validate_confluence_tree(cfg)
     _validate_registers(cfg)
+    from core import dispositions
+    try:
+        dispositions.validate(cfg)
+    except ValueError as exc:
+        sys.exit(str(exc))
     queries.validate_config(cfg)
     filters.validate_config_scopes(cfg)
     prompts.validate_config(cfg)
