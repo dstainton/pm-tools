@@ -98,15 +98,47 @@ def summary(report):
             lines.append("    Purpose/responsibilities/boundaries: unknown")
     if not report["products"]:
         lines.append(report.get("note") or "No product or workstream configuration in scope.")
+    if report.get("enriched"):
+        lines.append("")
+        lines.append("Evidence (examples only; not confirmed responsibilities):")
+        for entity in report["products"] + report["workstreams"]:
+            evidence = entity.get("evidence") or []
+            for item in evidence:
+                detail = item.get("detail") or (
+                    "{} item(s) sampled".format(len(item.get("items") or []))
+                    if item.get("items") is not None else item.get("title") or "")
+                lines.append("  {}: {} {} {}".format(
+                    entity["abbrev"], item["kind"], item["state"], detail))
     lines.append("")
     lines.append("Configured membership is not proof of business ownership.")
     return "\n".join(lines) + "\n"
 
 
+def _evidence_lines(evidence):
+    lines = ["- Evidence: {} ({})".format(
+        evidence["kind"], evidence["state"])]
+    if evidence.get("reference"):
+        lines.append("  - Reference: " + evidence["reference"])
+    if evidence.get("updated"):
+        lines.append("  - Last updated: " + evidence["updated"])
+    if evidence.get("title"):
+        lines.append("  - Title: " + evidence["title"])
+    if evidence.get("detail"):
+        lines.append("  - Note: " + evidence["detail"])
+    if evidence.get("excerpt"):
+        lines.append("  - Excerpt (unverified): " + evidence["excerpt"])
+    for item in evidence.get("items") or []:
+        lines.append("  - {}: {} (updated {})".format(
+            item["key"], item["title"], item["updated"]))
+    return lines + [""]
+
+
 def markdown(report):
     lines = ["# Product and workstream discovery", "",
-             "Phase 2A: configured facts only. No Jira, Confluence, SharePoint, "
-             "or model was queried. Membership does not prove business ownership.",
+             ("Phase 2B: bounded source examples, not confirmed ownership."
+              if report.get("enriched") else
+              "Phase 2A: configured facts only. No Jira, Confluence, SharePoint, "
+              "or model was queried. Membership does not prove business ownership."),
              "", "- Coverage: " + report["coverage"],
              "- Project filter: " + (report["scope_project"] or "none"), "",
              "## Configured profiles", ""]
@@ -121,6 +153,8 @@ def markdown(report):
                       "- Product goal: " + (product["goal"] or "unknown"),
                       "- Product responsibilities: unknown",
                       "- Product exclusions: unknown", ""])
+        for evidence in product.get("evidence") or []:
+            lines.extend(_evidence_lines(evidence))
         for ws in [w for w in report["workstreams"]
                    if w["product"] == product["abbrev"]]:
             lines.extend(["#### {} ({})".format(ws["name"], ws["abbrev"]), "",
@@ -135,11 +169,16 @@ def markdown(report):
                           "- Responsibilities: unknown",
                           "- Exclusions / boundaries: unknown",
                           "- Review state: not established", ""])
+            for evidence in ws.get("evidence") or []:
+                lines.extend(_evidence_lines(evidence))
     lines.extend(["## Scope and limitations", "",
                   "- Source references above describe where configured facts came from, "
                   "not evidence of verified product responsibilities.",
-                  "- No linked documents were read, and their availability or freshness "
-                  "was not checked.",
+                  ("- Source availability and timestamps are shown where retrieved; "
+                   "Jira Epic examples are bounded and not exhaustive."
+                   if report.get("enriched") else
+                   "- No linked documents were read, and their availability or freshness "
+                   "was not checked."),
                   "- Missing descriptions and boundaries are unknown, not inferred "
                   "from product names, components, or labels.",
                   "- No issue classifications or configuration changes are proposed.",

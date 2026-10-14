@@ -1,5 +1,5 @@
 """Read-only discovery of configured products and workstreams."""
-from core import discovery, output
+from core import discovery, output, progress
 
 
 def run(cfg, args):
@@ -10,6 +10,11 @@ def run(cfg, args):
                           getattr(args, "workstream", None)) else None
     report = discovery.inspect(cfg, selected=selected,
                                project=getattr(args, "project", None))
+    if getattr(args, "enrich", False):
+        from core import discovery_evidence
+        progress.start("Gathering bounded discovery evidence")
+        report = discovery_evidence.enrich(cfg, report)
+        progress.finish()
     print(discovery.summary(report), end="")
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
