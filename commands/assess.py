@@ -225,7 +225,7 @@ def run(cfg, args):
         progress.start('Resolving Jira dispositions in ' + project)
         try:
             scope = dispositions.resolve(cfg, project)
-        except (ValueError, KeyError, TypeError, Exception) as exc:
+        except Exception as exc:
             sys.exit('Cannot classify Jira statuses for {}: {}'.format(project, exc))
         progress.start('Reading active Jira issues in ' + project)
         inv = inventory.open_issues(cfg, project, jql_override=scope['jql']['active'])
