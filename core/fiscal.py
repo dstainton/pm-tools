@@ -136,14 +136,14 @@ def period_label(period):
 
 
 def period_phrase(period):
-    """`F27 Q3 (1 Oct – 31 Dec 2026)`."""
+    """`F27-Q3 (1 Oct – 31 Dec 2026)`."""
     start = format_day(period["start"], with_year=period["start"].year != period["end"].year)
     end = format_day(period["end"], with_year=True)
     return f"{period_label(period)} ({start} – {end})"
 
 
 def span_label(start, end, year_end):
-    """`F27 Q3`, `F27 Q2–Q3`, or `F27 Q4 – F28 Q1`."""
+    """`F27-Q3`, `F27-Q2–Q3`, or `F27-Q4 – F28-Q1`."""
     first = period_containing(start, year_end)
     last = period_containing(end, year_end)
     if first["year"] == last["year"] and first["quarter"] == last["quarter"]:
