@@ -42,6 +42,29 @@ def _policy(cfg, project):
     return policy
 
 
+def validate(cfg):
+    """Validate configuration shape without querying Jira."""
+    assessment = cfg.get("assessment") or {}
+    if not isinstance(assessment, dict) or set(assessment) - {"dispositions"}:
+        raise ValueError("assessment must contain only dispositions")
+    block = assessment.get("dispositions") or {}
+    if not isinstance(block, dict) or set(block) - set(KEYS) - {"projects"}:
+        raise ValueError("assessment.dispositions has unknown or invalid settings")
+    for kind in KEYS:
+        if kind in block:
+            _names(block[kind], "assessment.dispositions." + kind)
+    projects = block.get("projects") or {}
+    if not isinstance(projects, dict):
+        raise ValueError("assessment.dispositions.projects must be a mapping")
+    for project, override in projects.items():
+        if not isinstance(project, str) or not project.strip():
+            raise ValueError("assessment.dispositions.projects keys must be project names")
+        if not isinstance(override, dict) or set(override) - set(KEYS):
+            raise ValueError("Invalid project disposition override for " + project)
+        for kind, values in override.items():
+            _names(values, "assessment.dispositions.projects." + project + "." + kind)
+
+
 def resolve(cfg, project):
     """Discover project statuses and produce exact JQL for each disposition.
 
