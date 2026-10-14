@@ -141,7 +141,7 @@ class RenderingTests(unittest.TestCase):
         cfg = {"jira": {"project": "APS"}, "_workstreams": []}
         inv, facts = sample()
         events = []
-        def fetch(*args):
+        def fetch(*args, **kwargs):
             events.append("fetch")
             return inv
         def started(label):
