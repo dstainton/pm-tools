@@ -28,6 +28,7 @@ machine.
 | During the day | `pm note "..."` | Jots down an idea in a second. File it as a Jira ticket later with `pm inbox`. |
 | Daily Scrum | `pm daily` | What moved since yesterday, and who is working on what now. |
 | Before Sprint Planning | `pm ready` | A pass or fail for each ticket against your team's "ready" rules. |
+| Assessing an inherited backlog | `pm assess` | A complete-project open-issue inventory, short review summary, and detailed Markdown report. |
 | Tidying the backlog | `pm lint` | Tickets with missing details, such as no estimate, no parent, or dates that do not make sense. |
 | Fixing the gaps | `pm refine` | Draft titles, acceptance criteria, and estimates you can edit and then send to Jira. |
 | Before a meeting | `pm brief --for "Monthly review"` | What changed since you last met that group, and what you need from them. |
@@ -375,6 +376,7 @@ pm schedule add warm --at 07:00
 
 | Command | What it does |
 |---|---|
+| `pm assess` | Scans all open issues in a configured Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. Use `--project-key KEY` to select a project; incomplete inventory is reported explicitly. |
 | `pm lint` | Checks every ticket against simple rules: estimate, parent, dates, acceptance criteria, stalled work. |
 | `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also asks the AI model. |
 | `pm refine` | Drafts missing titles, acceptance criteria, and estimates into a file you edit. `--apply` sends what you kept to Jira. |
