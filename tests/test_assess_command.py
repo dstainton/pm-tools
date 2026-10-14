@@ -48,6 +48,48 @@ class RenderingTests(unittest.TestCase):
         self.count_patch.start()
         self.addCleanup(self.count_patch.stop)
 
+    def test_human_readable_scope_and_technical_queries_separated(self):
+        inv, facts = sample()
+        inv["jql"] = 'project = "APS" AND status IN (3, 10024)'
+        inv["dispositions"] = {
+            "status_names": {
+                "active": ["Blocked", "To Do"],
+                "completed": ["Closed", "Done"],
+                "excluded": []},
+            "jql": {
+                "active": inv["jql"],
+                "completed": 'project = "APS" AND status IN (6, 10002)',
+                "excluded": 'project = "APS" AND statusCategory = Done AND statusCategory != Done'}}
+        inv["completed_summary"] = {"status": "approximate", "count": 3437,
+                                    "jql": inv["dispositions"]["jql"]["completed"]}
+        inv["excluded_summary"] = {"status": "approximate", "count": 0,
+                                   "jql": inv["dispositions"]["jql"]["excluded"]}
+        brief = assess.summary([(inv, facts)])
+        self.assertIn("Active: Blocked, To Do", brief)
+        self.assertIn("Completed: Closed, Done", brief)
+        self.assertIn("Excluded: None matched", brief)
+        self.assertNotIn("status IN (", brief)
+        report = assess.markdown([(inv, facts)])
+        self.assertIn("**Active statuses:** Blocked, To Do", report)
+        self.assertIn("**Excluded statuses:** None matched", report)
+        self.assertIn("### Technical query details", report)
+        self.assertIn("Active inventory JQL: `" + inv["jql"] + "`", report)
+        self.assertNotIn("- Query: `", report)
+
+    def test_excluded_statuses_present_but_zero_issues(self):
+        inv, facts = sample()
+        inv["dispositions"] = {"status_names": {
+            "active": ["To Do"], "completed": ["Done"],
+            "excluded": ["Rejected"]},
+            "jql": {"active": "jql-active", "completed": "jql-done",
+                    "excluded": "jql-excluded"}}
+        inv["excluded_summary"] = {"status": "approximate", "count": 0,
+                                   "jql": "jql-excluded"}
+        output = assess.summary([(inv, facts)])
+        self.assertIn("Excluded: Rejected", output)
+        self.assertIn("Approximately 0 excluded issues", output)
+        self.assertNotIn("None matched", output)
+
     def test_completed_summary_is_separate_approximate_count(self):
         inv, facts = sample()
         inv["completed_summary"] = {"status": "approximate", "count": 20,
