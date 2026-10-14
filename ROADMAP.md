@@ -10,7 +10,7 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 - **Deferred / Rejected:** explicitly excluded until reconsidered by the owner.
 - **Current authorized work:** only the owner-assigned issue or explicit request; completion does not authorize automatically moving to another task.
 
-**Current authorized slice:** Phase 1 assessment design documentation only. Approved decisions are recorded in [docs/PHASE1-ASSESSMENT.md](docs/PHASE1-ASSESSMENT.md). The first implementation slice (1A) is proposed but not yet authorized. Do not begin implementation without an explicit owner assignment.
+**Current authorized slice:** Phase 1 closure and verification only, as explicitly requested. No Phase 2 implementation is authorized. Following owner review and merge of the closure PR, stop until new authorization.
 
 ## Phase 0: Product governance (Completed)
 
@@ -25,11 +25,11 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 **Exclusions:** No new CLI commands, Jira mutations, factories, schedulers, or code refactors.
 
-## Phase 1: Whole-project backlog assessment (Design approved; implementation pending authorization)
+## Phase 1: Whole-project backlog assessment (1A–1D merged; closure in review)
 
 **Outcome:** A PM can understand what they inherited *before* workstream configuration is complete.
 
-**Approved design:** [docs/PHASE1-ASSESSMENT.md](docs/PHASE1-ASSESSMENT.md). Default scope is open issues with completed work summarized separately, no automatic snapshot retention, and both a short terminal view and a full Markdown report. Implement in bounded slices, beginning with a trustworthy inventory; no application work is authorized by approval of the design alone.
+**Approved design:** [docs/PHASE1-ASSESSMENT.md](docs/PHASE1-ASSESSMENT.md). Default scope is open issues with completed work summarized separately, no automatic snapshot retention, and both a short terminal view and a full Markdown report. Implementation slices 1A–1D have been merged. The final closure PR completes the separately labelled approximate completed-work summary, transparent queue distribution, and acceptance review.
 
 - Assess the full relevant Jira project, including issues outside configured workstream membership.
 - Inventory by issue type, state, age, hierarchy, and ownership.
@@ -38,7 +38,7 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 - Produce a reviewable baseline with a prioritized, evidence-backed investigation queue.
 - Reuse `pm coverage`, `pm lint`, source adapters, and existing reporting logic where appropriate; avoid duplicate calculations.
 
-**Exit:** Tested synthetic scenarios include unclaimed issues, missing components/labels, stale work, partial Jira field configuration, empty results, and paginated retrieval. Reports explain what was and was not examined.
+**Exit, subject to final closure PR CI and owner acceptance:** Tested synthetic scenarios include unclaimed issues, missing components/labels, stale work, partial Jira field configuration, empty results, and paginated retrieval. Reports explain what was and was not examined.
 
 **Exclusions:** No bulk updates, model-made closure decisions, or strategic priority scores inferred from Jira hygiene.
 
