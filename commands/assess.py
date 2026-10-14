@@ -4,7 +4,7 @@ import datetime as dt
 import os
 import sys
 
-from core import assessment, inventory, output, progress, queries, review_queue, workstreams, sources
+from core import assessment, dispositions, inventory, output, progress, queries, review_queue, workstreams, sources
 
 
 def _projects(cfg, requested=None):
@@ -40,9 +40,9 @@ def _count_lines(result):
 
 
 
-def _completed(cfg, project):
+def _completed(cfg, project, jql_override=None):
     """Separate approximate completed count; never mix with open inventory."""
-    jql = "project = {} AND {}".format(
+    jql = jql_override or "project = {} AND {}".format(
         queries.quote(project), queries.render(cfg, "status.done"))
     try:
         return {"status": "approximate", "count": sources.approximate_count(
@@ -52,12 +52,12 @@ def _completed(cfg, project):
                 "reason": "{}: {}".format(type(exc).__name__, exc)}
 
 
-def _completed_line(inv):
+def _completed_line(inv, label='completed'):
     item = inv.get("completed_summary") or {"status": "unavailable"}
     if item["status"] == "approximate":
-        return "Approximately {} completed issues (separate Jira count)".format(
-            item["count"])
-    return "Completed-work count unavailable" + (
+        return "Approximately {} {} issues (separate Jira count)".format(
+            item["count"], label)
+    return "{}-work count unavailable".format(label.capitalize()) + (
         ": " + item["reason"] if item.get("reason") else "")
 
 
@@ -87,6 +87,7 @@ def summary(results):
                         key=lambda item: (-item[1], item[0]))
         groups, without = _distribution(inventory_result, result)
         lines.append("  Completed work: " + _completed_line(inventory_result))
+        lines.append("  Excluded work: " + _completed_line({"completed_summary": inventory_result.get("excluded_summary")}, "excluded"))
         lines.append("  Investigation queue (all groups):")
         lines.extend("    {} ({} issues)".format(g["title"], g["count"])
                      for g in groups)
@@ -129,6 +130,18 @@ def markdown(results):
             lines.append("Jira query: `" + completed["jql"] + "`")
         lines.append("This is an approximate Jira count, not a complete inventory; "
                      "completed issues are excluded from the open-work assessment.")
+        scope = inv.get("dispositions") or {}
+        if scope:
+            lines.extend(["", "### Effective disposition rules", ""])
+            for kind in ("active", "completed", "excluded"):
+                lines.append("- {}: {} (JQL: `{}`)".format(
+                    kind.capitalize(), ", ".join(scope["status_names"][kind]) or "(none)",
+                    scope["jql"][kind]))
+            excluded = inv.get("excluded_summary") or {}
+            lines.append("- Excluded-work count: " + (
+                str(excluded["count"]) + " (approximate)"
+                if excluded.get("status") == "approximate" else
+                "unavailable" + (": " + excluded["reason"] if excluded.get("reason") else "")))
         for title, values in (("Issue types", result["by_type"]),
                               ("Status categories", result["by_status_category"]),
                               ("Created age (days)", result["created_age_bands"]),
@@ -209,8 +222,14 @@ def run(cfg, args):
     results = []
     for index, project in enumerate(projects, 1):
         progress.start(progress.numbered(index, len(projects),
-                                         'Reading open Jira issues in ' + project))
-        inv = inventory.open_issues(cfg, project)
+                                         'Resolving Jira dispositions in ' + project))
+        try:
+            scope = dispositions.resolve(cfg, project)
+        except Exception as exc:
+            sys.exit('Cannot classify Jira statuses for {}: {}'.format(project, exc))
+        progress.start('Reading active Jira issues in ' + project)
+        inv = inventory.open_issues(cfg, project, jql_override=scope['jql']['active'])
+        inv['dispositions'] = scope
         if inv["status"] == "failed":
             sys.exit("Jira inventory failed for {}: {}".format(
                 project, inv["reason"] or "unknown error"))
@@ -221,7 +240,9 @@ def run(cfg, args):
             sys.exit("Workstream membership could not be verified for {}: {}: {}".format(
                 project, type(exc).__name__, exc))
         progress.start('Counting completed work in ' + project)
-        inv['completed_summary'] = _completed(cfg, project)
+        inv['completed_summary'] = _completed(cfg, project, scope['jql']['completed'])
+        progress.start('Counting excluded work in ' + project)
+        inv['excluded_summary'] = _completed(cfg, project, scope['jql']['excluded'])
         progress.start('Analyzing backlog in ' + project)
         results.append((inv, assessment.analyze(inv, today, claims=claims)))
     progress.finish()

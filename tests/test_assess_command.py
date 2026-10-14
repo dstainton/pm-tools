@@ -33,6 +33,16 @@ def sample(status="complete"):
 
 class RenderingTests(unittest.TestCase):
     def setUp(self):
+        self.scope_patch = patch("commands.assess.dispositions.resolve",
+                                 return_value={"jql": {
+                                     "active": "project = APS AND status IN (1)",
+                                     "completed": "project = APS AND status IN (2)",
+                                     "excluded": "project = APS AND status IN (3)"},
+                                     "status_names": {
+                                         "active": ["To Do"], "completed": ["Done"],
+                                         "excluded": ["Cancelled"]}})
+        self.scope_patch.start()
+        self.addCleanup(self.scope_patch.stop)
         self.count_patch = patch("commands.assess.sources.approximate_count",
                                  return_value=20)
         self.count_patch.start()
@@ -131,7 +141,7 @@ class RenderingTests(unittest.TestCase):
         cfg = {"jira": {"project": "APS"}, "_workstreams": []}
         inv, facts = sample()
         events = []
-        def fetch(*args):
+        def fetch(*args, **kwargs):
             events.append("fetch")
             return inv
         def started(label):
@@ -143,8 +153,9 @@ class RenderingTests(unittest.TestCase):
                 "commands.assess.progress.finish") as finish, patch(
                 "builtins.print"):
             assess.run(cfg, argparse.Namespace(project=None, out=folder))
-        self.assertTrue(events[0].startswith("Reading open Jira issues"))
-        self.assertEqual(events[1], "fetch")
+        self.assertTrue(events[0].startswith("Resolving Jira dispositions"))
+        self.assertTrue(events[1].startswith("Reading active Jira issues"))
+        self.assertEqual(events[2], "fetch")
         self.assertTrue(any("Checking workstream ownership" in x for x in events))
         self.assertTrue(any("Analyzing backlog" in x for x in events))
         self.assertTrue(any("Writing Markdown" in x for x in events))
