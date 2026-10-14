@@ -35,7 +35,7 @@ def build_report(cfg, sections, all_items, scope_note):
     if show_products and groups:
         lines.append("## Portfolio")
         lines.append("")
-        lines.append("| Product | Workstreams | Items |")
+        lines.append("| Product | Workstreams | Source items |")
         lines.append("|---------|-------------|------:|")
         items_by_ws = {}
         for it in all_items:
