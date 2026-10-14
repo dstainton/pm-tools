@@ -313,7 +313,7 @@ class PlanningAndSprintTests(unittest.TestCase):
         self.assertIn("Sprint Goal: Ship export", text)
         self.assertIn("Completed", text)
         self.assertIn("Incomplete", text)
-        self.assertIn("Forecast at start", text)
+        self.assertIn("Planned points at start", text)
 
 
 if __name__ == "__main__":
