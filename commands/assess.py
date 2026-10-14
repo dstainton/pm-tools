@@ -66,6 +66,16 @@ def _distribution(inv, facts):
     return groups, max(0, facts["count"] - sum(g["count"] for g in groups))
 
 
+def _status_names(scope, kind):
+    """Business-readable disposition names, or an explicit empty-state label."""
+    names = (scope.get("status_names") or {}).get(kind) or []
+    if names:
+        return ", ".join(names)
+    if kind == "excluded":
+        return "None matched (no excluded statuses configured in this project)"
+    return "None matched"
+
+
 def summary(results):
     lines = ["Backlog assessment", ""]
     for inventory_result, result in results:
@@ -73,10 +83,17 @@ def summary(results):
         lines.extend([
             "{} | {} | {} open issues".format(
                 project, result["inventory_status"].upper(), result["count"]),
-            "  Query: {}".format(inventory_result["jql"]),
+            "  Assessment scope: active statuses",
             "  Workstream ownership: {}".format(
                 "evaluated" if result["ownership_evaluated"] else "not evaluated"),
         ])
+        scope = inventory_result.get("dispositions") or {}
+        if scope:
+            lines.append("    Active: " + _status_names(scope, "active"))
+            lines.append("    Completed: " + _status_names(scope, "completed"))
+            lines.append("    Excluded: " + _status_names(scope, "excluded"))
+        else:
+            lines.append("    Scope details unavailable; see technical query in report")
         if not result["complete"]:
             lines.append("  WARNING: incomplete inventory: " +
                          (result["inventory_reason"] or "retrieval was not complete"))
@@ -113,7 +130,7 @@ def markdown(results):
             "- Retrieval status: **" + result["inventory_status"] + "**",
             "- Open issues retrieved: **" + str(result["count"]) + "**",
             "- Pages retrieved: " + str(inv["pages"]),
-            "- Query: `" + inv["jql"] + "`",
+            "- Assessment population: active statuses (see disposition rules below)",
             "- Workstream ownership: " + (
                 "evaluated" if result["ownership_evaluated"] else
                 "not evaluated (workstreams not configured)"),
@@ -126,22 +143,30 @@ def markdown(results):
         lines.extend(["", "### Completed work (separate population)", "",
                       _completed_line(inv) + "."])
         completed = inv.get("completed_summary") or {}
-        if completed.get("jql"):
-            lines.append("Jira query: `" + completed["jql"] + "`")
         lines.append("This is an approximate Jira count, not a complete inventory; "
                      "completed issues are excluded from the open-work assessment.")
         scope = inv.get("dispositions") or {}
         if scope:
             lines.extend(["", "### Effective disposition rules", ""])
             for kind in ("active", "completed", "excluded"):
-                lines.append("- {}: {} (JQL: `{}`)".format(
-                    kind.capitalize(), ", ".join(scope["status_names"][kind]) or "(none)",
-                    scope["jql"][kind]))
+                lines.append("- **{} statuses:** {}".format(
+                    kind.capitalize(), _status_names(scope, kind)))
             excluded = inv.get("excluded_summary") or {}
             lines.append("- Excluded-work count: " + (
                 str(excluded["count"]) + " (approximate)"
                 if excluded.get("status") == "approximate" else
                 "unavailable" + (": " + excluded["reason"] if excluded.get("reason") else "")))
+        lines.extend(["", "### Technical query details", "",
+                      "Exact Jira queries are retained here for verification; "
+                      "status IDs are internal Jira identifiers, not "
+                      "user-facing status names.", "",
+                      "- Active inventory JQL: `" + inv["jql"] + "`"])
+        for kind, label in (("completed", "Completed-work"),
+                            ("excluded", "Excluded-work")):
+            item = inv.get(kind + "_summary") or {}
+            jql = item.get("jql") or (scope.get("jql") or {}).get(kind)
+            if jql:
+                lines.append("- {} JQL: `{}`".format(label, jql))
         for title, values in (("Issue types", result["by_type"]),
                               ("Status categories", result["by_status_category"]),
                               ("Created age (days)", result["created_age_bands"]),
