@@ -52,12 +52,12 @@ def _completed(cfg, project, jql_override=None):
                 "reason": "{}: {}".format(type(exc).__name__, exc)}
 
 
-def _completed_line(inv):
+def _completed_line(inv, label='completed'):
     item = inv.get("completed_summary") or {"status": "unavailable"}
     if item["status"] == "approximate":
-        return "Approximately {} completed issues (separate Jira count)".format(
-            item["count"])
-    return "Completed-work count unavailable" + (
+        return "Approximately {} {} issues (separate Jira count)".format(
+            item["count"], label)
+    return "{}-work count unavailable".format(label.capitalize()) + (
         ": " + item["reason"] if item.get("reason") else "")
 
 
@@ -87,7 +87,7 @@ def summary(results):
                         key=lambda item: (-item[1], item[0]))
         groups, without = _distribution(inventory_result, result)
         lines.append("  Completed work: " + _completed_line(inventory_result))
-        lines.append("  Excluded work: " + _completed_line({"completed_summary": inventory_result.get("excluded_summary")}))
+        lines.append("  Excluded work: " + _completed_line({"completed_summary": inventory_result.get("excluded_summary")}, "excluded"))
         lines.append("  Investigation queue (all groups):")
         lines.extend("    {} ({} issues)".format(g["title"], g["count"])
                      for g in groups)
@@ -140,7 +140,8 @@ def markdown(results):
             excluded = inv.get("excluded_summary") or {}
             lines.append("- Excluded-work count: " + (
                 str(excluded["count"]) + " (approximate)"
-                if excluded.get("status") == "approximate" else "unavailable"))
+                if excluded.get("status") == "approximate" else
+                "unavailable" + (": " + excluded["reason"] if excluded.get("reason") else "")))
         for title, values in (("Issue types", result["by_type"]),
                               ("Status categories", result["by_status_category"]),
                               ("Created age (days)", result["created_age_bands"]),
