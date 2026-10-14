@@ -24,7 +24,7 @@ Commands:
     pm review            Without --apply, the old model judgement. With --apply,
                          the refine worksheet. Deprecated.
     pm note              Capture a thought offline; file it later.
-    pm coverage          Open issues no workstream claims, and unused components.
+    pm discover          Review configured product and workstream knowledge.\n    pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
                          pm and work are the full tables. Leadership is the
@@ -108,7 +108,7 @@ from commands import (report, lint, ready, init, setup, show,   # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
                       schedule, update, coverage, release_notes, warm,
-                      mcp_server, me, assess)
+                      mcp_server, me, assess, discover)
 
 
 def resolve_config_path(explicit):
@@ -698,6 +698,19 @@ def build_parser():
                           help="Jira project key(s), comma-separated. "
                                "Default: configured project(s).")
     p_assess.set_defaults(func=assess.run, needs_config=True)
+
+    p_discover = sub.add_parser(
+        "discover", parents=[help_opts, common],
+        help="Review configured product and workstream knowledge",
+        description="Read-only product/workstream discovery from local "
+                    "configuration, with explicit unknown responsibilities. "
+                    "No Jira or model requests.")
+    p_discover.add_argument("--project", metavar="KEY",
+                            help="Limit profiles to one Jira project")
+    p_discover.add_argument("--export", action="store_true",
+                            help="Write a detailed Markdown proposal to --out "
+                                 "or the configured output directory")
+    p_discover.set_defaults(func=discover.run, needs_config=True)
 
     p_cover = sub.add_parser(
         "coverage", parents=[help_opts, common],
