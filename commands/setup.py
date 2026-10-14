@@ -22,8 +22,18 @@ TOKEN_PAGE = "https://id.atlassian.com/manage-profile/security/api-tokens"
 
 def _tty():
     try:
-        return bool(sys.stdin.isatty())
-    except (AttributeError, ValueError):
+        if not sys.stdin.isatty():
+            return False
+        if sys.platform == "win32":
+            # Windows treats NUL (subprocess.DEVNULL) as a character device,
+            # so isatty() alone can incorrectly report interactive input.
+            import ctypes
+            import msvcrt
+            handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+            mode = ctypes.c_ulong()
+            return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
+        return True
+    except (AttributeError, OSError, ValueError):
         return False
 
 

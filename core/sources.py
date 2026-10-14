@@ -693,7 +693,10 @@ def _report_fields(cfg):
     """Report fields, always including parent even when config lists its own."""
     raw = cfg.get("fields") or DEFAULT_REPORT_FIELDS
     names = _field_list(raw)
-    for extra in ("parent",):
+    story_points_field = cfg.get("story_points_field") or ""
+    for extra in ("parent", story_points_field):
+        if not extra:
+            continue
         if extra not in names:
             names.append(extra)
     epic_link = (cfg.get("epic_link_field") or "parent").strip()
@@ -746,6 +749,8 @@ def fetch_jira(cfg, jql, tag_prefix, start_index):
         item["summary"] = summary
         item["status"] = status
         item["status_category"] = category
+        sp_field = cfg.get("story_points_field") or ""
+        item["story_points"] = f.get(sp_field) if sp_field else None
         item["assignee"] = assignee
         item["issuetype"] = (f.get("issuetype") or {}).get("name") or ""
         item["labels"] = list(f.get("labels") or [])

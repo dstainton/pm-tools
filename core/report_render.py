@@ -639,6 +639,49 @@ def _append_docs(lines, pages, profile, names, heading):
     lines.append("")
 
 
+def _story_point_totals(rows):
+    """Count unique, non-Epic Jira issues in the report scope.
+
+    A zero estimate is valid and differs from a missing estimate. These
+    totals reflect the issues' current statuses, not completed points in
+    the reporting window.
+    """
+    records = {}
+    for row in rows:
+        for item in row.get("items") or []:
+            if item.get("source") != "Jira" or not item.get("key"):
+                continue
+            if str(item.get("issuetype") or "").lower() == "epic":
+                continue
+            records.setdefault(item["key"], item)
+    done = open_points = 0.0
+    unestimated = 0
+    for item in records.values():
+        value = item.get("story_points")
+        if value is None or value == "":
+            unestimated += 1
+            continue
+        try:
+            points = float(value)
+        except (TypeError, ValueError):
+            unestimated += 1
+            continue
+        if str(item.get("status_category") or "").lower() == "done":
+            done += points
+        else:
+            open_points += points
+    return {"done": done, "open": open_points,
+            "unestimated": unestimated, "issues": len(records)}
+
+
+def _story_points_line(rows):
+    totals = _story_point_totals(rows)
+    return (f"Story points (current report scope): {totals['done']:g} Done, "
+            f"{totals['open']:g} open; "
+            f"{totals['unestimated']} of {totals['issues']} issues unestimated. "
+            "These are current-status totals, not points completed this week.")
+
+
 def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm",
               team_pages=None, sources="compact", dependencies=None):
     today = dt.date.today().isoformat()
@@ -697,6 +740,9 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm",
         if show_products and product:
             lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
             lines.append("")
+            product_rows = [row_by.get(ws["abbrev"]) or {} for ws in streams]
+            lines.append(_story_points_line(product_rows))
+            lines.append("")
             if profile.get("goal"):
                 goal = checklist.product_goal(product)
                 if goal:
@@ -717,6 +763,8 @@ def render_pm(cfg, groups, rows, sections, window, scope_note, who="pm",
             lines.append(f"{heading} {ws['name']} ({ws['abbrev']})")
             lines.append("")
             row = row_by.get(ws["abbrev"]) or {}
+            lines.append(_story_points_line([row]))
+            lines.append("")
             loose = [it for it in row.get("items") or []
                      if it.get("source") in ("Confluence", "SharePoint") and not it.get("epic")
                      and not (show_products and product and it.get("product_only"))]
@@ -799,6 +847,9 @@ def render_leadership(cfg, groups, rows, summaries, window):
         if several:
             lines.append(summaries[index] if index < len(summaries) else "Nothing this period.")
             lines.append("")
+        product_rows = [by_ws.get(ws["abbrev"]) or {} for ws in streams]
+        lines.append(_story_points_line(product_rows))
+        lines.append("")
         lines.append("| Epic | Workstream | Status | Progress | Signal | Target |")
         lines.append("|------|------------|--------|---------:|--------|--------|")
         for ws in streams:

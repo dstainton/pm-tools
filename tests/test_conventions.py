@@ -1,5 +1,6 @@
 """Conventions rename the team's issue types, links and labels."""
 
+import datetime as dt
 import unittest
 
 from core import conventions, prompts, workstreams
@@ -10,11 +11,12 @@ class ConventionTests(unittest.TestCase):
     def test_bug_types_and_epic_types(self):
         cfg = {"conventions": {"bug_types": ["Defect"]},
                "membership": {"epic_types": ["Initiative"]}}
+        recent = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
         self.assertTrue(triage._is_new_bug(
-            {"issuetype": "Defect", "created": "2026-09-25T00:00:00.000+0000"},
+            {"issuetype": "Defect", "created": recent},
             5, cfg))
         self.assertFalse(triage._is_new_bug(
-            {"issuetype": "Bug", "created": "2026-09-25T00:00:00.000+0000"},
+            {"issuetype": "Bug", "created": recent},
             5, cfg))
         self.assertTrue(workstreams.is_epic(cfg, {"issuetype": "Initiative"}))
 
