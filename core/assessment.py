@@ -74,6 +74,7 @@ def analyze(inventory, today, claims=None, rules=None):
 
     status = inventory.get("status") or "failed"
     rows = list(inventory.get("issues") or [])
+    unavailable = set(inventory.get("missing_config") or [])
     types, statuses, ages_created, ages_updated = Counter(), Counter(), Counter(), Counter()
     findings = []
     for issue in rows:
@@ -102,9 +103,9 @@ def analyze(inventory, today, claims=None, rules=None):
         lower_type = itype.lower()
         if lower_type in parent_types and not issue.get("epic"):
             flag("missing-parent", "No parent/Epic link available")
-        if lower_type in estimate_types and issue.get("story_points") in (None, ""):
+        if "story_points_field" not in unavailable and lower_type in estimate_types and issue.get("story_points") in (None, ""):
             flag("missing-estimate", "Estimate is not recorded")
-        if lower_type in criteria_types and not issue.get("acceptance_criteria"):
+        if "acceptance_criteria_field" not in unavailable and lower_type in criteria_types and not issue.get("acceptance_criteria"):
             flag("missing-criteria-field", "No acceptance criteria in the configured field; description may contain them")
         if category == "indeterminate" and updated_age is not None and updated_age > stale_days:
             flag("stalled-active", f"No Jira update for {updated_age} days while in progress")
