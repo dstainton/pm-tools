@@ -31,10 +31,12 @@ def build(inventory, assessment_result, sample_limit=12):
     No inference of obsolescence, stakeholder importance, or delivery priority.
     """
     by_key = {}
+    ages = {}
     for finding in assessment_result.get("findings") or []:
         key = finding.get("key")
         if key:
             by_key.setdefault(key, set()).add(finding["rule"])
+            ages[key] = finding.get("updated_age_days")
     groups = {name: [] for name, _, _ in GROUPS}
     for issue in inventory.get("issues") or []:
         key = issue.get("key")
@@ -44,9 +46,7 @@ def build(inventory, assessment_result, sample_limit=12):
         if not flags:
             continue
         status = str(issue.get("status_category") or "").lower()
-        updated_age = next((f.get("updated_age_days") for f in
-                            assessment_result["findings"]
-                            if f.get("key") == key), None)
+        updated_age = ages.get(key)
         if "stalled-active" in flags and "unassigned-person" in flags:
             name = "stalled-unassigned"
         elif "overdue" in flags:
