@@ -79,11 +79,10 @@ class RenderingTests(unittest.TestCase):
                        return_value=inv), patch(
                        "commands.assess.assessment.analyze",
                        return_value=sample()[1]), patch(
-                       "commands.assess.dt.date") as dates, patch(
                        "builtins.print") as output:
-                dates.today.return_value = dt.date(2026, 10, 14)
                 assess.run(cfg, args)
-            path = os.path.join(folder, "assessment-2026-10-14.md")
+            path = os.path.join(folder, "assessment-{}.md".format(
+                dt.date.today().isoformat()))
             self.assertTrue(os.path.isfile(path))
             with open(path, encoding="utf-8") as handle:
                 self.assertIn("## APS", handle.read())
