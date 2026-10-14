@@ -376,7 +376,7 @@ pm schedule add warm --at 07:00
 
 | Command | What it does |
 |---|---|
-| `pm assess` | Scans all open issues in a configured Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. Use `--project-key KEY` to select a project; incomplete inventory is reported explicitly. |
+| `pm assess` | Scans all open issues in a configured Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. Use `--project KEY` to select a project; incomplete inventory is reported explicitly. |
 | `pm lint` | Checks every ticket against simple rules: estimate, parent, dates, acceptance criteria, stalled work. |
 | `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also asks the AI model. |
 | `pm refine` | Drafts missing titles, acceptance criteria, and estimates into a file you edit. `--apply` sends what you kept to Jira. |
