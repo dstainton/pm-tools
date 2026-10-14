@@ -84,9 +84,9 @@ CATALOGUE = {
     },
     "assess": {
         "summary": "Assess open Jira issues across the whole project.",
-        "examples": ("pm assess", "pm assess --project-key APS"),
+        "examples": ("pm assess", "pm assess --project APS"),
         "related": ("coverage", "lint"),
-        "common": ("project_key", "out", "refresh"),
+        "common": ("project", "out", "refresh"),
     },
     "coverage": {
         "summary": "Work that no workstream claims.",
