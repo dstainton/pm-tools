@@ -221,8 +221,7 @@ def run(cfg, args):
     results = []
     for index, project in enumerate(projects, 1):
         progress.start(progress.numbered(index, len(projects),
-                                         'Reading open Jira issues in ' + project))
-        progress.start('Resolving Jira dispositions in ' + project)
+                                         'Resolving Jira dispositions in ' + project))
         try:
             scope = dispositions.resolve(cfg, project)
         except Exception as exc:
