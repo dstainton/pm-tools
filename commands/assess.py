@@ -4,7 +4,7 @@ import datetime as dt
 import os
 import sys
 
-from core import assessment, inventory, output, progress, workstreams, sources
+from core import assessment, inventory, output, progress, review_queue, workstreams, sources
 
 
 def _projects(cfg, requested=None):
@@ -58,6 +58,10 @@ def summary(results):
                          ", ".join(inventory_result["missing_config"]))
         ranked = sorted(result["finding_counts"].items(),
                         key=lambda item: (-item[1], item[0]))
+        groups = review_queue.build(inventory_result, result)
+        lines.append("  First review groups:")
+        lines.extend("    {} ({} issues)".format(g["title"], g["count"])
+                     for g in groups[:5])
         lines.append("  Review signals:")
         lines.extend("    {}: {}".format(rule, count) for rule, count in ranked[:8])
         if not ranked:
@@ -105,7 +109,35 @@ def markdown(results):
                          key=lambda item: (-item[1], item[0])))
         if not result["finding_counts"]:
             lines.append("| None observed | 0 |")
-        lines.extend(["", "### Issue evidence", "",
+        groups = review_queue.build(inv, result)
+        lines.extend(["", "### Investigation queue", "",
+                      "Each issue appears in only one review group. This is an "
+                      "investigation order, not an implementation priority. "
+                      "Sample rows are limited to 12 per group; complete rule "
+                      "evidence appears in the appendix.", ""])
+        if not groups:
+            lines.append("No review signals for the retrieved records.")
+        for group in groups:
+            lines.extend(["", "#### {} ({} issues)".format(
+                group["title"], group["count"]), "",
+                group["rationale"], "",
+                "| Issue | Status | Last updated | Summary |",
+                "| --- | --- | ---: | --- |"])
+            for row in group["sample"]:
+                key, url = row["key"], row["url"]
+                link = "[{}]({})".format(key, url) if url else key
+                days = row["updated_age_days"]
+                age = "{} days ago".format(days) if days is not None else "Unknown"
+                title = str(row["title"]).replace("|", "\\|").replace("\\n", " ")
+                lines.append("| {} | {} | {} | {} |".format(
+                    link, row["status"], age, title))
+            if group["count"] > len(group["sample"]):
+                lines.append("")
+                lines.append("{} further issues. See the evidence appendix.".format(
+                    group["count"] - len(group["sample"])))
+        lines.extend(["", "### Complete rule evidence (appendix)", "",
+                      "Each issue can appear more than once here because it "
+                      "may have multiple independent review signals.", "",
                       "| Finding | Issue | Detail |", "| --- | --- | --- |"])
         for finding in result["findings"]:
             key = finding["key"]
