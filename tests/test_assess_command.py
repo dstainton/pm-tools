@@ -32,6 +32,45 @@ def sample(status="complete"):
 
 
 class RenderingTests(unittest.TestCase):
+    def setUp(self):
+        self.count_patch = patch("commands.assess.sources.approximate_count",
+                                 return_value=20)
+        self.count_patch.start()
+        self.addCleanup(self.count_patch.stop)
+
+    def test_completed_summary_is_separate_approximate_count(self):
+        inv, facts = sample()
+        inv["completed_summary"] = {"status": "approximate", "count": 20,
+                                    "jql": 'project = "APS" AND statusCategory = Done'}
+        self.assertIn("Approximately 20 completed issues",
+                      assess.summary([(inv, facts)]))
+        report = assess.markdown([(inv, facts)])
+        self.assertIn("Completed work (separate population)", report)
+        self.assertIn("approximate Jira count", report)
+
+    def test_completed_count_failure_does_not_invent_zero(self):
+        cfg = {"jira": {"project": "APS"}}
+        with patch("commands.assess.sources.approximate_count",
+                   side_effect=ValueError("no access")):
+            outcome = assess._completed(cfg, "APS")
+        self.assertEqual(outcome["status"], "unavailable")
+        self.assertIsNone(outcome["count"])
+
+    def test_terminal_shows_every_review_group_and_zero_findings(self):
+        inv, facts = sample()
+        inv["issues"] = [
+            {"key": "APS-1", "summary": "needs review", "status_category": "new"},
+            {"key": "APS-2", "summary": "clean", "status_category": "new"}]
+        facts["count"] = 2
+        facts["findings"] = [
+            {"key": "APS-1", "rule": "missing-component",
+             "updated_age_days": 8, "detail": "missing", "url": ""}]
+        text = assess.summary([(inv, facts)])
+        self.assertIn("Investigation queue (all groups)", text)
+        self.assertIn("Other backlog quality review (1 issues)", text)
+        self.assertIn("No review signals (1 issues)", text)
+        self.assertIn("1 issues with no review signals", assess.markdown([(inv, facts)]))
+
     def test_summary_and_markdown_use_same_counts(self):
         records = [sample()]
         brief = assess.summary(records)
