@@ -694,7 +694,7 @@ def build_parser():
         description="Read-only project-wide backlog assessment, including "
                     "issues outside configured workstreams. Prints a short "
                     "summary and saves detailed Markdown.")
-    p_assess.add_argument("--project-key", metavar="KEY",
+    p_assess.add_argument("--project", metavar="KEY",
                           help="Jira project key(s), comma-separated. "
                                "Default: configured project(s).")
     p_assess.set_defaults(func=assess.run, needs_config=True)
