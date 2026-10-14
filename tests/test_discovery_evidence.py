@@ -17,6 +17,54 @@ CFG = {
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_title_reference_in_workstream_configuration_is_resolved(self):
+        cfg = dict(CFG)
+        cfg["workstreams"] = [dict(CFG["workstreams"][0],
+                                   confluence_page_id=None,
+                                   confluence_space="TEAM",
+                                   confluence_page="Gateway Overview")]
+        payload = {"id": "912", "title": "Gateway Overview",
+                   "version": {"when": "2026-10-01"}}
+        with patch("core.discovery_evidence.sources.search_confluence_by_title",
+                   return_value=[payload]) as lookup:
+            evidence = discovery_evidence._page(cfg, cfg["workstreams"][0])
+        lookup.assert_called_once_with(cfg, "TEAM", "Gateway Overview")
+        self.assertEqual(evidence["state"], "retrieved")
+        self.assertEqual(evidence["reference"], "912")
+
+    def test_title_reference_can_inherit_global_space(self):
+        cfg = dict(CFG, confluence=dict(CFG["confluence"], space="TEAM"))
+        entity = {"confluence_page": "Gateway Overview"}
+        with patch("core.discovery_evidence.sources.search_confluence_by_title",
+                   return_value=[{"id": "2", "title": "Gateway Overview"}]) as lookup:
+            evidence = discovery_evidence._page(cfg, entity)
+        lookup.assert_called_once_with(cfg, "TEAM", "Gateway Overview")
+        self.assertEqual(evidence["state"], "retrieved")
+
+    def test_duplicate_titles_require_explicit_page_id(self):
+        entity = {"confluence_space": "TEAM", "confluence_page": "Overview"}
+        with patch("core.discovery_evidence.sources.search_confluence_by_title",
+                   return_value=[{"id": "1"}, {"id": "2"}]):
+            evidence = discovery_evidence._page(CFG, entity)
+        self.assertEqual(evidence["state"], "ambiguous")
+        self.assertIn("confluence_page_id", evidence["detail"])
+
+    def test_space_only_is_configured_but_not_a_page_reference(self):
+        with patch("core.discovery_evidence.sources.search_confluence_by_title") as lookup:
+            evidence = discovery_evidence._page(CFG, {"confluence_space": "TEAM"})
+        lookup.assert_not_called()
+        self.assertEqual(evidence["state"], "configured")
+
+    def test_terminal_coverage_reflects_source_enrichment(self):
+        report = discovery.inspect(CFG)
+        with patch("core.discovery_evidence.sources.fetch_confluence_page",
+                   return_value=None), patch(
+                   "core.discovery_evidence.sources.search_issues",
+                   return_value=[]):
+            discovery_evidence.enrich(CFG, report)
+        self.assertIn("bounded Jira Epic samples", discovery.summary(report))
+        self.assertNotIn("configuration only (no Jira", discovery.summary(report))
+
     def test_bounded_evidence_never_confirmed_as_responsibility(self):
         payload = {"id": "88", "title": "Product strategy",
                    "version": {"when": "2026-09-01"},
