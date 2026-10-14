@@ -71,7 +71,7 @@ class RenderingTests(unittest.TestCase):
 
     def test_run_writes_markdown_to_selected_output_folder(self):
         cfg = {"jira": {"project": "APS"}, "_workstreams": []}
-        args = argparse.Namespace(project_key=None, out=None)
+        args = argparse.Namespace(project=None, out=None)
         with tempfile.TemporaryDirectory() as folder:
             args.out = folder
             inv, _ = sample()
@@ -93,7 +93,7 @@ class RenderingTests(unittest.TestCase):
         inv, _ = sample("failed")
         with patch("commands.assess.inventory.open_issues", return_value=inv):
             with self.assertRaises(SystemExit) as error:
-                assess.run(cfg, argparse.Namespace(project_key=None, out=None))
+                assess.run(cfg, argparse.Namespace(project=None, out=None))
         self.assertIn("paging interrupted", str(error.exception))
 
     def test_partial_run_reports_and_exits_nonzero(self):
@@ -107,7 +107,7 @@ class RenderingTests(unittest.TestCase):
                        "builtins.print"):
                 with self.assertRaises(SystemExit) as error:
                     assess.run(cfg, argparse.Namespace(
-                        project_key=None, out=folder))
+                        project=None, out=folder))
             self.assertEqual(error.exception.code, 1)
 
 
