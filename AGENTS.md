@@ -29,6 +29,7 @@ Stop and ask the owner when work would change the North Star, activate a future 
 - Use consistent user-facing scope options: `--project` for Jira projects, `--product` for configured products, and `--workstream` for configured workstreams. Add `-key` or `-id` only when users must distinguish identifier types.
 - Writes are previewed and approved. Never bulk-close or delete work based on model judgement.
 - Prefer straightforward changes and small reviewable PRs. No speculative refactors.
+- Follow [CLI progress and feedback](docs/CLI-PROGRESS.md): any command with noticeable work must show stage-level progress before slow operations, maintain useful feedback, and cleanly report completion or failure. Test this behaviour.
 
 ## Verification
 
