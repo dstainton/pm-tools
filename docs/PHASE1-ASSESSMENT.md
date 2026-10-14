@@ -1,8 +1,8 @@
 # Phase 1 design: Whole-project backlog assessment
 
-**Status:** Approved design choices recorded 2026-10-14. Implementation not yet authorized.
+**Status:** Implementation slices 1A–1D merged; final Phase 1 closure PR under review.
 
-**Authority:** [North Star](../NORTH_STAR.md) and [Roadmap](../ROADMAP.md). The source code and existing CLI remain unchanged until a bounded implementation task is approved.
+**Authority:** [North Star](../NORTH_STAR.md) and [Roadmap](../ROADMAP.md). Phase 1 functionality is implemented as `pm assess`; no Jira writes or model calls.
 
 ## Outcome
 
@@ -13,6 +13,16 @@ A product manager can assess an inherited Jira project even when issues lack com
 1. **Scope: open.** All non-completed issues in the selected Jira project(s), including items outside configured workstreams. Completed work is summarized separately where reliable data is available; it is not part of the open-work assessment population. Jira status categories and configured conventions should determine completion, not arbitrary English status names. Show explicit project keys and query scope.
 2. **Retention: none.** No automatic history or dated local snapshot store in Phase 1. An on-demand current report may be exported, but is not silently persisted as a history database. Trends and longitudinal comparisons remain Phase 4.
 3. **Output: both.** Concise, actionable terminal summary plus a full Markdown assessment report with linked issue evidence and completeness information. The command must not overwhelm the terminal with an undifferentiated issue dump.
+
+## Implementation and final closure verification
+
+- Slices 1A–1D are merged: uncapped open inventory, deterministic findings, CLI/Markdown presentation, and exclusive issue-level investigation groups.
+- The closure change displays every investigation group and the number of open issues without review findings.
+- Completed work is a **separate approximate Jira count** using the configured done-status vocabulary, not a downloaded completed-work inventory; an unavailable count is labelled unavailable, never zero.
+- Counts for completed work may differ from historical snapshots, and open and completed populations are never combined.
+- Review groups indicate investigation order, not product priority; issue inactivity is not proof that work is obsolete.
+- No automatic snapshot history, model inference, Jira changes, or Phase 2 classification has been added.
+- Final completion requires the full supported CI matrix and owner review of the closure PR.
 
 ## Proposed report model
 
@@ -56,7 +66,7 @@ Do not change existing `search_issues` default semantics globally unless tests d
 - **1C: `pm assess` and presentation.** Concise terminal plus detailed Markdown output with accurate source links.
 - **1D: Investigation queue and end-to-end hardening.** Prioritized evidence-backed review groupings and broad regression coverage.
 
-Authorization of this design does not authorize any of the implementation slices.
+All four slices were explicitly authorized and merged. Further implementation requires separate owner authorization.
 
 ## Acceptance tests for Phase 1
 
@@ -71,7 +81,7 @@ Authorization of this design does not authorize any of the implementation slices
 - No Jira writes or model calls.
 - Existing tests and supported CI operating systems pass.
 
-## Proposed first implementation issue: Phase 1A
+## Historical first implementation proposal: Phase 1A
 
 **Title:** Build complete open-issue Jira inventory with explicit retrieval completeness
 
