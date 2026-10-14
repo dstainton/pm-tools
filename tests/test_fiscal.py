@@ -13,7 +13,7 @@ class FiscalYearTests(unittest.TestCase):
         self.assertEqual(fiscal.year_tag(2027), "F27")
         self.assertEqual(fiscal.year_tag(2007), "F07")
         period = fiscal.period_containing(dt.date(2026, 10, 9), "03-31")
-        self.assertEqual(fiscal.period_label(period), "F27 Q3")
+        self.assertEqual(fiscal.period_label(period), "F27-Q3")
         self.assertEqual(period["quarter"], 3)
         self.assertEqual(period["start"], dt.date(2026, 10, 1))
         self.assertEqual(period["end"], dt.date(2026, 12, 31))
@@ -40,7 +40,7 @@ class FiscalYearTests(unittest.TestCase):
         self.assertEqual(opened["start"], dt.date(2027, 4, 1))
         self.assertEqual(
             fiscal.span_label(dt.date(2027, 3, 1), dt.date(2027, 4, 2), "03-31"),
-            "F27 Q4 – F28 Q1")
+            "F27-Q4 – F28-Q1")
 
     def test_a_january_year_end_still_uses_three_calendar_months(self):
         periods = fiscal.quarters(2027, "01-31")
@@ -99,15 +99,15 @@ class ReportTextTests(unittest.TestCase):
         self.assertIn("no inference model used", text)
         self.assertNotIn("no model", text)
         self.assertIn("F27 ends 31 Mar 2027", text)
-        self.assertIn("F27 Q3 (1 Oct – 31 Dec 2026)", text)
-        self.assertIn("F27 Q2–Q3", text)
+        self.assertIn("F27-Q3 (1 Oct – 31 Dec 2026)", text)
+        self.assertIn("F27-Q2–Q3", text)
         self.assertIn("Points / week", text)
-        self.assertIn("Open pts", text)
+        self.assertIn("Open points", text)
         self.assertIn("5.0", text)
         self.assertIn("21", text)
-        self.assertIn("6 Nov ± 14 d (F27 Q3) · 2 ± 1 sprints", text)
+        self.assertIn("6 Nov ± 14 d (F27-Q3) · 2 ± 1 sprints", text)
         self.assertIn("SDX pts", text)
-        self.assertIn("F27 Q2", text)
+        self.assertIn("F27-Q2", text)
         self.assertNotIn("FY2027", text)
 
     def test_an_unbounded_landing_says_or_later(self):
@@ -118,7 +118,7 @@ class ReportTextTests(unittest.TestCase):
             "open_ended": True,
         })
         text = metrics_cmd.render(groups, 8, year_end="03-31", today=today)
-        self.assertIn("6 Nov or later (F27 Q3) · 2 sprints or more", text)
+        self.assertIn("6 Nov or later (F27-Q3) · 2 sprints or more", text)
 
     def test_landing_without_a_sprint_omits_the_sprint_clause(self):
         today, groups = self._groups({
@@ -130,7 +130,7 @@ class ReportTextTests(unittest.TestCase):
         groups[0][1][0]["cadence_days"] = None
         text = metrics_cmd.render(groups, 8, year_end="03-31", today=today)
         self.assertIn(
-            "| SDX | 2.0 | 5.0 | 6 / 10 d | 8 | 21 | 6 Nov ± 14 d (F27 Q3) | 1 | 10 / 16 |",
+            "| SDX | 2.0 | 5.0 | 6 / 10 | 8 | 21 | 6 Nov ± 14 d (F27-Q3) | 1 | 10 / 16 |",
             text)
 
     def test_daily_and_lint_say_no_inference_model_used(self):
