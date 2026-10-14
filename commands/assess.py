@@ -122,9 +122,9 @@ def markdown(results):
 
 
 def run(cfg, args):
-    projects = _projects(cfg, getattr(args, "project_key", None))
+    projects = _projects(cfg, getattr(args, "project", None))
     if not projects:
-        sys.exit("No Jira project found. Use pm assess --project-key KEY or configure jira.project.")
+        sys.exit("No Jira project found. Use pm assess --project KEY or configure jira.project.")
     today = dt.date.today()
     results = []
     for project in projects:
