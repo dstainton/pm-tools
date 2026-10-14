@@ -53,6 +53,15 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(result["finding_counts"]["missing-parent"], 1)
         self.assertNotIn("unclaimed-workstream", result["finding_counts"])
 
+    def test_unconfigured_fields_are_not_reported_as_missing_issue_values(self):
+        records = inventory([issue("APS-1")])
+        records["missing_config"] = [
+            "story_points_field", "acceptance_criteria_field"]
+        result = assessment.analyze(records, TODAY)
+        self.assertNotIn("missing-estimate", result["finding_counts"])
+        self.assertNotIn("missing-criteria-field", result["finding_counts"])
+        self.assertEqual(result["finding_counts"]["missing-component"], 1)
+
     def test_distinguish_zero_estimate_from_missing_estimate(self):
         result = assessment.analyze(inventory([
             issue("APS-1", story_points=0),
