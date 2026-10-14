@@ -132,7 +132,7 @@ def year_tag(year):
 
 
 def period_label(period):
-    return f"{year_tag(period['year'])} Q{period['quarter']}"
+    return f"{year_tag(period['year'])}-Q{period['quarter']}"
 
 
 def period_phrase(period):
@@ -149,5 +149,5 @@ def span_label(start, end, year_end):
     if first["year"] == last["year"] and first["quarter"] == last["quarter"]:
         return period_label(first)
     if first["year"] == last["year"]:
-        return f"{year_tag(first['year'])} Q{first['quarter']}–Q{last['quarter']}"
+        return f"{year_tag(first['year'])}-Q{first['quarter']}–Q{last['quarter']}"
     return f"{period_label(first)} – {period_label(last)}"
