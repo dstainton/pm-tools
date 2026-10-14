@@ -850,7 +850,7 @@ def render_leadership(cfg, groups, rows, summaries, window):
         product_rows = [by_ws.get(ws["abbrev"]) or {} for ws in streams]
         lines.append(_story_points_line(product_rows))
         lines.append("")
-        lines.append("| Epic | Workstream | Status | Progress | Signal | Target |")
+        lines.append("| Epic | Workstream | Status | Issues completed / total | Signal | Target |")
         lines.append("|------|------------|--------|---------:|--------|--------|")
         for ws in streams:
             for epic in (by_ws.get(ws["abbrev"]) or {}).get("epics") or []:
@@ -933,10 +933,10 @@ def render_partner(cfg, groups, rows, summaries, window):
         lines.append("")
         show_percent = bool(opts.get("show_backlog_percent"))
         if show_percent:
-            lines.append("| Feature | Status | Items complete | Backlog items complete |")
+            lines.append("| Feature | Status | Issues completed / total | Backlog completed (%) |")
             lines.append("|---------|--------|---------------:|-----------------------:|")
         else:
-            lines.append("| Feature | Status | Items complete |")
+            lines.append("| Feature | Status | Issues completed / total |")
             lines.append("|---------|--------|---------------:|")
         for ws in streams:
             for epic in (by_ws.get(ws["abbrev"]) or {}).get("epics") or []:
@@ -948,12 +948,12 @@ def render_partner(cfg, groups, rows, summaries, window):
                 done = epic.get("children_done") or 0
                 phrase = {"new": "Planned", "done": "Delivered"}.get(
                     (epic.get("status_category") or "").lower(), "In progress")
-                items = f"{done} of {total}" if total else "0 of 0"
+                items = f"{done} of {total}" if total else "—"
                 feature = epic.get("summary") or epic["key"]
                 if opts.get("include_jira_links"):
                     feature = _md_link(feature, epic.get("url"))
                 if show_percent:
-                    pct = f"{int(100 * done / total)}%" if total else "0%"
+                    pct = f"{int(100 * done / total)}%" if total else "—"
                     lines.append(f"| {feature} | {phrase} | {items} | {pct} |")
                 else:
                     lines.append(f"| {feature} | {phrase} | {items} |")
