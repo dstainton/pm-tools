@@ -5,7 +5,7 @@ This module does not generate assessments or modify issues.
 
 import datetime as dt
 
-from core import filters, queries, sources
+from core import queries, sources
 
 
 def open_issues(cfg, project):
@@ -23,7 +23,7 @@ def open_issues(cfg, project):
                     dt.timezone.utc).isoformat(), "missing_config": []}
 
     jql = queries.render(cfg, "coverage.open_in_project",
-                         project=filters.quote(project))
+                         project=project)
     jira = cfg["jira"]
     fields = ["summary", "status", "issuetype", "components", "assignee",
               "labels", "duedate", "updated", "created", "description", "parent"]
