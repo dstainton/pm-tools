@@ -12,6 +12,10 @@ machine.
 - New here? Read this page, then [docs/START.md](docs/START.md).
 - Already set up? [docs/EVERYDAY.md](docs/EVERYDAY.md) is the short list of
   everyday commands.
+- Contributing or using an AI coding agent? Read [NORTH_STAR.md](NORTH_STAR.md),
+  [ROADMAP.md](ROADMAP.md), and [AGENTS.md](AGENTS.md). The existing
+  [architecture baseline](docs/ARCHITECTURE.md) and
+  [decision convention](docs/decisions/README.md) provide additional context.
 
 ---
 
