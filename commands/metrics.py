@@ -199,16 +199,16 @@ def render(groups, weeks, year_end="03-31", today=None):
     for product, rows in groups:
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Done / week | Points / week | "
-                     "Cycle (med / p85) | Open | Open pts | Landing | "
-                     "Scope added | Forecast pts |")
+        lines.append("| Workstream | Completed issues/week | Completed points/week | "
+                     "Cycle time (median / p85, days) | Open issues | Open points | Landing (projection) | "
+                     "Issues added | Delivered / forecast points |")
         lines.append("|-----------|------------:|--------------:|"
                      "------------------:|-----:|---------:|--------:|"
                      "------------:|-------------:|")
         for row in rows:
             cycle = row["cycle"]
             cycle_txt = ("—" if not cycle["n"]
-                         else f"{cycle['median']} / {cycle['p85']} d")
+                         else f"{cycle['median']} / {cycle['p85']}")
             rate = f"{row['weekly_rate']:.1f}"
             points = f"{row.get('weekly_points') or 0:.1f}"
             landing = _landing_cell(row, year_end, today)
@@ -265,15 +265,15 @@ def render_headline(groups, weeks, year_end="03-31", today=None):
     for product, rows in groups:
         lines.append(f"### {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Done / week | Points / week | "
-                     "Cycle (median) | Open | Open pts | "
+        lines.append("| Workstream | Completed issues/week | Completed points/week | "
+                     "Median cycle time (days) | Open issues | Open points | "
                      "Landing (projection) |")
         lines.append("|------------|------------:|--------------:|"
                      "---------------:|-----:|---------:|"
                      "----------------------|")
         for row in rows:
             cycle = row["cycle"]
-            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
+            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']}"
             landing = _landing_cell(row, year_end, today)
             lines.append(
                 f"| {row['workstream']} | {row['weekly_rate']:.1f} | "
@@ -298,14 +298,14 @@ def render_pulse(groups, weeks, year_end="03-31", today=None):
         _fiscal_line(year_end, today),
         "",
     ]
-    lines.append("| Workstream | Done / week | Points / week | "
-                 "Cycle (median) | Open | Open pts | Landing (projection) |")
+    lines.append("| Workstream | Completed issues/week | Completed points/week | "
+                 "Median cycle time (days) | Open issues | Open points | Landing (projection) |")
     lines.append("|------------|------------:|--------------:|"
                  "---------------:|-----:|---------:|----------------------|")
     for _product, rows in groups:
         for row in rows:
             cycle = row["cycle"]
-            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']} d"
+            cycle_txt = "—" if not cycle["n"] else f"{cycle['median']}"
             landing = _landing_cell(row, year_end, today)
             lines.append(
                 f"| {row['workstream']} | {row['weekly_rate']:.1f} | "
@@ -342,8 +342,8 @@ def render_sprint_context(sprint_name, groups, year_end="03-31"):
     if fiscal_line:
         lines.append(fiscal_line)
         lines.append("")
-    lines.append("| Workstream | Forecast at start | Delivered | Added | "
-                 "Carried in | Unfinished |")
+    lines.append("| Workstream | Planned points at start | Completed points | Points added | "
+                 "Carried-in issues | Unfinished issues |")
     lines.append("|-----------|------------------:|----------:|------:|"
                  "-----------:|-----------:|")
     any_sprint = False
@@ -462,8 +462,8 @@ def render_sprint(sprint_name, groups, cfg=None, year_end=None):
     for product, rows in groups:
         lines.append(f"## {product.get('name')} ({product.get('abbrev')})")
         lines.append("")
-        lines.append("| Workstream | Forecast at start | Delivered | "
-                     "Added after start | Carried in | Carried out |")
+        lines.append("| Workstream | Planned points at start | Completed points | "
+                     "Points added after start | Carried-in issues | Carried-out issues |")
         lines.append("|-----------|------------------:|----------:|"
                      "------------------:|-----------:|------------:|")
         for row in rows:
