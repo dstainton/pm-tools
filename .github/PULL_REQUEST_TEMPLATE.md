@@ -30,3 +30,4 @@ What user problem does this address? Link the approved issue or direct owner req
 - [ ] No unrelated features or speculative refactors
 - [ ] Documentation updated where necessary
 - [ ] CI checked; pending checks are not described as passing
+- [ ] Progress feedback assessed and tested for commands with noticeable work (or not applicable)
