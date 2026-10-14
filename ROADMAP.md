@@ -10,9 +10,9 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 - **Deferred / Rejected:** explicitly excluded until reconsidered by the owner.
 - **Current authorized work:** only the owner-assigned issue or explicit request; completion does not authorize automatically moving to another task.
 
-**Current authorized slice:** Phase 0 governance documents only. Do not build new commands as part of Phase 0. After this PR, request approval for a bounded Phase 1 issue before changing application behaviour.
+**Current authorized slice:** Phase 1 assessment design documentation only. Approved decisions are recorded in [docs/PHASE1-ASSESSMENT.md](docs/PHASE1-ASSESSMENT.md). The first implementation slice (1A) is proposed but not yet authorized. Do not begin implementation without an explicit owner assignment.
 
-## Phase 0: Product governance (Active)
+## Phase 0: Product governance (Completed)
 
 **Outcome:** A new agent can enter this repository, understand product direction, find the next approved task, and respect the architectural and verification boundaries without relying on previous chat history.
 
@@ -25,9 +25,11 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 **Exclusions:** No new CLI commands, Jira mutations, factories, schedulers, or code refactors.
 
-## Phase 1: Whole-project backlog assessment (Next)
+## Phase 1: Whole-project backlog assessment (Design approved; implementation pending authorization)
 
 **Outcome:** A PM can understand what they inherited *before* workstream configuration is complete.
+
+**Approved design:** [docs/PHASE1-ASSESSMENT.md](docs/PHASE1-ASSESSMENT.md). Default scope is open issues with completed work summarized separately, no automatic snapshot retention, and both a short terminal view and a full Markdown report. Implement in bounded slices, beginning with a trustworthy inventory; no application work is authorized by approval of the design alone.
 
 - Assess the full relevant Jira project, including issues outside configured workstream membership.
 - Inventory by issue type, state, age, hierarchy, and ownership.
