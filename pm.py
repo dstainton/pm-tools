@@ -108,7 +108,7 @@ from commands import (report, lint, ready, init, setup, show,   # noqa: E402
                       daily, workstreams, products, doctor, today,
                       triage, refine, inbox, metrics, brief, publish,
                       schedule, update, coverage, release_notes, warm,
-                      mcp_server, me)
+                      mcp_server, me, assess)
 
 
 def resolve_config_path(explicit):
@@ -687,6 +687,17 @@ def build_parser():
     p_me.add_argument("--audience", choices=["pm", "work", "leadership", "partner"],
                       help="With --who, confirms the shape is pm")
     p_me.set_defaults(func=me.run, needs_config=True)
+
+    p_assess = sub.add_parser(
+        "assess", parents=[help_opts, common],
+        help="Review open Jira work across an entire project",
+        description="Read-only project-wide backlog assessment, including "
+                    "issues outside configured workstreams. Prints a short "
+                    "summary and saves detailed Markdown.")
+    p_assess.add_argument("--project", metavar="KEY",
+                          help="Jira project key(s), comma-separated. "
+                               "Default: configured project(s).")
+    p_assess.set_defaults(func=assess.run, needs_config=True)
 
     p_cover = sub.add_parser(
         "coverage", parents=[help_opts, common],
