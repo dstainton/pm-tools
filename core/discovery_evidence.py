@@ -16,36 +16,45 @@ def _excerpt(text):
     return " ".join(text.split())[:MAX_EXCERPT]
 
 
-def _page_ref(cfg, entity):
-    page_id = entity.get("confluence_page_id")
-    if not page_id:
-        return None
-    return str(page_id)
-
-
 def _page(cfg, entity):
-    page_id = _page_ref(cfg, entity)
-    if not page_id:
+    """Read an explicitly configured page by ID or by space and title."""
+    page_id = entity.get("confluence_page_id")
+    title = entity.get("confluence_page")
+    space = entity.get("confluence_space") or (cfg.get("confluence") or {}).get("space")
+    has_reference = bool(page_id or (title and space))
+    if not has_reference:
+        if title or entity.get("confluence_space"):
+            return {"kind": "Confluence", "state": "configured",
+                    "detail": "Confluence scope exists but has no resolvable page reference"}
         return {"kind": "Confluence", "state": "not configured"}
+    reference = str(page_id) if page_id else "{} / {}".format(space, title)
     if not (cfg.get("confluence") or {}).get("base_url"):
         return {"kind": "Confluence", "state": "unavailable",
-                "detail": "Confluence connection not configured", "reference": page_id}
+                "detail": "Confluence connection not configured", "reference": reference}
     try:
-        raw = sources.fetch_confluence_page(cfg, page_id)
+        if page_id:
+            raw = sources.fetch_confluence_page(cfg, str(page_id))
+        else:
+            matches = sources.search_confluence_by_title(cfg, space, title)
+            if len(matches) > 1:
+                return {"kind": "Confluence", "state": "ambiguous",
+                        "detail": "Multiple pages have this title; configure confluence_page_id",
+                        "reference": reference}
+            raw = matches[0] if matches else None
         if not raw:
             return {"kind": "Confluence", "state": "unavailable",
-                    "detail": "Page was not found or could not be read",
-                    "reference": page_id}
+                    "detail": "Configured page not found or not accessible",
+                    "reference": reference}
         body = ((raw.get("body") or {}).get("storage") or {}).get("value") or ""
         return {"kind": "Confluence", "state": "retrieved",
                 "title": raw.get("title") or "Untitled",
-                "reference": str(raw.get("id") or page_id),
+                "reference": str(raw.get("id") or reference),
                 "updated": ((raw.get("version") or {}).get("when") or "unknown"),
                 "excerpt": _excerpt(body)}
     except Exception as exc:
         return {"kind": "Confluence", "state": "unavailable",
                 "detail": "{}: {}".format(type(exc).__name__, exc),
-                "reference": page_id}
+                "reference": reference}
 
 
 def _epics(cfg, ws):

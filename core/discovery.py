@@ -76,7 +76,8 @@ def inspect(cfg, selected=None, project=None):
 
 def summary(report):
     lines = ["Product and workstream discovery", "",
-             "Source coverage: configuration only (no Jira or document retrieval)"]
+             "Source coverage: " + (report["coverage"] if report.get("enriched") else
+                                    "configuration only (no Jira or document retrieval)")]
     if report["scope_project"]:
         lines.append("Project: " + report["scope_project"])
     lines.append("{} product group(s), {} workstream(s)".format(
