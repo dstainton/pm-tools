@@ -130,15 +130,17 @@ def _field_list(fields):
 
 
 def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
-                  page_size=None):
-    """Run a JQL search, following nextPageToken, and return the raw issues.
+                  page_size=None, with_metadata=False):
+    """Search Jira using continuation tokens.
 
-    `max_items` caps how much we pull for one query (defaults to the config's
-    `max_results`); pass 0 or None-with-`unlimited` semantics via
-    `max_items=0` to fetch everything the query matches.
+    The normal list-returning API retains its configured cap and exception
+    behaviour. with_metadata=True opts into explicit completeness reporting;
+    max_items=0 requests all matching records rather than the configured cap.
     """
     if not jql:
-        return []
+        result = {"issues": [], "complete": False, "reason": "empty JQL",
+                  "pages": 0, "count": 0}
+        return result if with_metadata else []
 
     if max_items is None:
         max_items = int(cfg.get("max_results", 100) or 100)
@@ -148,41 +150,63 @@ def search_issues(cfg, jql, fields=None, expand=None, max_items=None,
 
     cache = cfg.get("_fetch_cache")
     key = None
-    if cache is not None:
+    if cache is not None and not with_metadata:
         key = cache_key("search", jql, _field_list(fields), expand, max_items)
         hit = cache.get(key)
         if hit is not None:
             return hit
 
     url = _api(cfg, "search/jql")
-    issues, token = [], None
+    issues, token, seen_tokens, pages = [], None, set(), 0
+    complete, reason = False, ""
     while True:
-        # POST so a long JQL string (a list of epic keys, say) can't blow the
-        # URL length limit.
         body = {"jql": jql, "fields": _field_list(fields),
                 "maxResults": page_size}
         if expand:
             body["expand"] = expand
         if token:
             body["nextPageToken"] = token
+        try:
+            resp = send("POST", url, json=body, auth=_auth(cfg),
+                        headers={"Accept": "application/json"}, timeout=60)
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, dict) or not isinstance(data.get("issues"), list):
+                raise ValueError("Jira search response has no issues list")
+        except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+            if not with_metadata:
+                raise
+            reason = f"Jira search failed: {type(exc).__name__}: {exc}"
+            break
 
-        resp = send("POST",url, json=body, auth=_auth(cfg),
-                             headers={"Accept": "application/json"}, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-
-        page = data.get("issues") or []
+        pages += 1
+        page = data["issues"]
         issues.extend(page)
-        token = data.get("nextPageToken")
+        next_token = data.get("nextPageToken")
         if len(issues) > len(page):
             from core import progress
             progress.note(f"{len(issues)} issues")
-        if not token or not page:
-            break
         if max_items and len(issues) >= max_items:
+            complete = not bool(next_token)
+            if not complete:
+                reason = "configured item limit reached"
             break
+        if not next_token:
+            complete = True
+            break
+        if not page:
+            reason = "Jira returned an empty page with a continuation token"
+            break
+        if next_token in seen_tokens or next_token == token:
+            reason = "Jira repeated a continuation token"
+            break
+        seen_tokens.add(next_token)
+        token = next_token
 
     result = issues[:max_items] if max_items else issues
+    if with_metadata:
+        return {"issues": result, "complete": complete, "reason": reason,
+                "pages": pages, "count": len(result)}
     if cache is not None and key is not None:
         cache.put(key, result)
     return result
@@ -796,13 +820,13 @@ def sharepoint_search_url(site_id, query):
             f"/drive/root/search(q='{encoded}')")
 
 
-def fetch_jira_detailed(cfg, jql, max_results=None):
+def fetch_jira_detailed(cfg, jql, max_results=None, raw_issues=None):
     """Fetch issues with the extra fields lint needs. Returns list of dicts.
 
     Custom-field IDs (story points, start date, acceptance criteria, epic link)
     vary by Jira instance, so they are read from config and skipped if blank.
     """
-    if not jql:
+    if not jql and raw_issues is None:
         return []
 
     sp = cfg.get("story_points_field") or ""
@@ -818,8 +842,10 @@ def fetch_jira_detailed(cfg, jql, max_results=None):
             fields.append(extra)
 
     out = []
-    for iss in search_issues(cfg, jql, fields=fields, expand="changelog",
-                             max_items=max_results):
+    if raw_issues is None:
+        raw_issues = search_issues(cfg, jql, fields=fields, expand="changelog",
+                                   max_items=max_results)
+    for iss in raw_issues:
         f = iss.get("fields", {})
 
         # Epic / parent link — team-managed uses "parent", classic a customfield.
