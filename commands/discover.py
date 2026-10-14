@@ -15,6 +15,9 @@ def run(cfg, args):
         progress.start("Gathering bounded discovery evidence")
         report = discovery_evidence.enrich(cfg, report)
         progress.finish()
+    if getattr(args, "questions", False):
+        from core import discovery_questions
+        report = discovery_questions.attach(report)
     print(discovery.summary(report), end="")
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
