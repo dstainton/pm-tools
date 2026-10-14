@@ -8,7 +8,7 @@ import datetime as dt
 from core import queries, sources
 
 
-def open_issues(cfg, project):
+def open_issues(cfg, project, jql_override=None):
     """Return normalized open issues and honest retrieval metadata.
 
     The query is project-based, never workstream-based. A terminal continuation
@@ -22,8 +22,8 @@ def open_issues(cfg, project):
                 "pages": 0, "retrieved_at": dt.datetime.now(
                     dt.timezone.utc).isoformat(), "missing_config": []}
 
-    jql = queries.render(cfg, "coverage.open_in_project",
-                         project=project)
+    jql = jql_override or queries.render(cfg, "coverage.open_in_project",
+                                        project=project)
     jira = cfg["jira"]
     fields = ["summary", "status", "issuetype", "components", "assignee",
               "labels", "duedate", "updated", "created", "description", "parent"]
