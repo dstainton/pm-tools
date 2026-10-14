@@ -237,8 +237,8 @@ def render(groups, weeks, year_end="03-31", today=None):
             lines.append("Throughput by week")
             names = []
             for row in rows:
-                names.append(f"{row['workstream']} completed issues")
-                names.append(f"{row['workstream']} completed points")
+                names.append("Completed issues")
+                names.append("Completed points")
             header = "| Week | Quarter | " + " | ".join(names) + " |"
             lines.append(header)
             lines.append("|------|---------|" + "|".join(["------:"] * len(names)) + "|")
