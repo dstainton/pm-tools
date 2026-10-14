@@ -88,6 +88,29 @@ class RenderingTests(unittest.TestCase):
                 self.assertIn("## APS", handle.read())
             self.assertTrue(output.called)
 
+    def test_progress_starts_before_network_and_identifies_stages(self):
+        cfg = {"jira": {"project": "APS"}, "_workstreams": []}
+        inv, facts = sample()
+        events = []
+        def fetch(*args):
+            events.append("fetch")
+            return inv
+        def started(label):
+            events.append(label)
+        with tempfile.TemporaryDirectory() as folder, patch(
+                "commands.assess.inventory.open_issues", side_effect=fetch), patch(
+                "commands.assess.assessment.analyze", return_value=facts), patch(
+                "commands.assess.progress.start", side_effect=started), patch(
+                "commands.assess.progress.finish") as finish, patch(
+                "builtins.print"):
+            assess.run(cfg, argparse.Namespace(project=None, out=folder))
+        self.assertTrue(events[0].startswith("Reading open Jira issues"))
+        self.assertEqual(events[1], "fetch")
+        self.assertTrue(any("Checking workstream ownership" in x for x in events))
+        self.assertTrue(any("Analyzing backlog" in x for x in events))
+        self.assertTrue(any("Writing Markdown" in x for x in events))
+        self.assertGreaterEqual(finish.call_count, 2)
+
     def test_failed_inventory_stops_instead_of_reporting_zero(self):
         cfg = {"jira": {"project": "APS"}, "_workstreams": []}
         inv, _ = sample("failed")
