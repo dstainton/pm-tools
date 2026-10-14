@@ -82,6 +82,12 @@ CATALOGUE = {
         "related": ("refine", "ready"),
         "common": ("workstream", "apply"),
     },
+    "assess": {
+        "summary": "Assess open Jira issues across the whole project.",
+        "examples": ("pm assess", "pm assess --project-key APS"),
+        "related": ("coverage", "lint"),
+        "common": ("project_key", "out", "refresh"),
+    },
     "coverage": {
         "summary": "Work that no workstream claims.",
         "examples": ("pm coverage",),
@@ -188,12 +194,12 @@ CATALOGUE = {
 
 INTENTS = (
     ("Start the day", ("today", "do", "daily", "me", "note")),
-    ("Shape the backlog", ("ready", "refine", "lint", "show", "inbox", "triage")),
+    ("Shape the backlog", ("assess", "ready", "refine", "lint", "show", "inbox", "triage")),
     ("Report", ("report", "brief", "metrics", "release-notes")),
 )
 
 ROLE_COMMANDS = {
-    "pm": ("today", "do", "ready", "refine", "show", "report", "brief", "me"),
+    "pm": ("today", "do", "assess", "ready", "refine", "show", "report", "brief", "me"),
     "developer": ("daily", "me", "show", "ready", "release-notes"),
     "service-designer": ("report", "brief", "show", "release-notes", "me"),
     "analyst": ("ready", "refine", "lint", "show", "inbox", "report", "me"),
