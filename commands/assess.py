@@ -4,7 +4,7 @@ import datetime as dt
 import os
 import sys
 
-from core import assessment, inventory, output, workstreams, sources
+from core import assessment, inventory, output, progress, workstreams, sources
 
 
 def _projects(cfg, requested=None):
@@ -127,22 +127,29 @@ def run(cfg, args):
         sys.exit("No Jira project found. Use pm assess --project KEY or configure jira.project.")
     today = dt.date.today()
     results = []
-    for project in projects:
+    for index, project in enumerate(projects, 1):
+        progress.start(progress.numbered(index, len(projects),
+                                         'Reading open Jira issues in ' + project))
         inv = inventory.open_issues(cfg, project)
         if inv["status"] == "failed":
             sys.exit("Jira inventory failed for {}: {}".format(
                 project, inv["reason"] or "unknown error"))
+        progress.start('Checking workstream ownership in ' + project)
         try:
             claims = _claims(cfg, project)
         except Exception as exc:
             sys.exit("Workstream membership could not be verified for {}: {}: {}".format(
                 project, type(exc).__name__, exc))
+        progress.start('Analyzing backlog in ' + project)
         results.append((inv, assessment.analyze(inv, today, claims=claims)))
+    progress.finish()
     print(summary(results), end="")
     filename = "assessment-{}.md".format(today.isoformat())
+    progress.start('Writing Markdown assessment report')
     target = output.place(cfg, filename, getattr(args, "out", None))
     with open(target, "w", encoding="utf-8") as stream:
         stream.write(markdown(results))
+    progress.finish()
     print("Detailed report: " + target)
     if any(not result["complete"] for _, result in results):
         sys.exit(1)
