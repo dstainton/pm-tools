@@ -29,7 +29,7 @@ class ProposalTests(unittest.TestCase):
     def test_only_supported_tags_and_fields_survive(self):
         report = self._report()
         responses = [[{"field": "product_goal", "text": "Enable integration",
-                       "refs": ["J:ABC-1"]}],
+                       "refs": ["C:44"]}],
                      [{"field": "purpose", "text": "Operate routing", "refs": ["C:44"]},
                       {"field": "exclusions", "text": "Never handle identity",
                        "refs": ["J:MADEUP"]},
@@ -45,6 +45,34 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(report["workstreams"][0]["proposals"][0]["refs"], ["C:44"])
         self.assertIn("unconfirmed", discovery.markdown(report))
         self.assertIn("C:44", discovery.summary(report))
+
+    def test_epic_only_evidence_cannot_establish_responsibility(self):
+        report = self._report()
+        report["workstreams"][0]["evidence"] = [
+            {"kind": "Jira Epics", "state": "retrieved",
+             "items": [{"key": "ABC-1", "title": "Rename API",
+                        "updated": "2026-10-02"}]}]
+        with patch("core.discovery_proposals.model.call_model_json") as call, patch(
+                "core.discovery_proposals.model.announce"), patch(
+                "core.discovery_proposals.model.tick"), patch(
+                "core.discovery_proposals.progress.finish"):
+            discovery_proposals.propose(CFG, report)
+        call.assert_not_called()
+        self.assertIn("Epic titles alone", report["workstreams"][0]["proposal_note"])
+
+    def test_epic_only_citation_is_rejected_even_with_document(self):
+        report = self._report()
+        replies = [
+            ([{"field": "product_goal", "text": "Goal", "refs": ["C:44"]}], None),
+            ([{"field": "responsibilities", "text": "Manage renaming",
+               "refs": ["J:ABC-1"]}], None)]
+        with patch("core.discovery_proposals.model.call_model_json",
+                   side_effect=replies), patch(
+                   "core.discovery_proposals.model.announce"), patch(
+                   "core.discovery_proposals.model.tick"), patch(
+                   "core.discovery_proposals.progress.finish"):
+            discovery_proposals.propose(CFG, report)
+        self.assertEqual(report["workstreams"][0]["proposals"], [])
 
     def test_missing_evidence_skips_model(self):
         with patch("core.discovery_proposals.model.call_model_json") as call, patch(
