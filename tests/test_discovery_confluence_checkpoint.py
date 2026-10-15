@@ -14,6 +14,7 @@ class CheckpointTests(unittest.TestCase):
             path = Path(folder) / "store.sqlite"
             cfg = {"confluence": {"scopes": [{"type": "space", "space_key": "DOC"}]}}
             seen = []
+            updates = []
             def fake_list(cfg, space, start=0, limit=25, ancestor_id=None):
                 seen.append(start)
                 rows = [{"id": str(n), "title": "Page " + str(n),
@@ -22,11 +23,15 @@ class CheckpointTests(unittest.TestCase):
                 return rows, start + len(rows) < 5
             with patch.object(cp.sources, "list_confluence_inventory",
                               side_effect=fake_list):
-                first = cp.crawl(cfg, path, max_rows=2)
+                first = cp.crawl(cfg, path, max_rows=2, on_progress=updates.append)
                 second = cp.crawl(cfg, path, max_rows=2)
                 third = cp.crawl(cfg, path, max_rows=2)
                 fourth = cp.crawl(cfg, path, max_rows=2)
             self.assertEqual(seen, [0, 2, 4])
+            self.assertEqual(updates[0]["name"], "Space DOC")
+            self.assertEqual(updates[0]["offset"], 0)
+            self.assertEqual(updates[-1]["offset"], 2)
+            self.assertEqual(updates[-1]["processed"], 2)
             self.assertEqual([x[0]["status"] for x in (
                 first, second, third, fourth)],
                 ["incomplete", "incomplete", "complete", "complete"])
