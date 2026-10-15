@@ -18,7 +18,6 @@ def inspect(cfg, projects):
         item = {"project": project, "status": "complete",
                 "issue_types": [], "components": [], "versions": []}
         observations["projects"].append(item)
-        escaped = sources.quote(project, safe="") if hasattr(sources, "quote") else None
         from urllib.parse import quote
         url = root + "/rest/api/3/project/" + quote(project, safe="")
         try:
