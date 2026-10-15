@@ -91,8 +91,8 @@ def propose(cfg, report):
     model.announce(cfg["model"], len(ready), "pm discover proposals")
     for entity, is_product, rows in available:
         entity["proposals"] = []
-        if not rows:
-            entity["proposal_note"] = "Insufficient retrieved evidence"
+        if not any(row.get("source_type") == "document" for row in rows):
+            entity["proposal_note"] = "Insufficient descriptive document evidence; Epic titles alone cannot establish responsibilities"
             continue
         model.tick(cfg["model"], "drafting " + entity["abbrev"])
         prompt = json.dumps({"entity": entity["name"],
