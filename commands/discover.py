@@ -265,10 +265,12 @@ def run(cfg, args):
     if report.get("alias_candidates") is not None:
         entries = report["alias_candidates"]
         print("Unconfirmed alias candidates: {}".format(len(entries)))
-        for entry in entries:
+        for entry in entries[:50]:
             print("  {} ({}): {} = {} [{} evidence references]".format(
                 entry["project"], entry["status"], entry["canonical"],
                 entry["alias"], len(entry["citations"])))
+        if len(entries) > 50:
+            print("  ... {} additional candidates retained and exported".format(len(entries) - 50))
     if report.get("jira_index") is not None:
         result = report["jira_index"]
         print("Offline evidence index: {} documents ({} changed; {} issues scanned)".format(
