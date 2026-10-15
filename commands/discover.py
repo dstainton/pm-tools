@@ -47,8 +47,12 @@ def run(cfg, args):
         projects = list(dict.fromkeys(str(p) for p in projects if p))
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
-        report["jira_refresh"] = discovery_jira_checkpoint.refresh(
-            cfg, projects, db_file)
+        progress.start("Refreshing Jira inventory")
+        try:
+            report["jira_refresh"] = discovery_jira_checkpoint.refresh(
+                cfg, projects, db_file)
+        finally:
+            progress.finish()
     if getattr(args, "jira_history", False):
         from core import discovery_jira_history
         from core import paths
