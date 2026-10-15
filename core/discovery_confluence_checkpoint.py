@@ -120,3 +120,50 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
         return results
     finally:
         db.close()
+
+def indexed_inventory(cfg, db_path):
+    """Read only checkpoint entries belonging to currently authorized scopes.
+
+    Does not perform network requests or expand a page tree to an entire space.
+    Missing/incomplete checkpoints prevent a complete-coverage claim.
+    """
+    db = sqlite3.connect(str(db_path))
+    try:
+        _init(db)
+        pages = {}
+        statuses = []
+        for configured in discovery_inventory._scopes(cfg):
+            # Title-based roots are resolved during crawl. Match the persisted
+            # configured scope by its resolved identity; do not guess identities.
+            matches = []
+            for sid, scope_json, status, offset in db.execute(
+                    "SELECT scope_id, scope_json, status, offset FROM confluence_inventory_cursor"):
+                scope = json.loads(scope_json)
+                if scope["type"] != configured["type"]:
+                    continue
+                if configured.get("space") and configured["space"] != scope.get("space"):
+                    continue
+                if configured["type"] == "page_tree":
+                    root = configured.get("root_id")
+                    title = configured.get("root_title")
+                    if root and root != scope.get("root_id"):
+                        continue
+                    if title and title != scope.get("root_title"):
+                        continue
+                matches.append((sid, status, offset))
+            if len(matches) != 1:
+                statuses.append({"scope": configured, "status": "unavailable",
+                                 "detail": "No unique checkpoint for this authorized scope"})
+                continue
+            sid, status, offset = matches[0]
+            statuses.append({"scope": configured, "status": status, "offset": offset})
+            for pid, space, title, kind in db.execute(
+                    """SELECT content_id,space,title,content_type
+                       FROM confluence_inventory_items WHERE scope_id=?""", (sid,)):
+                pages[pid] = {"id": pid, "space": space, "title": title,
+                              "type": kind}
+        return {"pages": list(pages.values()), "scopes": statuses,
+                "coverage": "complete" if statuses and all(
+                    x["status"] == "complete" for x in statuses) else "partial"}
+    finally:
+        db.close()
