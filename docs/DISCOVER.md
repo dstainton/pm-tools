@@ -27,3 +27,13 @@ pm discover --enrich --export
 ```
 
 The Markdown export shows available page titles, IDs, update timestamps, short evidence excerpts, sampled Epic identifiers and summaries, and source failures. Source content is untrusted data. Workstream-purpose clarification and human confirmation are future, separately reviewed steps. This first evidence increment does not search for arbitrary Confluence pages by name, follow attachments, or crawl SharePoint.
+
+## Phase 2B: Clarification queue
+
+Use `pm discover --questions` to print up to five targeted questions about missing product goals and unconfirmed workstream responsibilities or exclusions. Combine with `--enrich` for Jira Epic and configured Confluence references, and with `--export` for a reviewable Markdown queue:
+
+```text
+pm discover --enrich --questions --export
+```
+
+Questions are deterministic and **not answered automatically**. They do not infer responsibilities from component names or Epic titles, or update configuration. The queue is a bounded set of prompts, not an exhaustive review or model-generated profile.

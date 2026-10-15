@@ -110,6 +110,12 @@ def summary(report):
                     if item.get("items") is not None else item.get("title") or "")
                 lines.append("  {}: {} {} {}".format(
                     entity["abbrev"], item["kind"], item["state"], detail))
+    if "clarifications" in report:
+        lines.append("")
+        lines.append("Questions for review (no answers assumed):")
+        for i, item in enumerate(report["clarifications"], 1):
+            lines.append("  {}. {} ({}): {}".format(
+                i, item["entity"], item["abbrev"], item["question"]))
     lines.append("")
     lines.append("Configured membership is not proof of business ownership.")
     return "\n".join(lines) + "\n"
@@ -172,6 +178,21 @@ def markdown(report):
                           "- Review state: not established", ""])
             for evidence in ws.get("evidence") or []:
                 lines.extend(_evidence_lines(evidence))
+    if "clarifications" in report:
+        lines.extend(["## Clarification queue (unconfirmed)", "",
+                      "Questions are based on missing confirmed definitions. "
+                      "Supporting sources are examples, not verified decisions.", ""])
+        for i, item in enumerate(report["clarifications"], 1):
+            lines.extend(["### {}. {} ({})".format(
+                i, item["entity"], item["abbrev"]), "",
+                "- Question: " + item["question"],
+                "- Missing definition: " + item["field"],
+                "- Reason: " + item["basis"],
+                "- Source state: " + item["source_state"]])
+            if item.get("references"):
+                lines.append("- Example references: " + ", ".join(item["references"]))
+            lines.append("- Decision: **needs review**")
+            lines.append("")
     lines.extend(["## Scope and limitations", "",
                   "- Source references above describe where configured facts came from, "
                   "not evidence of verified product responsibilities.",
