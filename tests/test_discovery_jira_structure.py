@@ -9,7 +9,7 @@ class Response:
         pass
 
     def json(self):
-        return {"issueTypes": [
+        return {"id": "10000", "issueTypes": [
             {"id": "1", "name": "Initiative", "hierarchyLevel": 2},
             {"id": "2", "name": "Epic", "hierarchyLevel": 1},
             {"id": "3", "name": "Sub-task", "subtask": True, "hierarchyLevel": -1}],
@@ -25,9 +25,18 @@ class FieldResponse:
                  "custom": True, "schema": {"type": "string"}}]
 
 
+class MappingResponse:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"isLast": True, "total": 1, "values": [
+            {"projectIds": ["10000"], "fieldConfigurationScheme": {"id": "20000"}}]}
+
+
 class StructureTests(unittest.TestCase):
     def test_custom_hierarchy_and_components(self):
-        with patch("core.discovery_jira_structure.sources.send", side_effect=[Response(), FieldResponse()]):
+        with patch("core.discovery_jira_structure.sources.send", side_effect=[Response(), FieldResponse(), MappingResponse()]):
             result = discovery_jira_structure.inspect(
                 {"jira": {"base_url": "https://jira.example", "email": "x", "api_token": "t"}},
                 ["APS"])
@@ -38,6 +47,7 @@ class StructureTests(unittest.TestCase):
         self.assertIn("versions_coverage", result["projects"][0])
         self.assertEqual(result["projects"][0]["fields"][0]["id"], "customfield_10012")
         self.assertIn("unverified", result["projects"][0]["fields_coverage"])
+        self.assertEqual(result["projects"][0]["project_field_config"][0]["projectIds"], ["10000"])
 
     def test_denied_project_is_not_complete(self):
         with patch("core.discovery_jira_structure.sources.send",
