@@ -113,3 +113,7 @@ Run `pm discover --confluence-crawl` repeatedly to resume a read-only, scope-bou
 ### Index pages from checkpointed Confluence inventory
 
 `pm discover --index-confluence` now uses the saved `--confluence-crawl` page inventory, including pages beyond the former 100-row inventory cap. Complete coverage is claimed only when every configured checkpoint is complete and indexing of pages, bounded comments, and blogs succeeds. Run `--confluence-crawl` again for incomplete page scopes before relying on the index for comprehensive discovery. Blog and comment retrieval still have their separate 100-row caps; those are subsequent collection improvements. Page bodies are fetched read-only from the authorized page IDs and retain Confluence citations.
+
+### Terminology candidate clustering
+
+Run `pm discover --concept-clusters --project APS --export` after `--alias-candidates`. The deterministic offline clustering groups candidate definitions only when their canonical names agree after conservative case, whitespace, punctuation, and program/programme spelling normalization within a source scope. Different names sharing an acronym are **not merged**; conflicting abbreviation meanings are explicitly marked ambiguous, with all source citations retained. Confirmed and candidate states remain distinct, and this report does not claim product ownership, formal renames, or contextual equivalence from mere co-occurrence. It is the first explainable grouping stage, not model-assisted semantic clustering.
