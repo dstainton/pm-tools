@@ -161,6 +161,24 @@ def run(cfg, args):
                 cfg, [p for p in projects if p])
         finally:
             progress.finish()
+    if getattr(args, "index_jira", False) or getattr(args, "search_evidence", None):
+        from core import discovery_fts, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.isfile(db_file):
+            raise SystemExit("Jira evidence database missing. Run --jira-inventory first.")
+        if getattr(args, "index_jira", False):
+            progress.start("Indexing collected Jira evidence offline")
+            try:
+                report["jira_index"] = discovery_fts.index_jira(
+                    db_file, on_progress=lambda processed:
+                    progress.note("{:,} Jira issues indexed".format(processed)))
+            finally:
+                progress.finish()
+        if getattr(args, "search_evidence", None):
+            report["evidence_matches"] = discovery_fts.search(
+                db_file, args.search_evidence,
+                project=getattr(args, "project", None))
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -175,6 +193,16 @@ def run(cfg, args):
         from core import discovery_questions
         report = discovery_questions.attach(report)
     print(discovery.summary(report), end="")
+    if report.get("jira_index") is not None:
+        result = report["jira_index"]
+        print("Offline evidence index: {} documents ({} changed; {} issues scanned)".format(
+            result["documents_total"], result["documents_updated"], result["issues_processed"]))
+    if report.get("evidence_matches") is not None:
+        matches = report["evidence_matches"]
+        print("Evidence matches: {}".format(len(matches)))
+        for item in matches:
+            print("  {} [{}] {}: {}".format(
+                item["citation"], item["kind"], item["title"], item["excerpt"]))
     if report.get("inventory") is not None:
         from core import discovery_inventory
         print(discovery_inventory.summary(report))
@@ -227,6 +255,15 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("jira_index") is not None:
+                item = report["jira_index"]
+                stream.write("\n## Offline Jira evidence index\n\n- Documents: {}\n- Changed: {}\n".format(
+                    item["documents_total"], item["documents_updated"]))
+            if report.get("evidence_matches") is not None:
+                stream.write("\n## Offline evidence search\n\n")
+                for item in report["evidence_matches"]:
+                    stream.write("- {} [{}] {}: {}\n".format(
+                        item["citation"], item["kind"], item["title"], item["excerpt"]))
             if report.get("jira_inventory") is not None:
                 inv = report["jira_inventory"]
                 stream.write("\n## Jira project inventory\n\n- Coverage: {}\n".format(inv["coverage"]))
