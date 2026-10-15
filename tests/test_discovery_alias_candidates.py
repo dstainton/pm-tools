@@ -18,14 +18,14 @@ class AliasMiningTests(unittest.TestCase):
                     ("jira:APS-1", "APS", "Secure Data Exchange (SDX)", "", "issue"),
                     ("jira:APS-2", "APS", "Intro", "Secure Data Exchange (SDX) onboarding", "comment"),
                     ("jira:OTHER-1", "OTHER", "Secure Data Exchange (SDX)", "", "issue"),
-                    ("jira:APS-3", "APS", "Peer to peer (P2P) architecture", "", "issue"),
+                    ("jira:APS-3", "APS", "Application Programming Interface (API) architecture", "", "issue"),
                 ])
                 db.commit()
             finally:
                 db.close()
             entries = discovery_alias_candidates.candidates(path, project="APS")
             self.assertEqual(len(entries), 2)
-            self.assertEqual(entries[1]["canonical"], "Peer to peer")
+            self.assertEqual(entries[1]["canonical"], "Application Programming Interface")
             self.assertEqual(entries[1]["alignment"], "schwartz-hearst")
             self.assertEqual(entries[0]["canonical"], "Secure Data Exchange")
             self.assertEqual(len(entries[0]["citations"]), 2)
