@@ -62,7 +62,7 @@ def inspect(cfg, projects):
                 if not data.get("id"):
                     raise ValueError("Project metadata did not provide project ID")
                 response = sources.send(
-                    "GET", root + "/rest/api/3/fieldconfiguration/project",
+                    "GET", root + "/rest/api/3/fieldconfigurationscheme/project",
                     params={"projectId": str(data["id"]), "maxResults": 100},
                     auth=(jira["email"], jira["api_token"]),
                     headers={"Accept": "application/json"}, timeout=60)
@@ -75,7 +75,7 @@ def inspect(cfg, projects):
                         len(mapping["values"]) < int(mapping["total"])):
                     raise ValueError("Field configuration mapping requires pagination")
                 item["project_field_config"] = mapping["values"]
-                item["project_field_config_coverage"] = "project associations only"
+                item["project_field_config_coverage"] = "project field configuration schemes; issue-type applicability unverified"
             except Exception as exc:
                 item["project_field_config_coverage"] = "unavailable: {}: {}".format(
                     type(exc).__name__, str(exc)[:120])
