@@ -207,6 +207,12 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
+    if getattr(args, "concept_clusters", False):
+        from core import discovery_concept_clusters, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        report["concept_clusters"] = discovery_concept_clusters.clusters(
+            db_file, project=getattr(args, "project", None))
     if getattr(args, "alias_candidates", False):
         from core import discovery_alias_candidates, paths
         import os
@@ -247,13 +253,24 @@ def run(cfg, args):
                 print("  Incomplete scope: {} ({})".format(
                     scope.get("space") or scope.get("root_id"),
                     scope.get("detail") or scope["status"]))
+    if report.get("concept_clusters") is not None:
+        entries = report["concept_clusters"]
+        print("Concept candidate clusters: {}".format(len(entries)))
+        for item in entries:
+            print("  {}: {} ({} citations; aliases: {}{})".format(
+                item["project"], item["canonical"], item["evidence_count"],
+                ", ".join(item["aliases"]),
+                "; ambiguous: " + ", ".join(item["ambiguous_aliases"])
+                if item["ambiguous_aliases"] else ""))
     if report.get("alias_candidates") is not None:
         entries = report["alias_candidates"]
         print("Unconfirmed alias candidates: {}".format(len(entries)))
-        for entry in entries:
+        for entry in entries[:50]:
             print("  {} ({}): {} = {} [{} evidence references]".format(
                 entry["project"], entry["status"], entry["canonical"],
                 entry["alias"], len(entry["citations"])))
+        if len(entries) > 50:
+            print("  ... {} additional candidates retained and exported".format(len(entries) - 50))
     if report.get("jira_index") is not None:
         result = report["jira_index"]
         print("Offline evidence index: {} documents ({} changed; {} issues scanned)".format(
@@ -324,6 +341,15 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("concept_clusters") is not None:
+                stream.write("\n## Candidate terminology clusters\n\n")
+                for item in report["concept_clusters"]:
+                    stream.write("- {}: {} | variants: {} | aliases: {} | citations: {} | ambiguous: {}\n".format(
+                        item["project"], item["canonical"],
+                        ", ".join(item["variants"]),
+                        ", ".join(item["aliases"]),
+                        ", ".join(item["citations"]),
+                        ", ".join(item["ambiguous_aliases"]) or "none"))
             if report.get("alias_candidates") is not None:
                 stream.write("\n## Unconfirmed alias candidates\n\n")
                 for entry in report["alias_candidates"]:
