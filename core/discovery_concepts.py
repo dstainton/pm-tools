@@ -24,6 +24,8 @@ def _init(db):
 
 
 def register(db_path, concept_id, canonical, project=None, status="candidate"):
+    if status not in ("candidate", "confirmed"):
+        raise ValueError("Status must be candidate or confirmed")
     if not concept_id.strip() or not canonical.strip():
         raise ValueError("Concept ID and canonical term required")
     db = sqlite3.connect(str(db_path))
