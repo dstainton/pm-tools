@@ -62,6 +62,11 @@ def stage(db_path, project=None, limit=50):
         concept_id = "auto:" + hashlib.sha256(
             (str(entry["project"]) + ":" + entry["canonical"].casefold()).encode()
         ).hexdigest()[:20]
+        with sqlite3.connect(str(db_path)) as db:
+            existing = db.execute("SELECT status FROM discovery_concepts WHERE concept_id=?",
+                                  (concept_id,)).fetchone()
+        if existing and existing[0] == "confirmed":
+            continue
         discovery_concepts.register(db_path, concept_id, entry["canonical"],
                                     project=entry["project"], status="candidate")
         for citation in entry["citations"]:
