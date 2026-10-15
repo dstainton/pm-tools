@@ -7,7 +7,7 @@ from urllib.parse import quote
 from core import discovery_jira_guard, sources
 
 
-def collect(cfg, db_path, max_issues=20, page_size=100):
+def collect(cfg, db_path, max_issues=20, page_size=100, on_progress=None):
     if max_issues < 1 or page_size < 1:
         raise ValueError("max_issues and page_size must be positive")
     db = sqlite3.connect(str(db_path))
@@ -39,6 +39,8 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
         jira = cfg["jira"]
         for (key,) in issues:
             result["attempted"] += 1
+            if on_progress is not None:
+                on_progress(result["attempted"] - 1, len(issues))
             row = db.execute("SELECT next_start, scan_id FROM jira_comment_progress WHERE issue_key=?",
                              (key,)).fetchone()
             start = row[0] if row else 0
@@ -95,6 +97,11 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
                 result["incomplete"] += 1
                 result["errors"].append({"issue": key, "detail":
                                          "{}: {}".format(type(exc).__name__, str(exc)[:140])})
+        if on_progress is not None:
+            on_progress(result["attempted"], result["attempted"] + db.execute(
+                """SELECT COUNT(*) FROM jira_raw_issues i
+                LEFT JOIN jira_comment_progress p ON i.issue_key=p.issue_key
+                WHERE COALESCE(p.complete, 0)=0""").fetchone()[0])
         result["remaining"] = db.execute("""SELECT COUNT(*) FROM jira_raw_issues i
             LEFT JOIN jira_comment_progress p ON p.issue_key=i.issue_key
             WHERE COALESCE(p.complete, 0)=0""").fetchone()[0]

@@ -49,10 +49,13 @@ class JiraHistoryTests(unittest.TestCase):
                 "items": [{"field": "components", "fromString": "Legacy",
                            "toString": "Gateway"}]}],
                 "total": 2, "isLast": True})
+            updates = []
             with patch("core.discovery_jira_history.sources.send",
                        side_effect=[first, second]) as send:
-                partial = discovery_jira_history.collect(cfg, path, max_issues=1)
+                partial = discovery_jira_history.collect(cfg, path, max_issues=1,
+                                                        on_progress=lambda a, b: updates.append((a, b)))
                 done = discovery_jira_history.collect(cfg, path, max_issues=1)
+            self.assertIn((0, 1), updates)
             self.assertEqual(partial["coverage"], "partial")
             self.assertEqual(done["coverage"], "complete")
             self.assertEqual(send.call_args.kwargs["params"]["startAt"], 1)

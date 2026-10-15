@@ -28,8 +28,12 @@ def run(cfg, args):
         projects = list(dict.fromkeys(str(p) for p in projects if p))
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
-        report["jira_inventory"] = discovery_jira_checkpoint.crawl(
-            cfg, projects, db_file)
+        progress.start("Collecting Jira inventory")
+        try:
+            report["jira_inventory"] = discovery_jira_checkpoint.crawl(
+                cfg, projects, db_file)
+        finally:
+            progress.finish()
     if getattr(args, "jira_refresh", False):
         from core import discovery_jira_checkpoint
         from core import paths
@@ -43,28 +47,79 @@ def run(cfg, args):
         projects = list(dict.fromkeys(str(p) for p in projects if p))
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
-        report["jira_refresh"] = discovery_jira_checkpoint.refresh(
-            cfg, projects, db_file)
-    if getattr(args, "jira_history", False):
-        from core import discovery_jira_history
+        progress.start("Refreshing Jira inventory")
+        try:
+            report["jira_refresh"] = discovery_jira_checkpoint.refresh(
+                cfg, projects, db_file)
+        finally:
+            progress.finish()
+    for flag, name, module_name, title in (
+            ("jira_history", "jira_history", "discovery_jira_history",
+             "Collecting Jira changelogs"),
+            ("jira_comments", "jira_comments", "discovery_jira_comments",
+             "Collecting Jira comments")):
+        if not getattr(args, flag, False):
+            continue
         from core import paths
+        import importlib
         import os
+        import time
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
         if not os.path.exists(db_file):
-            report["jira_history"] = {"coverage": "unavailable", "remaining": 0,
-                                      "completed": 0, "detail": "Run --jira-inventory first"}
-        else:
-            report["jira_history"] = discovery_jira_history.collect(cfg, db_file)
-    if getattr(args, "jira_comments", False):
-        from core import discovery_jira_comments
-        from core import paths
-        import os
-        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
-        if not os.path.exists(db_file):
-            report["jira_comments"] = {"coverage": "unavailable", "remaining": 0,
-                                       "completed": 0, "detail": "Run --jira-inventory first"}
-        else:
-            report["jira_comments"] = discovery_jira_comments.collect(cfg, db_file)
+            report[name] = {"coverage": "unavailable", "remaining": 0,
+                            "completed": 0, "detail": "Run --jira-inventory first"}
+            continue
+        collector = importlib.import_module("core." + module_name)
+        limit = getattr(args, "jira_limit", None)
+        if limit is not None and limit <= 0:
+            raise SystemExit("--jira-limit must be a positive number of issues.")
+        previous_remaining = None
+        total_completed = 0
+        total_attempted = 0
+        errors = []
+        started = time.monotonic()
+        import sqlite3
+        with sqlite3.connect(db_file) as conn:
+            initial_total = conn.execute(
+                "SELECT COUNT(DISTINCT issue_key) FROM jira_raw_issues").fetchone()[0]
+        progress.start(title)
+        try:
+            while True:
+                def on_batch(current, batch_size):
+                    count = total_attempted + current
+                    estimated_total = max(initial_total, count + batch_size)
+                    elapsed = max(0.001, time.monotonic() - started)
+                    rate = count / elapsed
+                    percent = 100 * count / estimated_total if estimated_total else 100
+                    eta = (estimated_total - count) / rate if rate else 0
+                    progress.note("{:,}/{:,} processed ({:.1f}%), {:.1f}/s, ETA {:.0f}s".format(
+                        count, estimated_total, percent, rate, eta))
+                batch_size = min(20, limit - total_attempted) if limit is not None else 20
+                if batch_size <= 0:
+                    break
+                batch = collector.collect(cfg, db_file, max_issues=batch_size,
+                                          on_progress=on_batch)
+                total_attempted += batch["attempted"]
+                total_completed += batch["completed"]
+                errors.extend(batch.get("errors") or [])
+                remaining = batch["remaining"]
+                progress.note("{:,} completed, {:,} remaining".format(
+                    total_completed, remaining))
+                if remaining == 0 or batch["attempted"] == 0:
+                    break
+                # A failed item must not be retried indefinitely in this invocation.
+                if previous_remaining is not None and remaining >= previous_remaining:
+                    break
+                previous_remaining = remaining
+            report[name] = {"coverage": "complete" if remaining == 0 else "partial",
+                            "attempted": total_attempted, "completed": total_completed,
+                            "remaining": remaining, "errors": errors}
+            if errors:
+                report[name]["detail"] = "{} issues had collection errors".format(len(errors))
+            elif remaining and previous_remaining is not None and remaining >= previous_remaining:
+                report[name]["detail"] = "Collection made no further progress"
+        finally:
+            progress.finish()
     if getattr(args, "jira_reconcile", False):
         from core import discovery_jira_reconcile
         from core import paths
@@ -81,8 +136,12 @@ def run(cfg, args):
             report["jira_reconcile"] = {"coverage": "unavailable", "projects": [],
                                         "detail": "Run --jira-inventory first"}
         else:
-            report["jira_reconcile"] = discovery_jira_reconcile.reconcile(
-                cfg, projects, db_file)
+            progress.start("Reconciling Jira inventory")
+            try:
+                report["jira_reconcile"] = discovery_jira_reconcile.reconcile(
+                    cfg, projects, db_file)
+            finally:
+                progress.finish()
     if getattr(args, "jira_structure", False):
         from core import discovery_jira_structure
         selected_project = getattr(args, "project", None)
@@ -91,8 +150,12 @@ def run(cfg, args):
                     [w.get("project") or w.get("jira_project")
                      for w in (cfg.get("workstreams") or [])] +
                     [(cfg.get("jira") or {}).get("project")])
-        report["jira_structure"] = discovery_jira_structure.inspect(
-            cfg, [p for p in projects if p])
+        progress.start("Inspecting Jira project configuration")
+        try:
+            report["jira_structure"] = discovery_jira_structure.inspect(
+                cfg, [p for p in projects if p])
+        finally:
+            progress.finish()
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")

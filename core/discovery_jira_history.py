@@ -31,7 +31,7 @@ def _setup(db):
     db.commit()
 
 
-def collect(cfg, db_path, max_issues=20, page_size=100):
+def collect(cfg, db_path, max_issues=20, page_size=100, on_progress=None):
     """Hydrate accessible issues a bounded amount per invocation.
 
     Pagination and storage are transactional per page. Unavailable history is
@@ -52,6 +52,8 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
         jira = cfg["jira"]
         for (key,) in issues:
             result["attempted"] += 1
+            if on_progress is not None:
+                on_progress(result["attempted"] - 1, len(issues))
             row = db.execute(
                 "SELECT next_start FROM jira_history_progress WHERE issue_key=?",
                 (key,)).fetchone()
@@ -110,6 +112,11 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
                 result["errors"].append({"issue": key,
                                          "detail": "{}: {}".format(
                                              type(exc).__name__, str(exc)[:140])})
+        if on_progress is not None:
+            on_progress(result["attempted"], result["attempted"] + db.execute(
+                """SELECT COUNT(*) FROM jira_raw_issues i
+                LEFT JOIN jira_history_progress p ON i.issue_key=p.issue_key
+                WHERE COALESCE(p.complete, 0)=0""").fetchone()[0])
         pending = db.execute("""SELECT COUNT(*) FROM jira_raw_issues i
             LEFT JOIN jira_history_progress p ON p.issue_key=i.issue_key
             WHERE COALESCE(p.complete, 0)=0""").fetchone()[0]

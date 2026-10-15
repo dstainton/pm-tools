@@ -73,3 +73,7 @@ Run `pm discover --jira-reconcile --export` after completing the baseline. This 
 ### Jira project configuration observations
 
 Use `pm discover --jira-structure --export` to inspect available project issue types, their reported hierarchy levels (when supplied by Jira), components and versions. Missing optional metadata is reported as unavailable rather than guessed. This is descriptive, read-only Jira configuration evidence. It does not infer ownership from component names or assume Initiatives are available in every Jira tenant.
+
+### Historical collection progress
+
+`pm discover --jira-history --export` and `pm discover --jira-comments --export` automatically work through all remaining issues, resuming from the persisted SQLite checkpoints. Interactive terminals show live processed/remaining counts, an approximate processing rate and ETA. Interrupted runs can be restarted safely. Use `--jira-limit 100` to cap the number of issues attempted in one invocation (for testing or constrained runs). Collection pauses when an entire batch fails to reduce repeated requests to inaccessible sources. Output redirected to a log uses periodic non-interactive progress notices.
