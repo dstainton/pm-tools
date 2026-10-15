@@ -53,5 +53,21 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(result["projects"][0]["stored"], 1)
 
 
+    def test_checkpoint_rejects_different_jira_endpoint(self):
+        cfg = {"jira": {"base_url": "https://jira.example", "email": "x", "api_token": "y"}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "crawl.sqlite"
+            with patch("core.discovery_jira_checkpoint.sources.send",
+                       return_value=Response({"issues": [{"key": "APS-1"}],
+                                              "nextPageToken": "more"})):
+                discovery_jira_checkpoint.crawl(cfg, ["APS"], path, page_limit=1)
+            changed = {"jira": dict(cfg["jira"], base_url="https://other.example")}
+            with patch("core.discovery_jira_checkpoint.sources.send") as send:
+                result = discovery_jira_checkpoint.crawl(changed, ["APS"], path)
+            self.assertEqual(result["coverage"], "partial")
+            self.assertEqual(result["projects"][0]["status"], "unavailable")
+            send.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
