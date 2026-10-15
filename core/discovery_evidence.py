@@ -4,6 +4,7 @@ Evidence is not an accepted definition of responsibility. No model calls.
 """
 import datetime as dt
 import re
+from html.parser import HTMLParser
 
 from core import queries, sources, workstreams
 
@@ -14,6 +15,63 @@ MAX_EXCERPT = 320
 def _excerpt(text):
     text = re.sub(r"<[^>]+>", " ", str(text or ""))
     return " ".join(text.split())[:MAX_EXCERPT]
+
+
+class _Sections(HTMLParser):
+    """Extract readable Confluence blocks while ignoring macros and navigation."""
+    SKIP = {"script", "style", "nav"}
+    HEADINGS = {"h1", "h2", "h3", "h4"}
+    BLOCKS = {"p", "li", "td", "blockquote"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.blocks = []
+        self.parts = []
+        self.depth = 0
+        self.current = ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.SKIP:
+            self.depth += 1
+        if self.depth == 0 and tag in self.HEADINGS | self.BLOCKS:
+            self._flush()
+            self.current = tag
+
+    def handle_endtag(self, tag):
+        if self.depth and tag in self.SKIP:
+            self.depth -= 1
+        elif not self.depth and tag == self.current:
+            self._flush()
+
+    def handle_data(self, data):
+        if not self.depth:
+            self.parts.append(data)
+
+    def _flush(self):
+        content = " ".join(" ".join(self.parts).split())
+        if content:
+            self.blocks.append((self.current, content))
+        self.parts = []
+        self.current = ""
+
+
+def _sections(raw):
+    """Retain bounded content sections beyond the first page paragraph."""
+    parser = _Sections()
+    parser.feed(str(raw or "")[:40000])
+    parser._flush()
+    sections = []
+    heading = ""
+    for kind, value in parser.blocks:
+        if kind in parser.HEADINGS:
+            heading = value[:120]
+        elif kind in parser.BLOCKS and len(value) >= 35:
+            sections.append({"heading": heading or "Page content",
+                             "text": value[:900]})
+    # Reserve slots for later sections, not only the introductory paragraph.
+    if len(sections) > 3:
+        sections = [sections[0], sections[len(sections)//2], sections[-1]]
+    return sections
 
 
 def _page(cfg, entity):
@@ -50,7 +108,7 @@ def _page(cfg, entity):
                 "title": raw.get("title") or "Untitled",
                 "reference": str(raw.get("id") or reference),
                 "updated": ((raw.get("version") or {}).get("when") or "unknown"),
-                "excerpt": _excerpt(body)}
+                "excerpt": _excerpt(body), "sections": _sections(body)}
     except Exception as exc:
         return {"kind": "Confluence", "state": "unavailable",
                 "detail": "{}: {}".format(type(exc).__name__, exc),
