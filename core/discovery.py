@@ -110,6 +110,15 @@ def summary(report):
                     if item.get("items") is not None else item.get("title") or "")
                 lines.append("  {}: {} {} {}".format(
                     entity["abbrev"], item["kind"], item["state"], detail))
+    if report.get("proposed"):
+        lines.append("")
+        lines.append("Unconfirmed model proposals (review required):")
+        for e in report["products"] + report["workstreams"]:
+            for p in e.get("proposals") or []:
+                lines.append("  {} {}: {} [{}]".format(
+                    e["abbrev"], p["field"], p["text"], ", ".join(p["refs"])))
+            if e.get("proposal_note"):
+                lines.append("  {}: {}".format(e["abbrev"], e["proposal_note"]))
     if "clarifications" in report:
         lines.append("")
         lines.append("Questions for review (no answers assumed):")
@@ -192,6 +201,21 @@ def markdown(report):
             if item.get("references"):
                 lines.append("- Example references: " + ", ".join(item["references"]))
             lines.append("- Decision: **needs review**")
+            lines.append("")
+    if report.get("proposed"):
+        lines.extend(["## Unconfirmed profile proposals", "",
+                      report["proposal_scope"], "",
+                      "These are model interpretations of bounded source excerpts, "
+                      "not approved profile definitions.", ""])
+        for e in report["products"] + report["workstreams"]:
+            if not e.get("proposals") and not e.get("proposal_note"):
+                continue
+            lines.extend(["### {} ({})".format(e["name"], e["abbrev"]), ""])
+            for p in e.get("proposals") or []:
+                lines.extend(["- **{} (unconfirmed):** {}. Evidence: {}.".format(
+                    p["field"], p["text"], ", ".join(p["refs"]))])
+            if e.get("proposal_note"):
+                lines.append("- " + e["proposal_note"])
             lines.append("")
     lines.extend(["## Scope and limitations", "",
                   "- Source references above describe where configured facts came from, "

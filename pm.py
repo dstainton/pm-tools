@@ -704,9 +704,11 @@ def build_parser():
         help="Review configured product and workstream knowledge",
         description="Read-only product/workstream discovery from local "
                     "configuration, with explicit unknown responsibilities. "
-                    "No Jira or model requests.")
+                    "Jira and model requests are opt-in.")
     p_discover.add_argument("--project", metavar="KEY",
                             help="Limit profiles to one Jira project")
+    p_discover.add_argument("--propose", action="store_true",
+                            help="Draft unconfirmed evidence-backed profiles with the configured model; requires --enrich")
     p_discover.add_argument("--questions", action="store_true",
                             help="Show a short queue of unconfirmed product questions")
     p_discover.add_argument("--enrich", action="store_true",
