@@ -104,11 +104,14 @@ def _comments(cfg, db, parent_id, space, parent_title, cap):
     return count, updated, "Comments beyond per-parent cap"
 
 
-def index(cfg, db_path, cap=100):
+def index(cfg, db_path, cap=100, use_checkpoint=False):
     """Fetch scoped pages, index independently, and report failures explicitly."""
     report = {}
-    discovery_inventory.build(cfg, report, cap=cap)
-    inventory = report["inventory"]
+    if use_checkpoint:
+        inventory = discovery_confluence_checkpoint.indexed_inventory(cfg, db_path)
+    else:
+        discovery_inventory.build(cfg, report, cap=cap)
+        inventory = report["inventory"]
     blogs, blog_scopes = _blogs(cfg, inventory, cap)
     db = sqlite3.connect(str(db_path))
     indexed = changed = comments_indexed = comments_changed = 0
