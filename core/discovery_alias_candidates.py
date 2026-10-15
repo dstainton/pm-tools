@@ -21,11 +21,11 @@ def _align(short, long):
     j = len(long) - 1
     while i >= 0:
         char = short[i].casefold()
-        while j >= 0 and long[j].casefold() != char:
+        while j >= 0:
+            if long[j].casefold() == char and (i != 0 or j == 0 or not long[j - 1].isalnum()):
+                break
             j -= 1
         if j < 0:
-            return False
-        if i == 0 and j > 0 and long[j - 1].isalnum():
             return False
         i -= 1
         j -= 1
