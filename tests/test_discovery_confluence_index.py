@@ -32,7 +32,7 @@ class ConfluenceIndexTests(unittest.TestCase):
                         result = discovery_confluence_index.index({}, path)
             self.assertTrue(result["complete"])
             self.assertEqual(result["indexed"], 1)
-            hits = discovery_fts.search(path, "product-strategy")
+            hits = discovery_fts.search(path, '"product-strategy"')
             self.assertEqual(hits[0]["kind"], "confluence_blogpost")
             self.assertEqual(hits[0]["citation"], "confluence:88")
 
