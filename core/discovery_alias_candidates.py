@@ -81,16 +81,22 @@ def candidates(db_path, project=None, limit=50):
 def stage(db_path, project=None, limit=50):
     """Record candidate aliases without promoting either side to confirmed."""
     records = candidates(db_path, project, limit)
-    with sqlite3.connect(str(db_path)) as db:
+    db = sqlite3.connect(str(db_path))
+    try:
         discovery_concepts._init(db)
+    finally:
+        db.close()
     for entry in records:
         import hashlib
         concept_id = "auto:" + hashlib.sha256(
             (str(entry["project"]) + ":" + entry["canonical"].casefold()).encode()
         ).hexdigest()[:20]
-        with sqlite3.connect(str(db_path)) as db:
+        db = sqlite3.connect(str(db_path))
+        try:
             existing = db.execute("SELECT status FROM discovery_concepts WHERE concept_id=?",
                                   (concept_id,)).fetchone()
+        finally:
+            db.close()
         if existing and existing[0] == "confirmed":
             continue
         discovery_concepts.register(db_path, concept_id, entry["canonical"],
