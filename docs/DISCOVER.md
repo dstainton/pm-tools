@@ -61,3 +61,7 @@ Run `pm discover --jira-inventory --export` to inventory all accessible issues i
 After the initial crawl completes, use `pm discover --jira-refresh --export` to retrieve newly updated issues using a two-day overlap window. An incomplete query does not advance the refresh watermark or modify stored issues. This is a current-state refresh, **not** a changelog, comment history, or deletion/permission-loss reconciliation. The latter remain part of issue #60.
 
 The discovery output distinguishes complete, partial, unavailable, and unconfigured source coverage. A complete source snapshot does not establish product ownership or a full history of field changes. Both commands are read-only with respect to Jira and do not alter operational product/workstream configuration.
+
+### Jira historical comments
+
+After the initial inventory, run `pm discover --jira-comments --export` to collect accessible Jira issue comments into local SQLite. Each invocation processes a bounded set of issues, with transactional per-issue pagination checkpoints, preserving Jira comment IDs, authors, original structured bodies, and created/updated timestamps. Repeat until coverage is complete. A missing comment endpoint or permission error is recorded as incomplete coverage. Comment data is not treated as accepted product policy or proof of ownership. The current collector captures a baseline snapshot, not yet continuous comment edits/deletions.
