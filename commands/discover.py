@@ -71,6 +71,8 @@ def run(cfg, args):
             continue
         collector = importlib.import_module("core." + module_name)
         limit = getattr(args, "jira_limit", None)
+        if limit is not None and limit <= 0:
+            raise SystemExit("--jira-limit must be a positive number of issues.")
         previous_remaining = None
         total_completed = 0
         total_attempted = 0
