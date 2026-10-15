@@ -62,28 +62,17 @@ def candidates(db_path, project=None, limit=50):
                     raw = match.group("name")
                     words = raw.split()
                     name = _definition(abbreviation, words)
-                    aligned = name is not None
-                    if not aligned:
-                        # Explicit parenthetical pairs such as Secure Data
-                        # Exchange (SDX) need corroboration: SDE != SDX.
-                        # These are not accepted by Schwartz-Hearst alignment.
-                        candidate = words[-len(abbreviation):]
-                        name = " ".join(candidate)
-                        if len(candidate) < 2 or name[0].upper() != abbreviation[0]:
-                            continue
+                    if name is None:
+                        continue
                     key = (scope, name.casefold(), abbreviation)
                     record = found.setdefault(key, {
                         "project": scope, "canonical": name, "alias": abbreviation,
                         "relation": "abbreviation", "status": "candidate",
-                        "alignment": "schwartz-hearst" if aligned else "corroborated-parenthetical",
+                        "alignment": "schwartz-hearst",
                         "citations": []})
                     if citation not in record["citations"]:
                         record["citations"].append(citation)
-        # A non-initialism abbreviation needs corroboration from at least
-        # two distinct cited records; neither category is ever auto-approved.
-        qualified = [x for x in found.values() if x["alignment"] == "schwartz-hearst" or
-                     len(x["citations"]) >= 2]
-        return sorted(qualified, key=lambda x: (
+        return sorted(found.values(), key=lambda x: (
             -len(x["citations"]), x["project"] or "", x["canonical"]))[:limit]
     finally:
         db.close()
