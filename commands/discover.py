@@ -30,6 +30,21 @@ def run(cfg, args):
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
         report["jira_inventory"] = discovery_jira_checkpoint.crawl(
             cfg, projects, db_file)
+    if getattr(args, "jira_refresh", False):
+        from core import discovery_jira_checkpoint
+        from core import paths
+        import os
+        selected_project = getattr(args, "project", None)
+        projects = ([selected_project] if selected_project else
+                    [p.get("project") for p in (cfg.get("products") or [])] +
+                    [w.get("project") or w.get("jira_project")
+                     for w in (cfg.get("workstreams") or [])] +
+                    [(cfg.get("jira") or {}).get("project")])
+        projects = list(dict.fromkeys(str(p) for p in projects if p))
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        os.makedirs(os.path.dirname(db_file), exist_ok=True)
+        report["jira_refresh"] = discovery_jira_checkpoint.refresh(
+            cfg, projects, db_file)
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -55,6 +70,13 @@ def run(cfg, args):
                 scope["project"], scope["status"], scope["stored"],
                 scope["fetched_pages"], "; " + scope["detail"]
                 if scope.get("detail") else ""))
+    if report.get("jira_refresh") is not None:
+        refresh = report["jira_refresh"]
+        print("Jira incremental refresh: " + refresh["coverage"])
+        for project in refresh["projects"]:
+            print("  {}: {} ({} changed issues){}".format(
+                project["project"], project["status"], project["updated"],
+                "; " + project["detail"] if project.get("detail") else ""))
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
         with open(target, "w", encoding="utf-8") as stream:
@@ -70,4 +92,12 @@ def run(cfg, args):
                         scope["project"], scope["status"], scope["stored"],
                         scope["fetched_pages"],
                         "; " + scope["detail"] if scope.get("detail") else ""))
+            if report.get("jira_refresh") is not None:
+                refresh = report["jira_refresh"]
+                stream.write("\n## Jira incremental refresh\n\n- Coverage: {}\n".format(
+                    refresh["coverage"]))
+                for project in refresh["projects"]:
+                    stream.write("- {}: {} ({} changed issues){}\n".format(
+                        project["project"], project["status"], project["updated"],
+                        "; " + project["detail"] if project.get("detail") else ""))
         print("Discovery report: " + target)
