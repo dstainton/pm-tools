@@ -95,3 +95,9 @@ This PR intentionally provides **registry storage and deterministic lookup**, no
 ### Automatic alias candidates (first increment)
 
 Run `pm discover --alias-candidates --project APS --export` after `--index-jira`. The local, deterministic candidate miner uses Schwartz–Hearst-style backward character alignment to recognize explicit abbreviation definitions such as `Secure Data Exchange (SDX)` in indexed issue titles and bodies, preserves source citations and project scope, and stages results as **unconfirmed** concepts/aliases for review. It does not invoke Jira, Confluence or an LLM; it does not auto-confirm relationships or modify organization configuration. Only confirmed aliases affect `--search-concept` results. This narrowly scoped first pass does not infer renames from co-occurrence, identify `P2P` as equivalent to `APS P2P`, or establish authoritative product naming decisions.
+
+### Confluence content indexing (initial scoped increment)
+
+Run `pm discover --index-confluence` after configuring authorized Confluence scopes. The command lists pages within the configured space or page tree, retrieves those page bodies, removes storage-format markup, and indexes their text alongside the existing Jira evidence in local SQLite FTS5. Each indexed page retains its original Confluence page ID and is searchable using `--search-evidence`. Alias candidate extraction can also examine indexed Confluence page text; pass no Jira `--project` filter unless it matches the intended Confluence space key.
+
+**Coverage:** This first increment inherits the Confluence metadata inventory's 100-search-row per-scope limit. If additional pages exist, the command reports incomplete coverage and does not claim full ingestion. Failed pages are itemized. No Confluence changes are written. Resumable uncapped collection and richer page/heading attribution remain open tasks under #58.
