@@ -24,12 +24,14 @@ class AliasMiningTests(unittest.TestCase):
             finally:
                 db.close()
             entries = discovery_alias_candidates.candidates(path, project="APS")
-            self.assertEqual(len(entries), 1)
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[1]["canonical"], "Peer to peer")
+            self.assertEqual(entries[1]["alignment"], "schwartz-hearst")
             self.assertEqual(entries[0]["canonical"], "Secure Data Exchange")
             self.assertEqual(len(entries[0]["citations"]), 2)
-            self.assertFalse(entries[0]["initials_match"])
+            self.assertEqual(entries[0]["alignment"], "corroborated-parenthetical")
             staged = discovery_alias_candidates.stage(path, project="APS")
-            self.assertEqual(len(staged), 1)
+            self.assertEqual(len(staged), 2)
             db = sqlite3.connect(str(path))
             try:
                 self.assertEqual(db.execute(
