@@ -76,6 +76,32 @@ class EvidenceTests(unittest.TestCase):
                             for row in sections))
         self.assertTrue(any(row["heading"] == "Capability" for row in sections))
 
+    def test_short_confluence_paragraphs_are_retained(self):
+        result = discovery_evidence._sections(
+            "<h2>Purpose</h2><p>Secure cross-boundary exchange.</p>")
+        self.assertEqual(result[0]["heading"], "Purpose")
+        self.assertEqual(result[0]["text"], "Secure cross-boundary exchange.")
+
+    def test_confluence_view_fallback_for_empty_storage(self):
+        entity = {"confluence_page_id": "12"}
+        payload = {"id": "12", "title": "Overview",
+                   "body": {"storage": {"value": ""},
+                            "view": {"value": "<h2>Service</h2><p>Gateway routing</p>"}}}
+        with patch("core.discovery_evidence.sources.fetch_confluence_page",
+                   return_value=payload):
+            result = discovery_evidence._page(CFG, entity)
+        self.assertEqual(result["body_format"], "view")
+        self.assertEqual(result["sections"][0]["text"], "Gateway routing")
+
+    def test_retrieved_page_without_text_reports_reason(self):
+        entity = {"confluence_page_id": "12"}
+        with patch("core.discovery_evidence.sources.fetch_confluence_page",
+                   return_value={"id": "12", "title": "Folder", "body": {}}):
+            result = discovery_evidence._page(CFG, entity)
+        self.assertEqual(result["state"], "retrieved")
+        self.assertIn("no readable inline text", result["detail"])
+        self.assertEqual(result["sections"], [])
+
     def test_bounded_evidence_never_confirmed_as_responsibility(self):
         payload = {"id": "88", "title": "Product strategy",
                    "version": {"when": "2026-09-01"},
