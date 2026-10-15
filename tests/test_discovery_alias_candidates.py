@@ -27,6 +27,7 @@ class AliasMiningTests(unittest.TestCase):
             self.assertEqual(len(entries), 1)
             self.assertEqual(entries[0]["canonical"], "Secure Data Exchange")
             self.assertEqual(len(entries[0]["citations"]), 2)
+            self.assertFalse(entries[0]["initials_match"])
             staged = discovery_alias_candidates.stage(path, project="APS")
             self.assertEqual(len(staged), 1)
             db = sqlite3.connect(str(path))
