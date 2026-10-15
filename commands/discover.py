@@ -78,13 +78,16 @@ def run(cfg, args):
         total_attempted = 0
         errors = []
         started = time.monotonic()
+        import sqlite3
+        with sqlite3.connect(db_file) as conn:
+            initial_total = conn.execute(
+                "SELECT COUNT(DISTINCT issue_key) FROM jira_raw_issues").fetchone()[0]
         progress.start(title)
         try:
             while True:
                 def on_batch(current, batch_size):
                     count = total_attempted + current
-                    estimated_total = max(count + (previous_remaining or 0),
-                                          count + batch_size)
+                    estimated_total = max(initial_total, count + batch_size)
                     elapsed = max(0.001, time.monotonic() - started)
                     rate = count / elapsed
                     percent = 100 * count / estimated_total if estimated_total else 100
