@@ -68,6 +68,42 @@ def _blogs(cfg, inventory, cap):
     return results, status
 
 
+def _comments(cfg, db, parent_id, space, parent_title, cap):
+    """Index direct comments with per-parent bounded pagination and citations."""
+    start = updated = count = 0
+    while start < cap:
+        rows, more = sources.list_confluence_comments(
+            cfg, parent_id, start=start, limit=min(25, cap - start))
+        if not rows:
+            if more:
+                return count, updated, "Empty comment page with continuation"
+            return count, updated, None
+        for comment in rows:
+            cid = str(comment.get("id") or "")
+            if not cid:
+                return count, updated, "Comment response has no ID"
+            body = _text(((comment.get("body") or {}).get("storage") or {}).get("value"))
+            if not body:
+                # Empty comments still have a valid observation.
+                body = ""
+            when = (comment.get("version") or {}).get("when")
+            with db:
+                updated += int(discovery_fts._put(
+                    db, "confluence:comment:" + cid, cid, space,
+                    "confluence_comment",
+                    (comment.get("history") or {}).get("createdDate"), when,
+                    parent_title + " comment " + cid, body,
+                    "confluence:" + parent_id + "#comment-" + cid,
+                    source="confluence"))
+            count += 1
+        start += len(rows)
+        if not more:
+            return count, updated, None
+        if start >= cap:
+            return count, updated, "Comments beyond per-parent cap"
+    return count, updated, "Comments beyond per-parent cap"
+
+
 def index(cfg, db_path, cap=100):
     """Fetch scoped pages, index independently, and report failures explicitly."""
     report = {}
@@ -75,7 +111,7 @@ def index(cfg, db_path, cap=100):
     inventory = report["inventory"]
     blogs, blog_scopes = _blogs(cfg, inventory, cap)
     db = sqlite3.connect(str(db_path))
-    indexed = changed = 0
+    indexed = changed = comments_indexed = comments_changed = 0
     errors = []
     try:
         discovery_fts._init(db)
@@ -104,10 +140,21 @@ def index(cfg, db_path, cap=100):
                         (fetched.get("history") or {}).get("createdDate"), version,
                         title, body, "confluence:" + pid, source="confluence"))
                 indexed += 1
+                try:
+                    found, modified, limitation = _comments(
+                        cfg, db, pid, space, title, cap)
+                    comments_indexed += found
+                    comments_changed += modified
+                    if limitation:
+                        errors.append({"id": pid, "detail": limitation})
+                except Exception as exc:
+                    errors.append({"id": pid, "detail": "Comments unavailable: {}: {}".format(
+                        type(exc).__name__, str(exc)[:160])})
             except Exception as exc:
                 errors.append({"id": pid, "detail": "{}: {}".format(
                     type(exc).__name__, str(exc)[:160])})
         return {"indexed": indexed, "changed": changed,
+                "comments_indexed": comments_indexed, "comments_changed": comments_changed,
                 "inventory_coverage": inventory["coverage"],
                 "scopes": inventory["scopes"] + blog_scopes, "errors": errors,
                 "complete": inventory["coverage"] == "complete" and not errors
