@@ -16,9 +16,18 @@ class Response:
             "components": [{"id": "40", "name": "API Gateway"}]}
 
 
+class FieldResponse:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return [{"id": "customfield_10012", "name": "Product Area",
+                 "custom": True, "schema": {"type": "string"}}]
+
+
 class StructureTests(unittest.TestCase):
     def test_custom_hierarchy_and_components(self):
-        with patch("core.discovery_jira_structure.sources.send", return_value=Response()):
+        with patch("core.discovery_jira_structure.sources.send", side_effect=[Response(), FieldResponse()]):
             result = discovery_jira_structure.inspect(
                 {"jira": {"base_url": "https://jira.example", "email": "x", "api_token": "t"}},
                 ["APS"])
@@ -27,6 +36,8 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(result["projects"][0]["components"][0]["name"], "API Gateway")
         self.assertNotIn("owner", result["projects"][0])
         self.assertIn("versions_coverage", result["projects"][0])
+        self.assertEqual(result["projects"][0]["fields"][0]["id"], "customfield_10012")
+        self.assertIn("unverified", result["projects"][0]["fields_coverage"])
 
     def test_denied_project_is_not_complete(self):
         with patch("core.discovery_jira_structure.sources.send",
