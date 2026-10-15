@@ -53,40 +53,68 @@ def run(cfg, args):
                 cfg, projects, db_file)
         finally:
             progress.finish()
-    if getattr(args, "jira_history", False):
-        from core import discovery_jira_history
+    for flag, name, module_name, title in (
+            ("jira_history", "jira_history", "discovery_jira_history",
+             "Collecting Jira changelogs"),
+            ("jira_comments", "jira_comments", "discovery_jira_comments",
+             "Collecting Jira comments")):
+        if not getattr(args, flag, False):
+            continue
         from core import paths
+        import importlib
         import os
+        import time
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
         if not os.path.exists(db_file):
-            report["jira_history"] = {"coverage": "unavailable", "remaining": 0,
-                                      "completed": 0, "detail": "Run --jira-inventory first"}
-        else:
-            progress.start("Collecting Jira changelogs")
-            try:
-                report["jira_history"] = discovery_jira_history.collect(
-                    cfg, db_file,
-                    on_progress=lambda current, total: progress.note(
-                        "{:,}/{:,} issues in current batch".format(current, total)))
-            finally:
-                progress.finish()
-    if getattr(args, "jira_comments", False):
-        from core import discovery_jira_comments
-        from core import paths
-        import os
-        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
-        if not os.path.exists(db_file):
-            report["jira_comments"] = {"coverage": "unavailable", "remaining": 0,
-                                       "completed": 0, "detail": "Run --jira-inventory first"}
-        else:
-            progress.start("Collecting Jira comments")
-            try:
-                report["jira_comments"] = discovery_jira_comments.collect(
-                    cfg, db_file,
-                    on_progress=lambda current, total: progress.note(
-                        "{:,}/{:,} issues in current batch".format(current, total)))
-            finally:
-                progress.finish()
+            report[name] = {"coverage": "unavailable", "remaining": 0,
+                            "completed": 0, "detail": "Run --jira-inventory first"}
+            continue
+        collector = importlib.import_module("core." + module_name)
+        limit = getattr(args, "jira_limit", None)
+        previous_remaining = None
+        total_completed = 0
+        total_attempted = 0
+        errors = []
+        started = time.monotonic()
+        progress.start(title)
+        try:
+            while True:
+                def on_batch(current, batch_size):
+                    count = total_attempted + current
+                    estimated_total = max(count + (previous_remaining or 0),
+                                          count + batch_size)
+                    elapsed = max(0.001, time.monotonic() - started)
+                    rate = count / elapsed
+                    percent = 100 * count / estimated_total if estimated_total else 100
+                    eta = (estimated_total - count) / rate if rate else 0
+                    progress.note("{:,}/{:,} processed ({:.1f}%), {:.1f}/s, ETA {:.0f}s".format(
+                        count, estimated_total, percent, rate, eta))
+                batch_size = min(20, limit - total_attempted) if limit is not None else 20
+                if batch_size <= 0:
+                    break
+                batch = collector.collect(cfg, db_file, max_issues=batch_size,
+                                          on_progress=on_batch)
+                total_attempted += batch["attempted"]
+                total_completed += batch["completed"]
+                errors.extend(batch.get("errors") or [])
+                remaining = batch["remaining"]
+                progress.note("{:,} completed, {:,} remaining".format(
+                    total_completed, remaining))
+                if remaining == 0 or batch["attempted"] == 0:
+                    break
+                # A failed item must not be retried indefinitely in this invocation.
+                if previous_remaining is not None and remaining >= previous_remaining:
+                    break
+                previous_remaining = remaining
+            report[name] = {"coverage": "complete" if remaining == 0 else "partial",
+                            "attempted": total_attempted, "completed": total_completed,
+                            "remaining": remaining, "errors": errors}
+            if errors:
+                report[name]["detail"] = "{} issues had collection errors".format(len(errors))
+            elif remaining and previous_remaining is not None and remaining >= previous_remaining:
+                report[name]["detail"] = "Collection made no further progress"
+        finally:
+            progress.finish()
     if getattr(args, "jira_reconcile", False):
         from core import discovery_jira_reconcile
         from core import paths
