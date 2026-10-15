@@ -12,7 +12,7 @@ def run(cfg, args):
                                project=getattr(args, "project", None))
     if getattr(args, "inventory", False):
         from core import discovery_inventory
-        progress.start("Inventorying configured Confluence spaces")
+        progress.start("Inventorying configured Confluence scopes")
         report = discovery_inventory.build(cfg, report)
         progress.finish()
     if getattr(args, "enrich", False):
@@ -38,5 +38,5 @@ def run(cfg, args):
             stream.write(discovery.markdown(report))
             if report.get("inventory") is not None:
                 from core import discovery_inventory
-                stream.write("\\n" + discovery_inventory.markdown(report))
+                stream.write("\n" + discovery_inventory.markdown(report))
         print("Discovery report: " + target)
