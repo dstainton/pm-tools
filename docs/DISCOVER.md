@@ -53,3 +53,11 @@ The inventory does **not** fetch or rank every page body yet, and makes no infer
 ### Intended URL-first onboarding
 
 The longer-term goal is to accept Confluence space or starting-page URLs and Jira project URLs, extract identifiers and allowed scope, inventory the accessible data, propose product/workstream mappings and membership configuration, then ask for human confirmation before saving configuration. URL parsing, connection authorization, and configuration generation are **not** included in this inventory increment.
+
+## Phase 2C Jira inventory and refresh (opt-in)
+
+Run `pm discover --jira-inventory --export` to inventory all accessible issues in configured Jira projects, including closed issues and custom issue types. Jira results are persisted in a local SQLite database at the configured local state directory (`discovery_jira.sqlite`), with transactional pagination checkpoints. A large crawl may take several executions: continue running the same command until coverage is complete. No model is required.
+
+After the initial crawl completes, use `pm discover --jira-refresh --export` to retrieve newly updated issues using a two-day overlap window. An incomplete query does not advance the refresh watermark or modify stored issues. This is a current-state refresh, **not** a changelog, comment history, or deletion/permission-loss reconciliation. The latter remain part of issue #60.
+
+The discovery output distinguishes complete, partial, unavailable, and unconfigured source coverage. A complete source snapshot does not establish product ownership or a full history of field changes. Both commands are read-only with respect to Jira and do not alter operational product/workstream configuration.
