@@ -27,7 +27,8 @@ class JiraHistoryTests(unittest.TestCase):
             db = sqlite3.connect(str(path))
             try:
                 db.execute("""CREATE TABLE jira_progress (project TEXT PRIMARY KEY, source_url TEXT, complete INTEGER)""")
-            db.execute("INSERT INTO jira_progress VALUES (?, ?, ?)", ("EX" if "comments" in "tests/test_discovery_jira_history.py" else "APS", "https://jira.test" if "comments" in "tests/test_discovery_jira_history.py" else "https://jira.example", 1))
+                db.execute("INSERT INTO jira_progress VALUES (?, ?, ?)",
+                           ("APS", "https://jira.example", 1))
             db.execute("""CREATE TABLE jira_raw_issues (
                     project TEXT, issue_key TEXT, payload TEXT,
                     PRIMARY KEY(project, issue_key))""")
@@ -71,6 +72,10 @@ class JiraHistoryTests(unittest.TestCase):
             path = Path(temp) / "evidence.sqlite"
             db = sqlite3.connect(str(path))
             try:
+                db.execute("""CREATE TABLE jira_progress (
+                    project TEXT PRIMARY KEY, source_url TEXT, complete INTEGER)""")
+                db.execute("INSERT INTO jira_progress VALUES (?, ?, ?)",
+                           ("APS", "https://jira.example", 1))
                 db.execute("""CREATE TABLE jira_raw_issues (
                     project TEXT, issue_key TEXT, payload TEXT,
                     PRIMARY KEY(project, issue_key))""")
