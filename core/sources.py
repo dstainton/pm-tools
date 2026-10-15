@@ -1095,7 +1095,7 @@ def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None):
     if ancestor_id is not None:
         cql += " AND " + queries.render(
             cfg, "confluence.ancestor", page_id=str(ancestor_id))
-    cql += " ORDER BY id ASC"
+    cql += " ORDER BY title ASC"
     def fetch():
         url = "{}/rest/api/content/search".format(block["base_url"].rstrip("/"))
         response = send(
