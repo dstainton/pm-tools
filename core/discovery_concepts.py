@@ -85,3 +85,39 @@ def expansions(db_path, query, project=None):
         return [dict(row) for row in db.execute(sql, (query, query, project))]
     finally:
         db.close()
+
+def search_concept(db_path, query, project=None, limit=20):
+    """Retrieve evidence for a term and its confirmed, project-scoped aliases.
+
+    Each hit records the search expression and any confirming alias citation.
+    Candidate relationships are deliberately excluded.
+    """
+    from core import discovery_fts
+    if not str(query or "").strip():
+        raise ValueError("Search term required")
+    terms = [(query, None)]
+    for record in expansions(db_path, query, project=project):
+        terms.append((record["canonical"], record))
+        terms.append((record["alias"], record))
+    unique = {}
+    for term, link in terms:
+        term = term.strip()
+        if not term:
+            continue
+        key = term.casefold()
+        if key not in unique:
+            unique[key] = (term, link)
+    results = {}
+    for term, relation in unique.values():
+        # Quote as an FTS5 phrase; never interpret alias text as raw FTS syntax.
+        phrase = '"' + term.replace('"', '""') + '"'
+        for hit in discovery_fts.search(db_path, phrase, project=project,
+                                        limit=limit):
+            key = hit["citation"]
+            if key not in results:
+                results[key] = dict(hit, matched_term=term,
+                                    alias_evidence=(relation["citation"]
+                                                    if relation else None))
+    return sorted(results.values(), key=lambda r: (
+        0 if r["matched_term"].casefold() == query.casefold() else 1,
+        r["score"], r["citation"]))[:limit]
