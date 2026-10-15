@@ -86,7 +86,8 @@ def propose(cfg, report):
     entities = entities[:MAX_ENTITIES]
     available = [(entity, kind, _inputs(report, entity, kind))
                  for entity, kind in entities]
-    ready = [(e, k, rows) for e, k, rows in available if any(\n        row.get("source_type") == "document" for row in rows)]
+    ready = [(e, k, rows) for e, k, rows in available if any(
+        row.get("source_type") == "document" for row in rows)]
     model.announce(cfg["model"], len(ready), "pm discover proposals")
     for entity, is_product, rows in available:
         entity["proposals"] = []
@@ -101,7 +102,9 @@ def propose(cfg, report):
         if error:
             entity["proposal_note"] = "Model response unavailable or invalid: " + str(error)[:160]
             continue
-        document_refs = {x["tag"] for x in rows if x.get("source_type") == "document"}\n        entity["proposals"] = [item for item in _clean(data, {x["tag"] for x in rows}, is_product)\n                               if any(tag in document_refs for tag in item["refs"])]
+        document_refs = {x["tag"] for x in rows if x.get("source_type") == "document"}
+        entity["proposals"] = [item for item in _clean(data, {x["tag"] for x in rows}, is_product)
+                               if any(tag in document_refs for tag in item["refs"])]
         if not entity["proposals"]:
             entity["proposal_note"] = "No supported claims proposed"
     report["proposed"] = True
