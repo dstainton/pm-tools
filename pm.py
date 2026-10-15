@@ -727,6 +727,8 @@ def build_parser():
                             help="Refresh changed Jira issues after a complete local inventory")
     p_discover.add_argument("--index-jira", action="store_true",
                             help="Index stored Jira issues, comments and history offline")
+    p_discover.add_argument("--search-concept", metavar="TERM",
+                            help="Search offline evidence with confirmed scoped concept aliases")
     p_discover.add_argument("--search-evidence", metavar="QUERY",
                             help="Search the offline discovery evidence index")
     p_discover.add_argument("--jira-inventory", action="store_true",

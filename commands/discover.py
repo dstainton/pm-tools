@@ -161,7 +161,8 @@ def run(cfg, args):
                 cfg, [p for p in projects if p])
         finally:
             progress.finish()
-    if getattr(args, "index_jira", False) or getattr(args, "search_evidence", None):
+    if (getattr(args, "index_jira", False) or getattr(args, "search_evidence", None)
+            or getattr(args, "search_concept", None)):
         from core import discovery_fts, paths
         import os
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
@@ -175,6 +176,10 @@ def run(cfg, args):
                     progress.note("{:,} Jira issues indexed".format(processed)))
             finally:
                 progress.finish()
+        if getattr(args, "search_concept", None):
+            from core import discovery_concepts
+            report["concept_matches"] = discovery_concepts.search_concept(
+                db_file, args.search_concept, project=getattr(args, "project", None))
         if getattr(args, "search_evidence", None):
             report["evidence_matches"] = discovery_fts.search(
                 db_file, args.search_evidence,
@@ -197,6 +202,14 @@ def run(cfg, args):
         result = report["jira_index"]
         print("Offline evidence index: {} documents ({} changed; {} issues scanned)".format(
             result["documents_total"], result["documents_updated"], result["issues_processed"]))
+    if report.get("concept_matches") is not None:
+        matches = report["concept_matches"]
+        print("Concept evidence matches: {}".format(len(matches)))
+        for item in matches:
+            print("  {} [{} via {}{}]: {}".format(
+                item["citation"], item["kind"], item["matched_term"],
+                " (alias evidence: {})".format(item["alias_evidence"])
+                if item["alias_evidence"] else "", item["excerpt"]))
     if report.get("evidence_matches") is not None:
         matches = report["evidence_matches"]
         print("Evidence matches: {}".format(len(matches)))
