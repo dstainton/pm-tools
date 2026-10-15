@@ -45,6 +45,16 @@ def run(cfg, args):
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
         report["jira_refresh"] = discovery_jira_checkpoint.refresh(
             cfg, projects, db_file)
+    if getattr(args, "jira_history", False):
+        from core import discovery_jira_history
+        from core import paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.exists(db_file):
+            report["jira_history"] = {"coverage": "unavailable", "remaining": 0,
+                                      "completed": 0, "detail": "Run --jira-inventory first"}
+        else:
+            report["jira_history"] = discovery_jira_history.collect(cfg, db_file)
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -77,6 +87,11 @@ def run(cfg, args):
             print("  {}: {} ({} changed issues){}".format(
                 project["project"], project["status"], project["updated"],
                 "; " + project["detail"] if project.get("detail") else ""))
+    if report.get("jira_history") is not None:
+        history = report["jira_history"]
+        print("Jira changelog history: {} ({} issues completed; {} remaining){}".format(
+            history["coverage"], history["completed"], history["remaining"],
+            "; " + history["detail"] if history.get("detail") else ""))
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
         with open(target, "w", encoding="utf-8") as stream:
@@ -100,4 +115,11 @@ def run(cfg, args):
                     stream.write("- {}: {} ({} changed issues){}\n".format(
                         project["project"], project["status"], project["updated"],
                         "; " + project["detail"] if project.get("detail") else ""))
+            if report.get("jira_history") is not None:
+                history = report["jira_history"]
+                stream.write("\n## Jira historical classification changes\n\n")
+                stream.write("- Coverage: {}\n- Issues completed this run: {}\n- Issues remaining: {}\n".format(
+                    history["coverage"], history["completed"], history["remaining"]))
+                for error in history.get("errors") or []:
+                    stream.write("- {}: {}\n".format(error["issue"], error["detail"]))
         print("Discovery report: " + target)
