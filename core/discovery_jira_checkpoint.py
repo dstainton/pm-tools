@@ -196,14 +196,31 @@ def refresh(cfg, projects, db_path, overlap_days=2, page_size=100):
                         # Commit changes and watermark together. The overlap
                         # prevents skipped records near the boundary.
                         with db:
+                            history_tables = {r[0] for r in db.execute(
+                                "SELECT name FROM sqlite_master WHERE type='table'")}
                             for issue in records["issues"]:
                                 key = issue.get("key")
                                 if not key:
                                     raise ValueError("Jira refresh returned missing issue key")
+                                serialized = json.dumps(issue, ensure_ascii=False, sort_keys=True)
+                                previous = db.execute(
+                                    "SELECT payload FROM jira_raw_issues WHERE project=? AND issue_key=?",
+                                    (project, str(key))).fetchone()
                                 db.execute("""INSERT INTO jira_raw_issues(project, issue_key, payload)
                                     VALUES(?, ?, ?) ON CONFLICT(project, issue_key)
                                     DO UPDATE SET payload=excluded.payload""",
-                                    (project, str(key), json.dumps(issue, ensure_ascii=False)))
+                                    (project, str(key), serialized))
+                                # Changed source records need a new full pass over
+                                # comments/changelog. Keep old events as evidence.
+                                if previous is None or json.loads(previous[0]) != issue:
+                                    if "jira_history_progress" in history_tables:
+                                        db.execute("""UPDATE jira_history_progress
+                                            SET next_start=0, complete=0 WHERE issue_key=?""",
+                                            (str(key),))
+                                    if "jira_comment_progress" in history_tables:
+                                        db.execute("""UPDATE jira_comment_progress
+                                            SET next_start=0, complete=0 WHERE issue_key=?""",
+                                            (str(key),))
                             db.execute("UPDATE jira_progress SET refreshed_at=? WHERE project=?",
                                        (refresh_started, project))
                         status["status"] = "complete"
