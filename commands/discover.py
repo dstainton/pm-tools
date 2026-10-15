@@ -83,6 +83,16 @@ def run(cfg, args):
         else:
             report["jira_reconcile"] = discovery_jira_reconcile.reconcile(
                 cfg, projects, db_file)
+    if getattr(args, "jira_structure", False):
+        from core import discovery_jira_structure
+        selected_project = getattr(args, "project", None)
+        projects = ([selected_project] if selected_project else
+                    [p.get("project") for p in (cfg.get("products") or [])] +
+                    [w.get("project") or w.get("jira_project")
+                     for w in (cfg.get("workstreams") or [])] +
+                    [(cfg.get("jira") or {}).get("project")])
+        report["jira_structure"] = discovery_jira_structure.inspect(
+            cfg, [p for p in projects if p])
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -132,6 +142,14 @@ def run(cfg, args):
             print("  {}: {} ({} absent candidates){}".format(
                 scope["project"], scope["status"], scope["missing_candidates"],
                 "; " + scope["detail"] if scope.get("detail") else ""))
+    if report.get("jira_structure") is not None:
+        structure = report["jira_structure"]
+        print("Jira project structure: " + structure["coverage"])
+        for item in structure["projects"]:
+            print("  {}: {} ({} issue types, {} components){}".format(
+                item["project"], item["status"], len(item["issue_types"]),
+                len(item["components"]),
+                "; " + item["detail"] if item.get("detail") else ""))
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
         with open(target, "w", encoding="utf-8") as stream:
@@ -177,4 +195,16 @@ def run(cfg, args):
                     stream.write("- {}: {} ({} absent candidates){}\n".format(
                         scope["project"], scope["status"], scope["missing_candidates"],
                         "; " + scope["detail"] if scope.get("detail") else ""))
+            if report.get("jira_structure") is not None:
+                structure = report["jira_structure"]
+                stream.write("\n## Jira project structure\n\n- Coverage: {}\n".format(
+                    structure["coverage"]))
+                for item in structure["projects"]:
+                    stream.write("- {}: {}\n".format(item["project"], item["status"]))
+                    for issue_type in item["issue_types"]:
+                        stream.write("  - {} (ID {}, hierarchy level {})\n".format(
+                            issue_type["name"], issue_type["id"],
+                            issue_type["hierarchy_level"]))
+                    if item.get("detail"):
+                        stream.write("  - Note: {}\n".format(item["detail"]))
         print("Discovery report: " + target)
