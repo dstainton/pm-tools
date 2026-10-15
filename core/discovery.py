@@ -143,6 +143,10 @@ def _evidence_lines(evidence):
         lines.append("  - Note: " + evidence["detail"])
     if evidence.get("excerpt"):
         lines.append("  - Excerpt (unverified): " + evidence["excerpt"])
+    for index, section in enumerate(evidence.get("sections") or [], 1):
+        lines.append("  - Section {} ({}): {}".format(
+            index, section.get("heading") or "Page content",
+            section.get("text") or ""))
     for item in evidence.get("items") or []:
         lines.append("  - {}: {} (updated {})".format(
             item["key"], item["title"], item["updated"]))
