@@ -719,6 +719,8 @@ def build_parser():
                             help="Compare stored Jira issue IDs with a full fresh project search")
     p_discover.add_argument("--jira-comments", action="store_true",
                             help="Resume Jira comment evidence collection")
+    p_discover.add_argument("--jira-limit", type=int, default=None,
+                            help="Maximum historical Jira issues to attempt; default: all")
     p_discover.add_argument("--jira-history", action="store_true",
                             help="Resume Jira issue classification changelog collection")
     p_discover.add_argument("--jira-refresh", action="store_true",
