@@ -77,3 +77,11 @@ Use `pm discover --jira-structure --export` to inspect available project issue t
 ### Historical collection progress
 
 `pm discover --jira-history --export` and `pm discover --jira-comments --export` automatically work through all remaining issues, resuming from the persisted SQLite checkpoints. Interactive terminals show live processed/remaining counts, an approximate processing rate and ETA. Interrupted runs can be restarted safely. Use `--jira-limit 100` to cap the number of issues attempted in one invocation (for testing or constrained runs). Collection pauses when an entire batch fails to reduce repeated requests to inaccessible sources. Output redirected to a log uses periodic non-interactive progress notices.
+
+### Offline evidence search (Jira)
+
+Once Jira inventory, history and comment collection have finished, run `pm discover --index-jira`. This reads only the existing local SQLite database and builds an FTS5 index of Jira summaries, descriptions, directly assigned components and labels, comments, and recorded field changes. It makes **no Jira requests** and does not require a model. Re-running updates changed documents and leaves unchanged entries alone.
+
+Search with `pm discover --search-evidence '"APS P2P"' --export` or `pm discover --search-evidence 'gateway'`. Use `--project APS` to filter by project. Each match includes a stable Jira issue/comment/changelog identifier and distinguishes issue content, comments and historical change observations. Search results are evidence, not confirmed ownership or taxonomy. SQLite FTS5 supports quoted phrases, token prefixes and Boolean searches; malformed FTS expressions produce an error rather than being silently reinterpreted.
+
+This initial index covers collected **Jira** evidence only. Confluence page content, historical source reconciliation, richer field filters, document heading extraction and temporal taxonomy remain separate increments under #58.
