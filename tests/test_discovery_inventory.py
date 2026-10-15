@@ -100,5 +100,38 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(scopes[0]["type"], "page_tree")
 
 
+    def test_overlapping_trees_have_one_global_page_with_two_provenances(self):
+        cfg = {"confluence": {"base_url": "https://wiki.example", "space": "POSM",
+                              "scopes": [{"type": "page_tree", "page_id": "42"},
+                                         {"type": "page_tree", "page_id": "43"}]}}
+        roots = {
+            "42": {"id": "42", "title": "APS", "space": {"key": "POSM"},
+                   "ancestors": []},
+            "43": {"id": "43", "title": "Gateway", "space": {"key": "POSM"},
+                   "ancestors": [{"id": "42"}]},
+        }
+        child = {"id": "44", "title": "Gateway API",
+                 "ancestors": [{"id": "42"}, {"id": "43"}]}
+        def search(_, __, start=0, limit=25, ancestor_id=None):
+            return ([roots["43"], child] if ancestor_id == "42" else [child], False)
+        with patch("core.discovery_inventory.sources.fetch_confluence_page",
+                   side_effect=lambda cfg, page_id: roots[page_id]), patch(
+                       "core.discovery_inventory.sources.list_confluence_inventory",
+                       side_effect=search):
+            report = discovery_inventory.build(cfg, {})
+        pages = report["inventory"]["pages"]
+        self.assertEqual([p["id"] for p in pages], ["42", "43", "44"])
+        self.assertEqual(pages[2]["scope_indices"], [0, 1])
+        self.assertEqual(report["inventory"]["coverage"], "complete")
+
+    def test_bad_explicit_scope_never_widens_to_default_space(self):
+        cfg = {"confluence": {"base_url": "https://wiki.example", "space": "POSM",
+                              "scopes": [{"type": "page_tree"}]}}
+        with patch("core.discovery_inventory.sources.list_confluence_inventory") as fetch:
+            report = discovery_inventory.build(cfg, {})
+        self.assertEqual(report["inventory"]["coverage"], "unavailable")
+        fetch.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
