@@ -27,7 +27,11 @@ class CheckpointTests(unittest.TestCase):
                               "nextPageToken": "next"})
             final = Response({"issues": [{"key": "APS-2", "fields": {}}]})
             with patch("core.discovery_jira_checkpoint.sources.send", return_value=first):
-                partial = discovery_jira_checkpoint.crawl(cfg, ["APS"], path, page_limit=1)
+                updates = []
+                partial = discovery_jira_checkpoint.crawl(cfg, ["APS"], path, page_limit=1,
+                    on_progress=lambda project, stored, pages, complete:
+                    updates.append((project, stored, pages, complete)))
+            self.assertEqual(updates, [("APS", 1, 1, False)])
             self.assertEqual(partial["coverage"], "partial")
             with patch("core.discovery_jira_checkpoint.sources.send", return_value=final) as send:
                 complete = discovery_jira_checkpoint.crawl(cfg, ["APS"], path)
