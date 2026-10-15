@@ -39,16 +39,23 @@ def candidates(db_path, project=None, limit=50):
                     # abbreviation length; avoids absorbing sentence context.
                     words = words[-len(abbreviation):]
                     name = " ".join(words)
-                    if len(words) < 2 or _initials(name) != abbreviation:
+                    if len(words) < 2:
+                        continue
+                    exact_initials = _initials(name) == abbreviation
+                    if not exact_initials and name[0].upper() != abbreviation[0]:
                         continue
                     key = (scope, name.casefold(), abbreviation)
                     record = found.setdefault(key, {
                         "project": scope, "canonical": name, "alias": abbreviation,
                         "relation": "abbreviation", "status": "candidate",
-                        "citations": []})
+                        "initials_match": exact_initials, "citations": []})
                     if citation not in record["citations"]:
                         record["citations"].append(citation)
-        return sorted(found.values(), key=lambda x: (
+        # A non-initialism abbreviation needs corroboration from at least
+        # two distinct cited records; neither category is ever auto-approved.
+        qualified = [x for x in found.values() if x["initials_match"] or
+                     len(x["citations"]) >= 2]
+        return sorted(qualified, key=lambda x: (
             -len(x["citations"]), x["project"] or "", x["canonical"]))[:limit]
     finally:
         db.close()
