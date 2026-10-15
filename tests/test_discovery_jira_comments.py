@@ -56,6 +56,34 @@ class CommentTests(unittest.TestCase):
         finally:
             db.close()
 
+
+    def test_complete_rescan_flags_missing_without_deleting(self):
+        with patch("core.discovery_jira_comments.sources.send",
+                   return_value=Reply({"total": 2, "comments": [
+                       {"id": "1", "body": "first"},
+                       {"id": "2", "body": "second"}]})):
+            discovery_jira_comments.collect(self.cfg, self.path)
+        db = sqlite3.connect(str(self.path))
+        try:
+            db.execute("UPDATE jira_comment_progress SET next_start=0, complete=0")
+            db.commit()
+        finally:
+            db.close()
+        with patch("core.discovery_jira_comments.sources.send",
+                   return_value=Reply({"total": 1, "comments": [
+                       {"id": "2", "body": "edited"}]})):
+            report = discovery_jira_comments.collect(self.cfg, self.path)
+        self.assertEqual(report["coverage"], "complete")
+        db = sqlite3.connect(str(self.path))
+        try:
+            rows = db.execute(
+                "SELECT comment_id, absent_candidate FROM jira_comments ORDER BY comment_id").fetchall()
+            self.assertEqual(rows, [("1", 1), ("2", 0)])
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM jira_comments").fetchone()[0], 2)
+        finally:
+            db.close()
+
+
     def test_permission_failure_keeps_pending(self):
         with patch("core.discovery_jira_comments.sources.send",
                    side_effect=PermissionError("forbidden")):
