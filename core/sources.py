@@ -1081,7 +1081,7 @@ def _confluence_block(cfg):
     return cfg or {}
 
 
-def list_confluence_inventory(cfg, space, start=0, limit=25):
+def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None):
     """One cached page of Confluence metadata plus server continuation flag.
 
     No lookback window: discovery needs historical as well as current pages.
@@ -1092,6 +1092,10 @@ def list_confluence_inventory(cfg, space, start=0, limit=25):
     cql = queries.render(cfg, "confluence.space", space=space)
     cql += " AND " + queries.render(cfg, "confluence.types",
                                     types=["page"])
+    if ancestor_id is not None:
+        cql += " AND " + queries.render(
+            cfg, "confluence.ancestor", page_id=str(ancestor_id))
+    cql += " ORDER BY title ASC"
     def fetch():
         url = "{}/rest/api/content/search".format(block["base_url"].rstrip("/"))
         response = send(
@@ -1106,7 +1110,7 @@ def list_confluence_inventory(cfg, space, start=0, limit=25):
                 "has_more": bool((payload.get("_links") or {}).get("next"))}
     from core import pages
     data = pages.cache_fetch(cfg, "confluence-inventory",
-                             (space, start, limit), fetch)
+                             (space, str(ancestor_id) if ancestor_id is not None else None, cql, start, limit), fetch)
     return data["results"], data["has_more"]
 
 
