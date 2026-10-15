@@ -65,6 +65,24 @@ def run(cfg, args):
                                        "completed": 0, "detail": "Run --jira-inventory first"}
         else:
             report["jira_comments"] = discovery_jira_comments.collect(cfg, db_file)
+    if getattr(args, "jira_reconcile", False):
+        from core import discovery_jira_reconcile
+        from core import paths
+        import os
+        project = getattr(args, "project", None)
+        projects = ([project] if project else
+                    [p.get("project") for p in (cfg.get("products") or [])] +
+                    [w.get("project") or w.get("jira_project")
+                     for w in (cfg.get("workstreams") or [])] +
+                    [(cfg.get("jira") or {}).get("project")])
+        projects = list(dict.fromkeys(str(p) for p in projects if p))
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.exists(db_file):
+            report["jira_reconcile"] = {"coverage": "unavailable", "projects": [],
+                                        "detail": "Run --jira-inventory first"}
+        else:
+            report["jira_reconcile"] = discovery_jira_reconcile.reconcile(
+                cfg, projects, db_file)
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -107,6 +125,13 @@ def run(cfg, args):
         print("Jira comments: {} ({} issues completed; {} remaining){}".format(
             comments["coverage"], comments["completed"], comments["remaining"],
             "; " + comments["detail"] if comments.get("detail") else ""))
+    if report.get("jira_reconcile") is not None:
+        inv = report["jira_reconcile"]
+        print("Jira reconciliation: " + inv["coverage"])
+        for scope in inv["projects"]:
+            print("  {}: {} ({} absent candidates){}".format(
+                scope["project"], scope["status"], scope["missing_candidates"],
+                "; " + scope["detail"] if scope.get("detail") else ""))
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
         with open(target, "w", encoding="utf-8") as stream:
@@ -144,4 +169,12 @@ def run(cfg, args):
                     comments["coverage"], comments["completed"], comments["remaining"]))
                 for error in comments.get("errors") or []:
                     stream.write("- {}: {}\n".format(error["issue"], error["detail"]))
+            if report.get("jira_reconcile") is not None:
+                reconcile = report["jira_reconcile"]
+                stream.write("\n## Jira inventory reconciliation\n\n- Coverage: {}\n".format(
+                    reconcile["coverage"]))
+                for scope in reconcile["projects"]:
+                    stream.write("- {}: {} ({} absent candidates){}\n".format(
+                        scope["project"], scope["status"], scope["missing_candidates"],
+                        "; " + scope["detail"] if scope.get("detail") else ""))
         print("Discovery report: " + target)
