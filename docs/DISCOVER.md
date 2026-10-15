@@ -69,3 +69,7 @@ After the initial inventory, run `pm discover --jira-comments --export` to colle
 ### Jira inventory reconciliation
 
 Run `pm discover --jira-reconcile --export` after completing the baseline. This performs a complete fresh search of each configured Jira project and compares issue IDs against the local inventory. An issue no longer returned is flagged as **absent from the accessible project search**, not deleted. It may have been moved, made inaccessible, or removed. The command never deletes locally retained evidence, never uses partial results to establish absence, and does not assert that permissions are unchanged. It is a bounded-by-server-pagination read-only reconciliation rather than a substitute for historical changelog evidence.
+
+### Jira project configuration observations
+
+Use `pm discover --jira-structure --export` to inspect available project issue types, their reported hierarchy levels (when supplied by Jira), components and versions. Missing optional metadata is reported as unavailable rather than guessed. This is descriptive, read-only Jira configuration evidence. It does not infer ownership from component names or assume Initiatives are available in every Jira tenant.
