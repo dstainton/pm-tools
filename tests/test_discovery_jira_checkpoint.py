@@ -93,11 +93,14 @@ class CheckpointTests(unittest.TestCase):
                            "complete": False, "reason": "timeout"}):
                 partial = discovery_jira_checkpoint.refresh(cfg, ["APS"], path)
             self.assertEqual(partial["coverage"], "partial")
-            with sqlite3.connect(str(path)) as db:
+            db = sqlite3.connect(str(path))
+            try:
                 self.assertEqual(db.execute(
                     "SELECT COUNT(*) FROM jira_raw_issues").fetchone()[0], 1)
                 self.assertIsNone(db.execute(
                     "SELECT refreshed_at FROM jira_progress").fetchone()[0])
+            finally:
+                db.close()
             with patch("core.discovery_jira_checkpoint.sources.search_issues",
                        return_value={"issues": [{"key": "APS-2",
                            "fields": {"updated": "2026-10-02T00:00:00Z"}}],
@@ -105,11 +108,14 @@ class CheckpointTests(unittest.TestCase):
                 updated = discovery_jira_checkpoint.refresh(cfg, ["APS"], path)
             self.assertEqual(updated["coverage"], "complete")
             self.assertIn("updated >=", search.call_args.args[1])
-            with sqlite3.connect(str(path)) as db:
+            db = sqlite3.connect(str(path))
+            try:
                 self.assertEqual(db.execute(
                     "SELECT COUNT(*) FROM jira_raw_issues").fetchone()[0], 2)
                 self.assertIsNotNone(db.execute(
                     "SELECT refreshed_at FROM jira_progress").fetchone()[0])
+            finally:
+                db.close()
 
 
 if __name__ == "__main__":
