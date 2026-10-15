@@ -1219,6 +1219,29 @@ def fetch_confluence_page(cfg, page_id):
     return page_core.cache_fetch(cfg, "confluence-page", (str(page_id),), fetch)
 
 
+def list_confluence_comments(cfg, content_id, start=0, limit=25):
+    """Read direct comments attached to one already-authorized content ID.
+
+    The caller is responsible for establishing the parent page/blog scope.
+    The continuation flag is retained so incomplete collection is visible.
+    """
+    block = _confluence_block(cfg)
+    if not block.get("base_url"):
+        raise ValueError("Confluence connection missing")
+    url = "{}/rest/api/content/{}/child/comment".format(
+        block["base_url"].rstrip("/"), content_id)
+    response = send(
+        "GET", url, params={
+            "start": start, "limit": limit,
+            "expand": "body.storage,version,history,ancestors"},
+        auth=(block["email"], block["api_token"]),
+        headers={"Accept": "application/json"}, timeout=60)
+    response.raise_for_status()
+    payload = response.json()
+    return payload.get("results") or [], bool(
+        (payload.get("_links") or {}).get("next"))
+
+
 def fetch_remote_links(cfg, key):
     """Jira remote links for one issue."""
     jira = cfg.get("jira") if isinstance(cfg, dict) and cfg.get("jira") else cfg
