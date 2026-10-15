@@ -118,5 +118,40 @@ class CheckpointTests(unittest.TestCase):
                 db.close()
 
 
+    def test_changed_issue_reopens_history_and_comment_checkpoints(self):
+        import sqlite3
+        cfg = {"jira": {"base_url": "https://jira.example",
+                        "email": "x", "api_token": "y"}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "crawl.sqlite"
+            original = {"key": "APS-1", "fields": {"updated": "2026-10-01T00:00:00Z"}}
+            with patch("core.discovery_jira_checkpoint.sources.send",
+                       return_value=Response({"issues": [original]})):
+                discovery_jira_checkpoint.crawl(cfg, ["APS"], path)
+            db = sqlite3.connect(str(path))
+            try:
+                db.execute("""CREATE TABLE jira_history_progress
+                    (issue_key TEXT PRIMARY KEY, next_start INTEGER, complete INTEGER)""")
+                db.execute("""CREATE TABLE jira_comment_progress
+                    (issue_key TEXT PRIMARY KEY, next_start INTEGER, complete INTEGER)""")
+                db.execute("INSERT INTO jira_history_progress VALUES ('APS-1', 10, 1)")
+                db.execute("INSERT INTO jira_comment_progress VALUES ('APS-1', 5, 1)")
+                db.commit()
+            finally:
+                db.close()
+            changed = {"key": "APS-1", "fields": {"updated": "2026-10-02T00:00:00Z"}}
+            with patch("core.discovery_jira_checkpoint.sources.search_issues",
+                       return_value={"issues": [changed], "complete": True}):
+                discovery_jira_checkpoint.refresh(cfg, ["APS"], path)
+            db = sqlite3.connect(str(path))
+            try:
+                self.assertEqual(db.execute(
+                    "SELECT next_start, complete FROM jira_history_progress").fetchone(), (0, 0))
+                self.assertEqual(db.execute(
+                    "SELECT next_start, complete FROM jira_comment_progress").fetchone(), (0, 0))
+            finally:
+                db.close()
+
+
 if __name__ == "__main__":
     unittest.main()
