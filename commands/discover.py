@@ -188,8 +188,16 @@ def run(cfg, args):
         from core import discovery_confluence_checkpoint, paths
         import os
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
-        report["confluence_crawl"] = discovery_confluence_checkpoint.crawl(
-            cfg, db_file)
+        progress.start("Crawling Confluence scopes")
+        def show_crawl(item):
+            progress.note("[{}/{}] {}: {} ({} this run, offset {})".format(
+                item["index"], item["total"], item["name"], item["status"],
+                item["processed"], item["offset"]))
+        try:
+            report["confluence_crawl"] = discovery_confluence_checkpoint.crawl(
+                cfg, db_file, on_progress=show_crawl)
+        finally:
+            progress.finish()
     if getattr(args, "index_confluence", False):
         from core import discovery_confluence_index, paths
         import os

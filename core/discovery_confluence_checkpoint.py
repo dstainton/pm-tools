@@ -27,16 +27,23 @@ def _identity(scope):
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
-def crawl(cfg, db_path, max_rows=100):
+def crawl(cfg, db_path, max_rows=100, on_progress=None):
     """Collect at most max_rows search results per scope, resuming next time."""
     if max_rows < 1:
         raise ValueError("max_rows must be positive")
     scopes = discovery_inventory._scopes(cfg)
     db = sqlite3.connect(str(db_path))
     results = []
+    def emit(scope, status, offset, processed, index, total):
+        if on_progress is not None:
+            name = ("Space " + str(scope.get("space") or "unknown")
+                    if scope.get("type") == "space"
+                    else "Page tree " + str(scope.get("root_title") or scope.get("root_id") or "unknown"))
+            on_progress({"name": name, "status": status, "offset": offset,
+                         "processed": processed, "index": index, "total": total})
     try:
         _init(db)
-        for configured in scopes:
+        for scope_index, configured in enumerate(scopes, 1):
             # Resolve title-based roots before generating the checkpoint ID.
             entry = {"scope": configured, "status": "unavailable", "processed": 0}
             results.append(entry)
@@ -50,7 +57,9 @@ def crawl(cfg, db_path, max_rows=100):
                 offset, status = record if record else (0, "pending")
                 if status == "complete":
                     entry.update(status="complete", offset=offset, scope=scope)
+                    emit(scope, "complete", offset, 0, scope_index, len(scopes))
                     continue
+                emit(scope, "collecting", offset, 0, scope_index, len(scopes))
                 if root:
                     with db:
                         db.execute("""INSERT OR IGNORE INTO confluence_inventory_items
@@ -95,6 +104,8 @@ def crawl(cfg, db_path, max_rows=100):
                           offset=excluded.offset,status=excluded.status,error=NULL""",
                           (sid, json.dumps(scope, sort_keys=True), offset, status))
                     entry["processed"] += len(rows)
+                    emit(scope, "complete" if not more else "collecting",
+                         offset, entry["processed"], scope_index, len(scopes))
                     if not more:
                         break
                     if not rows:
@@ -103,6 +114,9 @@ def crawl(cfg, db_path, max_rows=100):
             except Exception as exc:
                 entry.update(status="incomplete", error="{}: {}".format(
                     type(exc).__name__, str(exc)[:160]))
+                emit(entry.get("scope", configured), "incomplete",
+                     entry.get("offset", 0), entry["processed"],
+                     scope_index, len(scopes))
         return results
     finally:
         db.close()
