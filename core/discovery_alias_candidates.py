@@ -81,6 +81,8 @@ def candidates(db_path, project=None, limit=50):
 def stage(db_path, project=None, limit=50):
     """Record candidate aliases without promoting either side to confirmed."""
     records = candidates(db_path, project, limit)
+    with sqlite3.connect(str(db_path)) as db:
+        discovery_concepts._init(db)
     for entry in records:
         import hashlib
         concept_id = "auto:" + hashlib.sha256(
