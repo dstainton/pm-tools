@@ -41,10 +41,10 @@ def _definition(short, words):
     return None
 
 
-def candidates(db_path, project=None, limit=50):
+def candidates(db_path, project=None, limit=None):
     """Mine explicit 'Expanded Name (ABC)' evidence without writes."""
-    if limit < 1 or limit > 500:
-        raise ValueError("limit must be 1..500")
+    if limit is not None and limit < 1:
+        raise ValueError("limit must be positive")
     db = sqlite3.connect(str(db_path))
     try:
         sql = """SELECT citation, project, title, body FROM discovery_fts_documents
@@ -73,12 +73,13 @@ def candidates(db_path, project=None, limit=50):
                     if citation not in record["citations"]:
                         record["citations"].append(citation)
         return sorted(found.values(), key=lambda x: (
-            -len(x["citations"]), x["project"] or "", x["canonical"]))[:limit]
+            -len(x["citations"]), x["project"] or "", x["canonical"]))[:limit] if limit else sorted(found.values(), key=lambda x: (
+            -len(x["citations"]), x["project"] or "", x["canonical"]))
     finally:
         db.close()
 
 
-def stage(db_path, project=None, limit=50):
+def stage(db_path, project=None, limit=None):
     """Record candidate aliases without promoting either side to confirmed."""
     records = candidates(db_path, project, limit)
     db = sqlite3.connect(str(db_path))
