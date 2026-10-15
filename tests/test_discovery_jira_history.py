@@ -29,7 +29,7 @@ class JiraHistoryTests(unittest.TestCase):
                 db.execute("""CREATE TABLE jira_progress (project TEXT PRIMARY KEY, source_url TEXT, complete INTEGER)""")
                 db.execute("INSERT INTO jira_progress VALUES (?, ?, ?)",
                            ("APS", "https://jira.example", 1))
-            db.execute("""CREATE TABLE jira_raw_issues (
+                db.execute("""CREATE TABLE jira_raw_issues (
                     project TEXT, issue_key TEXT, payload TEXT,
                     PRIMARY KEY(project, issue_key))""")
                 db.execute("INSERT INTO jira_raw_issues VALUES (?, ?, ?)",
