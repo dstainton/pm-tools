@@ -725,6 +725,8 @@ def build_parser():
                             help="Resume Jira issue classification changelog collection")
     p_discover.add_argument("--jira-refresh", action="store_true",
                             help="Refresh changed Jira issues after a complete local inventory")
+    p_discover.add_argument("--confluence-crawl", action="store_true",
+                            help="Resume comprehensive scoped Confluence page inventory")
     p_discover.add_argument("--index-confluence", action="store_true",
                             help="Index authorized Confluence page bodies with explicit coverage")
     p_discover.add_argument("--index-jira", action="store_true",
