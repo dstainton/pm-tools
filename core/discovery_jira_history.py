@@ -6,7 +6,7 @@ renames, ownership changes, or current product definitions.
 import sqlite3
 from urllib.parse import quote
 
-from core import sources
+from core import discovery_jira_guard, sources
 
 INTEREST = {"labels", "component", "components", "parent", "status",
             "issuetype", "fix version", "fixversion", "epic link"}
@@ -42,6 +42,7 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
     db = sqlite3.connect(str(db_path))
     try:
         _setup(db)
+        discovery_jira_guard.check(db, cfg)
         issues = db.execute("""SELECT DISTINCT i.issue_key FROM jira_raw_issues AS i
             LEFT JOIN jira_history_progress AS p ON i.issue_key=p.issue_key
             WHERE COALESCE(p.complete, 0)=0 ORDER BY i.issue_key LIMIT ?""",
