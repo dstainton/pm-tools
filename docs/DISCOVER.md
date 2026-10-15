@@ -37,3 +37,9 @@ pm discover --enrich --questions --export
 ```
 
 Questions are deterministic and **not answered automatically**. They do not infer responsibilities from component names or Epic titles, or update configuration. The queue is a bounded set of prompts, not an exhaustive review or model-generated profile.
+
+## Phase 2B: Evidence-grounded candidate profiles
+
+Run `pm discover --enrich --propose --export` to explicitly invoke the configured model on bounded source evidence. This can take several model calls. It drafts **unconfirmed** candidate product goals and workstream purpose, responsibilities, or exclusions.
+
+The model sees no more than five retrieved evidence items per entity, drawn from configured Confluence page excerpts and sampled Jira Epic titles. A product may use evidence from its selected workstreams. No more than five entities are considered in one run. The model must cite input evidence tags in every proposal, and unknown tags are rejected. **A matching tag is not a guarantee the sentence is supported**: review both the proposal and the cited excerpt before accepting any claim. No document crawling, profile confirmation, Jira writes, or configuration changes occur. `--propose` requires `--enrich`; neither is the default.
