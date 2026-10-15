@@ -731,6 +731,8 @@ def build_parser():
                             help="Index authorized Confluence page bodies with explicit coverage")
     p_discover.add_argument("--index-jira", action="store_true",
                             help="Index stored Jira issues, comments and history offline")
+    p_discover.add_argument("--concept-clusters", action="store_true",
+                            help="Group candidate aliases and report ambiguous meanings")
     p_discover.add_argument("--alias-candidates", action="store_true",
                             help="Propose unconfirmed acronym aliases from local indexed evidence")
     p_discover.add_argument("--search-concept", metavar="TERM",
