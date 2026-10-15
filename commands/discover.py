@@ -55,6 +55,16 @@ def run(cfg, args):
                                       "completed": 0, "detail": "Run --jira-inventory first"}
         else:
             report["jira_history"] = discovery_jira_history.collect(cfg, db_file)
+    if getattr(args, "jira_comments", False):
+        from core import discovery_jira_comments
+        from core import paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.exists(db_file):
+            report["jira_comments"] = {"coverage": "unavailable", "remaining": 0,
+                                       "completed": 0, "detail": "Run --jira-inventory first"}
+        else:
+            report["jira_comments"] = discovery_jira_comments.collect(cfg, db_file)
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -92,6 +102,11 @@ def run(cfg, args):
         print("Jira changelog history: {} ({} issues completed; {} remaining){}".format(
             history["coverage"], history["completed"], history["remaining"],
             "; " + history["detail"] if history.get("detail") else ""))
+    if report.get("jira_comments") is not None:
+        comments = report["jira_comments"]
+        print("Jira comments: {} ({} issues completed; {} remaining){}".format(
+            comments["coverage"], comments["completed"], comments["remaining"],
+            "; " + comments["detail"] if comments.get("detail") else ""))
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
         with open(target, "w", encoding="utf-8") as stream:
@@ -121,5 +136,12 @@ def run(cfg, args):
                 stream.write("- Coverage: {}\n- Issues completed this run: {}\n- Issues remaining: {}\n".format(
                     history["coverage"], history["completed"], history["remaining"]))
                 for error in history.get("errors") or []:
+                    stream.write("- {}: {}\n".format(error["issue"], error["detail"]))
+            if report.get("jira_comments") is not None:
+                comments = report["jira_comments"]
+                stream.write("\n## Jira comment collection\n\n")
+                stream.write("- Coverage: {}\n- Issues completed this run: {}\n- Issues remaining: {}\n".format(
+                    comments["coverage"], comments["completed"], comments["remaining"]))
+                for error in comments.get("errors") or []:
                     stream.write("- {}: {}\n".format(error["issue"], error["detail"]))
         print("Discovery report: " + target)
