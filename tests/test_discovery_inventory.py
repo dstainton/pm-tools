@@ -20,7 +20,7 @@ class InventoryTests(unittest.TestCase):
         with patch("core.discovery_inventory.sources.list_confluence_inventory",
                    side_effect=[([page(1), page(2)], False)]) as fetch:
             updates = []
-                report = discovery_inventory.build(CFG, {}, cap=30,
+            report = discovery_inventory.build(CFG, {}, cap=30,
                 on_progress=lambda scope, scanned, cap, more:
                 updates.append((scanned, cap, more)))
         self.assertEqual(updates, [(2, 30, False)])
