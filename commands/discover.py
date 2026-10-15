@@ -184,6 +184,15 @@ def run(cfg, args):
             report["evidence_matches"] = discovery_fts.search(
                 db_file, args.search_evidence,
                 project=getattr(args, "project", None))
+    if getattr(args, "index_confluence", False):
+        from core import discovery_confluence_index, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        progress.start("Indexing scoped Confluence page content")
+        try:
+            report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
+        finally:
+            progress.finish()
     if getattr(args, "alias_candidates", False):
         from core import discovery_alias_candidates, paths
         import os
@@ -206,6 +215,18 @@ def run(cfg, args):
         from core import discovery_questions
         report = discovery_questions.attach(report)
     print(discovery.summary(report), end="")
+    if report.get("confluence_index") is not None:
+        entry = report["confluence_index"]
+        print("Confluence evidence: {} pages indexed, {} changed; inventory {}, complete: {}, errors: {}".format(
+            entry["indexed"], entry["changed"], entry["inventory_coverage"],
+            entry["complete"], len(entry["errors"])))
+        for item in entry["errors"][:10]:
+            print("  {}: {}".format(item["id"], item["detail"]))
+        for scope in entry["scopes"]:
+            if scope.get("status") != "complete":
+                print("  Incomplete scope: {} ({})".format(
+                    scope.get("space") or scope.get("root_id"),
+                    scope.get("detail") or scope["status"]))
     if report.get("alias_candidates") is not None:
         entries = report["alias_candidates"]
         print("Unconfirmed alias candidates: {}".format(len(entries)))
