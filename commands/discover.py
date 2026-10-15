@@ -217,8 +217,9 @@ def run(cfg, args):
     print(discovery.summary(report), end="")
     if report.get("confluence_index") is not None:
         entry = report["confluence_index"]
-        print("Confluence evidence: {} pages indexed, {} changed; inventory {}, complete: {}, errors: {}".format(
-            entry["indexed"], entry["changed"], entry["inventory_coverage"],
+        print("Confluence evidence: {} pages/blogs, {} comments indexed; {} content and {} comments changed; inventory {}, complete: {}, errors: {}".format(
+            entry["indexed"], entry["comments_indexed"], entry["changed"],
+            entry["comments_changed"], entry["inventory_coverage"],
             entry["complete"], len(entry["errors"])))
         for item in entry["errors"][:10]:
             print("  {}: {}".format(item["id"], item["detail"]))
