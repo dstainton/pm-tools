@@ -15,7 +15,8 @@ class ClarificationTests(unittest.TestCase):
         ws["evidence"] = [
             {"kind": "Confluence", "state": "retrieved", "reference": "22"},
             {"kind": "Jira Epics", "state": "retrieved",
-             "items": [{"key": "ABC-3"}, {"key": "ABC-4"}]}]
+             "items": [{"key": "ABC-3", "title": "Epic three", "updated": "2026-10-01"},
+                       {"key": "ABC-4", "title": "Epic four", "updated": "2026-10-02"}]}]
         report = discovery_questions.attach(report)
         self.assertEqual(len(report["clarifications"]), 2)
         item = report["clarifications"][1]
