@@ -9,7 +9,7 @@ import re
 import sqlite3
 from html.parser import HTMLParser
 
-from core import discovery_fts, discovery_inventory, sources
+from core import discovery_fts, discovery_inventory, discovery_confluence_checkpoint, sources
 
 
 class _Text(HTMLParser):
