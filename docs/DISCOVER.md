@@ -53,3 +53,23 @@ The inventory does **not** fetch or rank every page body yet, and makes no infer
 ### Intended URL-first onboarding
 
 The longer-term goal is to accept Confluence space or starting-page URLs and Jira project URLs, extract identifiers and allowed scope, inventory the accessible data, propose product/workstream mappings and membership configuration, then ask for human confirmation before saving configuration. URL parsing, connection authorization, and configuration generation are **not** included in this inventory increment.
+
+## Phase 2C Jira inventory and refresh (opt-in)
+
+Run `pm discover --jira-inventory --export` to inventory all accessible issues in configured Jira projects, including closed issues and custom issue types. Jira results are persisted in a local SQLite database at the configured local state directory (`discovery_jira.sqlite`), with transactional pagination checkpoints. A large crawl may take several executions: continue running the same command until coverage is complete. No model is required.
+
+After the initial crawl completes, use `pm discover --jira-refresh --export` to retrieve newly updated issues using a two-day overlap window. An incomplete query does not advance the refresh watermark or modify stored issues. This is a current-state refresh, **not** a changelog, comment history, or deletion/permission-loss reconciliation. The latter remain part of issue #60.
+
+The discovery output distinguishes complete, partial, unavailable, and unconfigured source coverage. A complete source snapshot does not establish product ownership or a full history of field changes. Both commands are read-only with respect to Jira and do not alter operational product/workstream configuration.
+
+### Jira historical comments
+
+After the initial inventory, run `pm discover --jira-comments --export` to collect accessible Jira issue comments into local SQLite. Each invocation processes a bounded set of issues, with transactional per-issue pagination checkpoints, preserving Jira comment IDs, authors, original structured bodies, and created/updated timestamps. Repeat until coverage is complete. A missing comment endpoint or permission error is recorded as incomplete coverage. Comment data is not treated as accepted product policy or proof of ownership. The current collector captures a baseline snapshot, not yet continuous comment edits/deletions.
+
+### Jira inventory reconciliation
+
+Run `pm discover --jira-reconcile --export` after completing the baseline. This performs a complete fresh search of each configured Jira project and compares issue IDs against the local inventory. An issue no longer returned is flagged as **absent from the accessible project search**, not deleted. It may have been moved, made inaccessible, or removed. The command never deletes locally retained evidence, never uses partial results to establish absence, and does not assert that permissions are unchanged. It is a bounded-by-server-pagination read-only reconciliation rather than a substitute for historical changelog evidence.
+
+### Jira project configuration observations
+
+Use `pm discover --jira-structure --export` to inspect available project issue types, their reported hierarchy levels (when supplied by Jira), components and versions. Missing optional metadata is reported as unavailable rather than guessed. This is descriptive, read-only Jira configuration evidence. It does not infer ownership from component names or assume Initiatives are available in every Jira tenant.
