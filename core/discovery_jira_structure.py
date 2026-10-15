@@ -54,6 +54,31 @@ def inspect(cfg, projects):
                     type(exc).__name__, str(exc)[:120])
                 item["status"] = "partial"
                 observations["coverage"] = "partial"
+            # A project's issue type + field configuration may differ from
+            # the global field catalogue. This endpoint can be restricted by
+            # permissions or Jira edition; never infer missing applicability.
+            item["project_field_config"] = []
+            try:
+                if not data.get("id"):
+                    raise ValueError("Project metadata did not provide project ID")
+                response = sources.send(
+                    "GET", root + "/rest/api/3/fieldconfiguration/project",
+                    params={"projectId": str(data["id"]), "maxResults": 100},
+                    auth=(jira["email"], jira["api_token"]),
+                    headers={"Accept": "application/json"}, timeout=60)
+                response.raise_for_status()
+                mapping = response.json()
+                if not isinstance(mapping, dict) or not isinstance(mapping.get("values"), list):
+                    raise ValueError("Unexpected field configuration mapping")
+                if mapping.get("isLast") is not True and (
+                        mapping.get("total") is None or
+                        len(mapping["values"]) < int(mapping["total"])):
+                    raise ValueError("Field configuration mapping requires pagination")
+                item["project_field_config"] = mapping["values"]
+                item["project_field_config_coverage"] = "project associations only"
+            except Exception as exc:
+                item["project_field_config_coverage"] = "unavailable: {}: {}".format(
+                    type(exc).__name__, str(exc)[:120])
             # Components/versions may be unavailable in project metadata.
             for name, field in (("components", "components"), ("versions", "versions")):
                 value = data.get(field)
