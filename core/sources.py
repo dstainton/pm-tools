@@ -1081,7 +1081,7 @@ def _confluence_block(cfg):
     return cfg or {}
 
 
-def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None):
+def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None, content_types=None):
     """One cached page of Confluence metadata plus server continuation flag.
 
     No lookback window: discovery needs historical as well as current pages.
@@ -1091,7 +1091,7 @@ def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None):
         raise ValueError("Confluence connection missing")
     cql = queries.render(cfg, "confluence.space", space=space)
     cql += " AND " + queries.render(cfg, "confluence.types",
-                                    types=["page"])
+                                    types=list(content_types or ["page"]))
     if ancestor_id is not None:
         cql += " AND " + queries.render(
             cfg, "confluence.ancestor", page_id=str(ancestor_id))
