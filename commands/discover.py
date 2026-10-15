@@ -205,6 +205,8 @@ def run(cfg, args):
                         stream.write("  - {} (ID {}, hierarchy level {})\n".format(
                             issue_type["name"], issue_type["id"],
                             issue_type["hierarchy_level"]))
+                    stream.write("  - Field catalogue: {} ({} fields)\n".format(
+                        item.get("fields_coverage", "unavailable"), len(item.get("fields") or [])))
                     if item.get("detail"):
                         stream.write("  - Note: {}\n".format(item["detail"]))
         print("Discovery report: " + target)
