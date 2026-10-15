@@ -713,6 +713,8 @@ def build_parser():
                             help="Show a short queue of unconfirmed product questions")
     p_discover.add_argument("--inventory", action="store_true",
                             help="Inventory configured Confluence space pages with coverage accounting")
+    p_discover.add_argument("--jira-history", action="store_true",
+                            help="Resume Jira issue classification changelog collection")
     p_discover.add_argument("--jira-refresh", action="store_true",
                             help="Refresh changed Jira issues after a complete local inventory")
     p_discover.add_argument("--jira-inventory", action="store_true",
