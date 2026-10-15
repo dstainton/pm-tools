@@ -69,5 +69,48 @@ class CheckpointTests(unittest.TestCase):
             send.assert_not_called()
 
 
+    def test_refresh_only_after_complete_baseline(self):
+        cfg = {"jira": {"base_url": "https://jira.example", "email": "x", "api_token": "y"}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "crawl.sqlite"
+            with patch("core.discovery_jira_checkpoint.sources.search_issues") as search:
+                result = discovery_jira_checkpoint.refresh(cfg, ["APS"], path)
+            self.assertEqual(result["coverage"], "partial")
+            search.assert_not_called()
+
+    def test_refresh_updates_issues_and_rejects_partial_results(self):
+        import sqlite3
+        cfg = {"jira": {"base_url": "https://jira.example", "email": "x", "api_token": "y"}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "crawl.sqlite"
+            with patch("core.discovery_jira_checkpoint.sources.send",
+                       return_value=Response({"issues": [{"key": "APS-1",
+                           "fields": {"updated": "2026-10-01T00:00:00Z"}}]})):
+                discovery_jira_checkpoint.crawl(cfg, ["APS"], path)
+            with patch("core.discovery_jira_checkpoint.sources.search_issues",
+                       return_value={"issues": [{"key": "APS-2",
+                           "fields": {"updated": "2026-10-02T00:00:00Z"}}],
+                           "complete": False, "reason": "timeout"}):
+                partial = discovery_jira_checkpoint.refresh(cfg, ["APS"], path)
+            self.assertEqual(partial["coverage"], "partial")
+            with sqlite3.connect(str(path)) as db:
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM jira_raw_issues").fetchone()[0], 1)
+                self.assertIsNone(db.execute(
+                    "SELECT refreshed_at FROM jira_progress").fetchone()[0])
+            with patch("core.discovery_jira_checkpoint.sources.search_issues",
+                       return_value={"issues": [{"key": "APS-2",
+                           "fields": {"updated": "2026-10-02T00:00:00Z"}}],
+                           "complete": True}) as search:
+                updated = discovery_jira_checkpoint.refresh(cfg, ["APS"], path)
+            self.assertEqual(updated["coverage"], "complete")
+            self.assertIn("updated >=", search.call_args.args[1])
+            with sqlite3.connect(str(path)) as db:
+                self.assertEqual(db.execute(
+                    "SELECT COUNT(*) FROM jira_raw_issues").fetchone()[0], 2)
+                self.assertIsNotNone(db.execute(
+                    "SELECT refreshed_at FROM jira_progress").fetchone()[0])
+
+
 if __name__ == "__main__":
     unittest.main()
