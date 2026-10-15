@@ -185,6 +185,7 @@ def refresh(cfg, projects, db_path, overlap_days=2, page_size=100):
                     jql += ' AND updated >= "' + since + '"'
                 jql += " ORDER BY updated ASC, key ASC"
                 try:
+                    refresh_started = dt.datetime.now(dt.timezone.utc).isoformat()
                     records = sources.search_issues(jira, jql,
                         fields=discovery_jira_inventory.FIELDS,
                         max_items=0, page_size=page_size, with_metadata=True)
@@ -194,7 +195,6 @@ def refresh(cfg, projects, db_path, overlap_days=2, page_size=100):
                     else:
                         # Commit changes and watermark together. The overlap
                         # prevents skipped records near the boundary.
-                        now = dt.datetime.now(dt.timezone.utc).isoformat()
                         with db:
                             for issue in records["issues"]:
                                 key = issue.get("key")
@@ -205,7 +205,7 @@ def refresh(cfg, projects, db_path, overlap_days=2, page_size=100):
                                     DO UPDATE SET payload=excluded.payload""",
                                     (project, str(key), json.dumps(issue, ensure_ascii=False)))
                             db.execute("UPDATE jira_progress SET refreshed_at=? WHERE project=?",
-                                       (now, project))
+                                       (refresh_started, project))
                         status["status"] = "complete"
                         status["updated"] = len(records["issues"])
                 except Exception as exc:
