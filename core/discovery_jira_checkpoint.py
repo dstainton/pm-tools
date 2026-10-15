@@ -5,6 +5,7 @@ payloads are stored before derived interpretation so evidence can be reindexed.
 """
 import json
 import sqlite3
+from urllib.parse import urlsplit
 
 from core import discovery_jira_inventory, sources
 
@@ -16,7 +17,8 @@ def _database(path):
         project TEXT PRIMARY KEY,
         continuation TEXT,
         complete INTEGER NOT NULL DEFAULT 0,
-        page_count INTEGER NOT NULL DEFAULT 0
+        page_count INTEGER NOT NULL DEFAULT 0,
+        source_url TEXT
     )""")
     db.execute("""CREATE TABLE IF NOT EXISTS jira_raw_issues (
         project TEXT NOT NULL,
@@ -24,6 +26,9 @@ def _database(path):
         payload TEXT NOT NULL,
         PRIMARY KEY(project, issue_key)
     )""")
+    cols = {row[1] for row in db.execute("PRAGMA table_info(jira_progress)")}
+    if "source_url" not in cols:
+        db.execute("ALTER TABLE jira_progress ADD COLUMN source_url TEXT")
     db.commit()
     return db
 
@@ -44,12 +49,18 @@ def crawl(cfg, projects, db_path, page_limit=20, page_size=100):
     db = _database(db_path)
     try:
         for project in projects:
-            row = db.execute("SELECT continuation, complete, page_count FROM jira_progress WHERE project=?",
+            row = db.execute("SELECT continuation, complete, page_count, source_url FROM jira_progress WHERE project=?",
                              (project,)).fetchone()
-            token, complete, total_pages = row if row else (None, 0, 0)
+            token, complete, total_pages, source_url = row if row else (None, 0, 0, None)
             state = {"project": project, "status": "complete" if complete else "incomplete",
                      "fetched_pages": 0, "stored": 0}
             result["projects"].append(state)
+            canonical_source = cfg["jira"]["base_url"].rstrip("/")
+            if source_url and source_url != canonical_source:
+                state["status"] = "unavailable"
+                state["detail"] = "Checkpoint belongs to a different Jira endpoint"
+                result["coverage"] = "partial"
+                continue
             if complete:
                 state["stored"] = db.execute(
                     "SELECT COUNT(*) FROM jira_raw_issues WHERE project=?", (project,)).fetchone()[0]
@@ -90,11 +101,13 @@ def crawl(cfg, projects, db_path, page_limit=20, page_size=100):
                                 VALUES(?, ?, ?) ON CONFLICT(project, issue_key)
                                 DO UPDATE SET payload=excluded.payload""",
                                 (project, str(key), json.dumps(issue, ensure_ascii=False)))
-                        db.execute("""INSERT INTO jira_progress(project, continuation, complete, page_count)
-                            VALUES(?, ?, ?, ?) ON CONFLICT(project)
+                        db.execute("""INSERT INTO jira_progress(project, continuation, complete, page_count, source_url)
+                            VALUES(?, ?, ?, ?, ?) ON CONFLICT(project)
                             DO UPDATE SET continuation=excluded.continuation,
-                            complete=excluded.complete, page_count=excluded.page_count""",
-                            (project, None if done else next_token, int(done), total_pages + 1))
+                            complete=excluded.complete, page_count=excluded.page_count,
+                            source_url=excluded.source_url""",
+                            (project, None if done else next_token, int(done), total_pages + 1,
+                             canonical_source))
                     total_pages += 1
                     state["fetched_pages"] += 1
                     token = next_token
