@@ -15,6 +15,11 @@ def run(cfg, args):
         progress.start("Gathering bounded discovery evidence")
         report = discovery_evidence.enrich(cfg, report)
         progress.finish()
+    if getattr(args, "propose", False):
+        from core import discovery_proposals
+        if not getattr(args, "enrich", False):
+            raise SystemExit("--propose requires --enrich to establish source evidence.")
+        report = discovery_proposals.propose(cfg, report)
     if getattr(args, "questions", False):
         from core import discovery_questions
         report = discovery_questions.attach(report)
