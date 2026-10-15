@@ -9,6 +9,35 @@ from core import discovery_confluence_index, discovery_fts
 
 
 class ConfluenceIndexTests(unittest.TestCase):
+    def test_scoped_comment_index_and_truncation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "index.sqlite"
+            def fake_build(cfg, report, cap=100):
+                report["inventory"] = {
+                    "coverage": "complete",
+                    "scopes": [{"type": "page_tree", "space": "DOC", "status": "complete"}],
+                    "pages": [{"id": "42", "space": "DOC", "title": "Gateway",
+                               "type": "page"}]}
+                return report
+            page = {"id": "42", "title": "Gateway", "space": {"key": "DOC"},
+                    "body": {"storage": {"value": "<p>Gateway docs</p>"}}}
+            comment = {"id": "99", "body": {"storage": {
+                "value": "<p>Secure Data Exchange (SDX) terminology</p>"}},
+                "history": {"createdDate": "2026-10-01"}}
+            with patch.object(discovery_confluence_index.discovery_inventory,
+                              "build", side_effect=fake_build):
+                with patch.object(discovery_confluence_index.sources,
+                                  "fetch_confluence_page", return_value=page):
+                    with patch.object(discovery_confluence_index.sources,
+                                      "list_confluence_comments", return_value=([comment], True)):
+                        result = discovery_confluence_index.index({}, path, cap=1)
+            self.assertEqual(result["comments_indexed"], 1)
+            self.assertFalse(result["complete"])
+            self.assertTrue(result["errors"])
+            matches = discovery_fts.search(path, '"Secure Data Exchange"')
+            self.assertEqual(matches[0]["citation"], "confluence:42#comment-99")
+            self.assertEqual(matches[0]["kind"], "confluence_comment")
+
     def test_space_blog_posts_and_labels_are_searchable(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "index.sqlite"
@@ -29,7 +58,9 @@ class ConfluenceIndexTests(unittest.TestCase):
                                       [{"id": "88", "title": "Product update"}], False)):
                     with patch.object(discovery_confluence_index.sources,
                                       "fetch_confluence_page", return_value=blog):
-                        result = discovery_confluence_index.index({}, path)
+                        with patch.object(discovery_confluence_index.sources,
+                                          "list_confluence_comments", return_value=([], False)):
+                            result = discovery_confluence_index.index({}, path)
             self.assertTrue(result["complete"])
             self.assertEqual(result["indexed"], 1)
             hits = discovery_fts.search(path, '"product-strategy"')
@@ -57,8 +88,10 @@ class ConfluenceIndexTests(unittest.TestCase):
                                   "fetch_confluence_page", return_value=page):
                     with patch.object(discovery_confluence_index.sources,
                                       "list_confluence_inventory", return_value=([], False)):
-                        first = discovery_confluence_index.index({}, path)
-                        second = discovery_confluence_index.index({}, path)
+                        with patch.object(discovery_confluence_index.sources,
+                                          "list_confluence_comments", return_value=([], False)):
+                            first = discovery_confluence_index.index({}, path)
+                            second = discovery_confluence_index.index({}, path)
             self.assertEqual(first["indexed"], 1)
             self.assertEqual(first["changed"], 1)
             self.assertFalse(first["complete"])
