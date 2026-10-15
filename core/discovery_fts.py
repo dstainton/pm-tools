@@ -38,7 +38,7 @@ def _init(db):
 
 
 def _put(db, doc_id, source_key, project, kind, event_time, updated_at,
-         title, body, citation):
+         title, body, citation, source="jira"):
     digest = hashlib.sha256(json.dumps(
         [project, kind, event_time, updated_at, title, body, citation],
         ensure_ascii=False).encode("utf-8")).hexdigest()
@@ -51,8 +51,8 @@ def _put(db, doc_id, source_key, project, kind, event_time, updated_at,
     db.execute("""INSERT OR REPLACE INTO discovery_fts_documents
         (doc_id, source, source_key, project, kind, event_time, updated_at,
          citation, digest, title, body)
-        VALUES (?, 'jira', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (doc_id, source_key, project, kind, event_time, updated_at,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (doc_id, source, source_key, project, kind, event_time, updated_at,
          citation, digest, title, body))
     db.execute("INSERT INTO discovery_fts(doc_id, title, body) VALUES (?, ?, ?)",
                (doc_id, title, body))
