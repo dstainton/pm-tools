@@ -3,7 +3,7 @@ import json
 import sqlite3
 from urllib.parse import quote
 
-from core import sources
+from core import discovery_jira_guard, sources
 
 
 def collect(cfg, db_path, max_issues=20, page_size=100):
@@ -19,6 +19,7 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
             created_at TEXT, updated_at TEXT, author_id TEXT,
             payload TEXT NOT NULL, PRIMARY KEY(issue_key, comment_id))""")
         db.commit()
+        discovery_jira_guard.check(db, cfg)
         issues = db.execute("""SELECT DISTINCT i.issue_key FROM jira_raw_issues i
             LEFT JOIN jira_comment_progress p ON p.issue_key=i.issue_key
             WHERE COALESCE(p.complete, 0)=0 ORDER BY i.issue_key LIMIT ?""",
