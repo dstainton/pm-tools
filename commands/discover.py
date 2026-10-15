@@ -13,8 +13,13 @@ def run(cfg, args):
     if getattr(args, "inventory", False):
         from core import discovery_inventory
         progress.start("Inventorying configured Confluence scopes")
-        report = discovery_inventory.build(cfg, report)
-        progress.finish()
+        try:
+            report = discovery_inventory.build(cfg, report,
+                on_progress=lambda scope, scanned, cap, more:
+                progress.note('{}: {} rows scanned (cap {})'.format(
+                    scope.get('space') or scope.get('root_id') or 'page tree', scanned, cap)))
+        finally:
+            progress.finish()
     if getattr(args, "jira_inventory", False):
         from core import discovery_jira_checkpoint
         from core import paths
@@ -31,7 +36,10 @@ def run(cfg, args):
         progress.start("Collecting Jira inventory")
         try:
             report["jira_inventory"] = discovery_jira_checkpoint.crawl(
-                cfg, projects, db_file)
+                cfg, projects, db_file,
+                on_progress=lambda project, stored, pages, complete:
+                progress.note('{}: {} issues stored, {} pages{}'.format(
+                    project, stored, pages, ', complete' if complete else '')))
         finally:
             progress.finish()
     if getattr(args, "jira_refresh", False):
