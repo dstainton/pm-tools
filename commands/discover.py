@@ -184,6 +184,12 @@ def run(cfg, args):
             report["evidence_matches"] = discovery_fts.search(
                 db_file, args.search_evidence,
                 project=getattr(args, "project", None))
+    if getattr(args, "confluence_crawl", False):
+        from core import discovery_confluence_checkpoint, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        report["confluence_crawl"] = discovery_confluence_checkpoint.crawl(
+            cfg, db_file)
     if getattr(args, "index_confluence", False):
         from core import discovery_confluence_index, paths
         import os
@@ -215,6 +221,11 @@ def run(cfg, args):
         from core import discovery_questions
         report = discovery_questions.attach(report)
     print(discovery.summary(report), end="")
+    if report.get("confluence_crawl") is not None:
+        for item in report["confluence_crawl"]:
+            print("Confluence crawl: {} ({} rows this run, offset {}){}".format(
+                item["status"], item["processed"], item.get("offset", 0),
+                "; " + item["error"] if item.get("error") else ""))
     if report.get("confluence_index") is not None:
         entry = report["confluence_index"]
         print("Confluence evidence: {} pages/blogs, {} comments indexed; {} content and {} comments changed; inventory {}, complete: {}, errors: {}".format(
