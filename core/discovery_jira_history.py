@@ -3,7 +3,6 @@
 Changelog entries are observations. They do not automatically establish
 renames, ownership changes, or current product definitions.
 """
-import json
 import sqlite3
 from urllib.parse import quote
 
@@ -72,6 +71,8 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
                 end = start + len(values)
                 done = bool(data.get("isLast")) or (
                     total is not None and end >= int(total))
+                if total is None and data.get("isLast") is None:
+                    raise ValueError("Jira changelog response omitted pagination completion metadata")
                 if not values and not done:
                     raise ValueError("Empty changelog page without completion")
                 with db:
@@ -80,13 +81,12 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
                         if not event_id:
                             raise ValueError("Changelog entry missing id")
                         author = (event.get("author") or {}).get("accountId")
-                        for item in event.get("items") or []:
+                        for ordinal, item in enumerate(event.get("items") or []):
                             field = str(item.get("field") or "")
                             if field.casefold() not in INTEREST:
                                 continue
                             # A history entry may contain multiple values for
                             # one field; key by item position to avoid loss.
-                            ordinal = (event.get("items") or []).index(item)
                             db.execute("""INSERT OR REPLACE INTO jira_history_events
                                 (issue_key, history_id, event_time, author,
                                  field_name, old_value, new_value)
