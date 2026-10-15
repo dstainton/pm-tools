@@ -65,6 +65,17 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("bounded Jira Epic samples", discovery.summary(report))
         self.assertNotIn("configuration only (no Jira", discovery.summary(report))
 
+    def test_section_extraction_reaches_beyond_initial_navigation(self):
+        body = ("<h1>Overview</h1><p>" + "Navigation content. " * 30
+                + "</p><h2>Capability</h2><p>"
+                + "Provides secure information exchange between organizations "
+                  "with governed identities and auditable transfers."
+                + "</p>")
+        sections = discovery_evidence._sections(body)
+        self.assertTrue(any("secure information exchange" in row["text"]
+                            for row in sections))
+        self.assertTrue(any(row["heading"] == "Capability" for row in sections))
+
     def test_bounded_evidence_never_confirmed_as_responsibility(self):
         payload = {"id": "88", "title": "Product strategy",
                    "version": {"when": "2026-09-01"},
