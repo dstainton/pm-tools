@@ -10,6 +10,11 @@ def run(cfg, args):
                           getattr(args, "workstream", None)) else None
     report = discovery.inspect(cfg, selected=selected,
                                project=getattr(args, "project", None))
+    if getattr(args, "inventory", False):
+        from core import discovery_inventory
+        progress.start("Inventorying configured Confluence spaces")
+        report = discovery_inventory.build(cfg, report)
+        progress.finish()
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -24,8 +29,14 @@ def run(cfg, args):
         from core import discovery_questions
         report = discovery_questions.attach(report)
     print(discovery.summary(report), end="")
+    if report.get("inventory") is not None:
+        from core import discovery_inventory
+        print(discovery_inventory.summary(report))
     if getattr(args, "export", False):
         target = output.place(cfg, "discovery.md", getattr(args, "out", None))
         with open(target, "w", encoding="utf-8") as stream:
             stream.write(discovery.markdown(report))
+            if report.get("inventory") is not None:
+                from core import discovery_inventory
+                stream.write("\\n" + discovery_inventory.markdown(report))
         print("Discovery report: " + target)

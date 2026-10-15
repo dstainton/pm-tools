@@ -711,6 +711,8 @@ def build_parser():
                             help="Draft unconfirmed evidence-backed profiles with the configured model; requires --enrich")
     p_discover.add_argument("--questions", action="store_true",
                             help="Show a short queue of unconfirmed product questions")
+    p_discover.add_argument("--inventory", action="store_true",
+                            help="Inventory configured Confluence space pages with coverage accounting")
     p_discover.add_argument("--enrich", action="store_true",
                             help="Read bounded Jira Epic and configured Confluence evidence")
     p_discover.add_argument("--export", action="store_true",

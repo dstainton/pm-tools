@@ -1081,6 +1081,35 @@ def _confluence_block(cfg):
     return cfg or {}
 
 
+def list_confluence_inventory(cfg, space, start=0, limit=25):
+    """One cached page of Confluence metadata plus server continuation flag.
+
+    No lookback window: discovery needs historical as well as current pages.
+    """
+    block = _confluence_block(cfg)
+    if not block.get("base_url"):
+        raise ValueError("Confluence connection missing")
+    cql = queries.render(cfg, "confluence.space", space=space)
+    cql += " AND " + queries.render(cfg, "confluence.types",
+                                    types=["page"])
+    def fetch():
+        url = "{}/rest/api/content/search".format(block["base_url"].rstrip("/"))
+        response = send(
+            "GET", url,
+            params={"cql": cql, "start": start, "limit": limit,
+                    "expand": "version,space,ancestors"},
+            auth=(block["email"], block["api_token"]),
+            headers={"Accept": "application/json"}, timeout=60)
+        response.raise_for_status()
+        payload = response.json()
+        return {"results": payload.get("results") or [],
+                "has_more": bool((payload.get("_links") or {}).get("next"))}
+    from core import pages
+    data = pages.cache_fetch(cfg, "confluence-inventory",
+                             (space, start, limit), fetch)
+    return data["results"], data["has_more"]
+
+
 def search_confluence_by_title(cfg, space, title, ancestor_id=None, parent_id=None):
     """Pages and folders with this exact title.
 

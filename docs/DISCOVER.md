@@ -43,3 +43,13 @@ Questions are deterministic and **not answered automatically**. They do not infe
 Run `pm discover --enrich --propose --export` to explicitly invoke the configured model on bounded source evidence. This can take several model calls. It drafts **unconfirmed** candidate product goals and workstream purpose, responsibilities, or exclusions.
 
 The model sees no more than five retrieved evidence items per entity, drawn from configured Confluence page excerpts and sampled Jira Epic titles. A product may use evidence from its selected workstreams. No more than five entities are considered in one run. The model must cite input evidence tags in every proposal, and unknown tags are rejected. **A matching tag is not a guarantee the sentence is supported**: review both the proposal and the cited excerpt before accepting any claim. No document crawling, profile confirmation, Jira writes, or configuration changes occur. `--propose` requires `--enrich`; neither is the default.
+
+## Discovery inventory foundation
+
+Use `pm discover --inventory --export` to enumerate **page metadata** in the configured Confluence space and any explicitly configured workstream/product spaces. This is opt-in and does not invoke a model. It uses the existing fetch cache, pages through results, retains page identifiers, titles, dates and ancestors, and reports coverage as complete, partial, unavailable, or unconfigured. Each space has a **100-page safety cap** in this first increment; if more pages exist, the result is explicitly **truncated**, never called comprehensive. This cap will be made resumable before full index-based discovery is considered complete.
+
+The inventory does **not** fetch or rank every page body yet, and makes no inferred product assignments. It does not silently treat a Jira project or space name as proof of ownership. Further increments will add resumable full-space traversal, content extraction, passage indexing, local relevance ranking, and evidence synthesis.
+
+### Intended URL-first onboarding
+
+The longer-term goal is to accept Confluence space or starting-page URLs and Jira project URLs, extract identifiers and allowed scope, inventory the accessible data, propose product/workstream mappings and membership configuration, then ask for human confirmation before saving configuration. URL parsing, connection authorization, and configuration generation are **not** included in this inventory increment.
