@@ -1,6 +1,7 @@
 """Resumable Jira comment collection without inference or Jira writes."""
 import json
 import sqlite3
+import uuid
 from urllib.parse import quote
 
 from core import discovery_jira_guard, sources
@@ -13,11 +14,20 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
     try:
         db.execute("""CREATE TABLE IF NOT EXISTS jira_comment_progress (
             issue_key TEXT PRIMARY KEY, next_start INTEGER NOT NULL DEFAULT 0,
-            complete INTEGER NOT NULL DEFAULT 0)""")
+            complete INTEGER NOT NULL DEFAULT 0, scan_id TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS jira_comments (
             issue_key TEXT NOT NULL, comment_id TEXT NOT NULL,
             created_at TEXT, updated_at TEXT, author_id TEXT,
-            payload TEXT NOT NULL, PRIMARY KEY(issue_key, comment_id))""")
+            payload TEXT NOT NULL, seen_scan TEXT, absent_candidate INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(issue_key, comment_id))""")
+        progress_columns = {r[1] for r in db.execute("PRAGMA table_info(jira_comment_progress)")}
+        if "scan_id" not in progress_columns:
+            db.execute("ALTER TABLE jira_comment_progress ADD COLUMN scan_id TEXT")
+        comment_columns = {r[1] for r in db.execute("PRAGMA table_info(jira_comments)")}
+        if "seen_scan" not in comment_columns:
+            db.execute("ALTER TABLE jira_comments ADD COLUMN seen_scan TEXT")
+        if "absent_candidate" not in comment_columns:
+            db.execute("ALTER TABLE jira_comments ADD COLUMN absent_candidate INTEGER NOT NULL DEFAULT 0")
         db.commit()
         discovery_jira_guard.check(db, cfg)
         issues = db.execute("""SELECT DISTINCT i.issue_key FROM jira_raw_issues i
@@ -29,9 +39,10 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
         jira = cfg["jira"]
         for (key,) in issues:
             result["attempted"] += 1
-            row = db.execute("SELECT next_start FROM jira_comment_progress WHERE issue_key=?",
+            row = db.execute("SELECT next_start, scan_id FROM jira_comment_progress WHERE issue_key=?",
                              (key,)).fetchone()
             start = row[0] if row else 0
+            scan_id = (row[1] if row and start > 0 else None) or uuid.uuid4().hex
             try:
                 response = sources.send(
                     "GET", jira["base_url"].rstrip("/") + "/rest/api/3/issue/" +
@@ -56,20 +67,26 @@ def collect(cfg, db_path, max_issues=20, page_size=100):
                             raise ValueError("Comment missing ID")
                         db.execute("""INSERT INTO jira_comments
                             (issue_key, comment_id, created_at, updated_at,
-                             author_id, payload) VALUES (?, ?, ?, ?, ?, ?)
+                             author_id, payload, seen_scan, absent_candidate) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
                             ON CONFLICT(issue_key, comment_id)
                             DO UPDATE SET created_at=excluded.created_at,
                             updated_at=excluded.updated_at,
-                            author_id=excluded.author_id, payload=excluded.payload""",
+                            author_id=excluded.author_id, payload=excluded.payload,
+                            seen_scan=excluded.seen_scan, absent_candidate=0""",
                             (key, str(identity), comment.get("created"),
                              comment.get("updated"),
                              (comment.get("author") or {}).get("accountId"),
-                             json.dumps(comment, ensure_ascii=False)))
+                             json.dumps(comment, ensure_ascii=False), scan_id))
+                    if done:
+                        db.execute("""UPDATE jira_comments SET absent_candidate=1
+                            WHERE issue_key=? AND (seen_scan IS NULL OR seen_scan != ?)""",
+                            (key, scan_id))
                     db.execute("""INSERT INTO jira_comment_progress
-                        (issue_key, next_start, complete) VALUES (?, ?, ?)
+                        (issue_key, next_start, complete, scan_id) VALUES (?, ?, ?, ?)
                         ON CONFLICT(issue_key) DO UPDATE SET
-                        next_start=excluded.next_start, complete=excluded.complete""",
-                        (key, end, int(done)))
+                        next_start=excluded.next_start, complete=excluded.complete,
+                        scan_id=excluded.scan_id""",
+                        (key, end, int(done), scan_id))
                 if done:
                     result["completed"] += 1
                 else:
