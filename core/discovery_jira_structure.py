@@ -32,6 +32,28 @@ def inspect(cfg, projects):
                                     "subtask": bool(x.get("subtask")),
                                     "hierarchy_level": x.get("hierarchyLevel")}
                                    for x in data["issueTypes"]]
+            # Site-wide fields are candidates, not proof of applicability to
+            # this project's issue screens or configured workstreams.
+            item["fields"] = []
+            try:
+                field_response = sources.send(
+                    "GET", root + "/rest/api/3/field",
+                    auth=(jira["email"], jira["api_token"]),
+                    headers={"Accept": "application/json"}, timeout=60)
+                field_response.raise_for_status()
+                field_data = field_response.json()
+                if not isinstance(field_data, list):
+                    raise ValueError("Unexpected Jira field catalog")
+                item["fields"] = [
+                    {"id": str(f.get("id", "")), "name": f.get("name"),
+                     "custom": bool(f.get("custom")), "schema": f.get("schema") or {}}
+                    for f in field_data if isinstance(f, dict)]
+                item["fields_coverage"] = "site catalogue; project applicability unverified"
+            except Exception as exc:
+                item["fields_coverage"] = "unavailable: {}: {}".format(
+                    type(exc).__name__, str(exc)[:120])
+                item["status"] = "partial"
+                observations["coverage"] = "partial"
             # Components/versions may be unavailable in project metadata.
             for name, field in (("components", "components"), ("versions", "versions")):
                 value = data.get(field)
