@@ -24,7 +24,8 @@ Commands:
     pm review            Without --apply, the old model judgement. With --apply,
                          the refine worksheet. Deprecated.
     pm note              Capture a thought offline; file it later.
-    pm discover          Review configured product and workstream knowledge.\n    pm coverage          Open issues no workstream claims, and unused components.
+    pm discover          Review configured product and workstream knowledge.
+    pm coverage          Open issues no workstream claims, and unused components.
     pm inbox             List, edit, create or drop captured notes.
     pm metrics           Delivery numbers per product and workstream.
                          pm and work are the full tables. Leadership is the
@@ -137,11 +138,17 @@ def resolve_config_path(explicit):
             return path
 
     sys.exit(
-        "No config file found. Get started with:\n"
-        "  pm init                     # creates ~/.pm-tools/config.yaml\n\n"
-        "Or point pm at an existing config by any of:\n"
-        "  * running from a folder containing config.yaml\n"
-        "  * setting PM_CONFIG=/path/to/config.yaml\n"
+        "No config file found. Get started with:
+"
+        "  pm init                     # creates ~/.pm-tools/config.yaml
+
+"
+        "Or point pm at an existing config by any of:
+"
+        "  * running from a folder containing config.yaml
+"
+        "  * setting PM_CONFIG=/path/to/config.yaml
+"
         "  * passing --config /path/to/config.yaml"
     )
 
@@ -713,6 +720,8 @@ def build_parser():
                             help="Show a short queue of unconfirmed product questions")
     p_discover.add_argument("--inventory", action="store_true",
                             help="Inventory configured Confluence space pages with coverage accounting")
+    p_discover.add_argument("--jira-inventory", action="store_true",
+                            help="Resume read-only project-wide Jira inventory, including closed issues")
     p_discover.add_argument("--enrich", action="store_true",
                             help="Read bounded Jira Epic and configured Confluence evidence")
     p_discover.add_argument("--export", action="store_true",
@@ -880,7 +889,8 @@ def main():
     if getattr(args, "workstream", None):
         scope_bits.append(", ".join(w["abbrev"] for w in selected))
     if scope_bits:
-        print(f"(scope: {' / '.join(scope_bits)})\n")
+        print(f"(scope: {' / '.join(scope_bits)})
+")
 
     with progress.running():
         args.func(cfg, args)
