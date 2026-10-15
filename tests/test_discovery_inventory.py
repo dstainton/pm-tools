@@ -19,7 +19,11 @@ class InventoryTests(unittest.TestCase):
     def test_complete_two_pages(self):
         with patch("core.discovery_inventory.sources.list_confluence_inventory",
                    side_effect=[([page(1), page(2)], False)]) as fetch:
-            report = discovery_inventory.build(CFG, {}, cap=30)
+            updates = []
+                report = discovery_inventory.build(CFG, {}, cap=30,
+                on_progress=lambda scope, scanned, cap, more:
+                updates.append((scanned, cap, more)))
+        self.assertEqual(updates, [(2, 30, False)])
         self.assertEqual(report["inventory"]["coverage"], "complete")
         self.assertEqual(report["inventory"]["scopes"][0]["retrieved"], 2)
         self.assertEqual(report["inventory"]["pages"][0]["ancestors"], ["10"])
