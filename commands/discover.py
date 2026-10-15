@@ -184,6 +184,14 @@ def run(cfg, args):
             report["evidence_matches"] = discovery_fts.search(
                 db_file, args.search_evidence,
                 project=getattr(args, "project", None))
+    if getattr(args, "alias_candidates", False):
+        from core import discovery_alias_candidates, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.isfile(db_file):
+            raise SystemExit("Local Jira evidence index missing; run --index-jira first.")
+        report["alias_candidates"] = discovery_alias_candidates.stage(
+            db_file, project=getattr(args, "project", None))
     if getattr(args, "enrich", False):
         from core import discovery_evidence
         progress.start("Gathering bounded discovery evidence")
@@ -198,6 +206,13 @@ def run(cfg, args):
         from core import discovery_questions
         report = discovery_questions.attach(report)
     print(discovery.summary(report), end="")
+    if report.get("alias_candidates") is not None:
+        entries = report["alias_candidates"]
+        print("Unconfirmed alias candidates: {}".format(len(entries)))
+        for entry in entries:
+            print("  {} ({}): {} = {} [{} evidence references]".format(
+                entry["project"], entry["status"], entry["canonical"],
+                entry["alias"], len(entry["citations"])))
     if report.get("jira_index") is not None:
         result = report["jira_index"]
         print("Offline evidence index: {} documents ({} changed; {} issues scanned)".format(
@@ -268,6 +283,12 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("alias_candidates") is not None:
+                stream.write("\n## Unconfirmed alias candidates\n\n")
+                for entry in report["alias_candidates"]:
+                    stream.write("- {}: {} ({}) [{}]\n".format(
+                        entry["project"], entry["canonical"], entry["alias"],
+                        ", ".join(entry["citations"])))
             if report.get("jira_index") is not None:
                 item = report["jira_index"]
                 stream.write("\n## Offline Jira evidence index\n\n- Documents: {}\n- Changed: {}\n".format(
