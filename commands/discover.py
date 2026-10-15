@@ -107,6 +107,8 @@ def run(cfg, args):
                     total_completed, remaining))
                 if remaining == 0 or batch["attempted"] == 0:
                     break
+                if limit is not None and total_attempted >= limit:
+                    break
                 # A failed item must not be retried indefinitely in this invocation.
                 if previous_remaining is not None and remaining >= previous_remaining:
                     break
@@ -115,7 +117,10 @@ def run(cfg, args):
                             "attempted": total_attempted, "completed": total_completed,
                             "remaining": remaining, "errors": errors}
             if errors:
-                report[name]["detail"] = "{} issues had collection errors".format(len(errors))
+                report[name]["detail"] = "{} failed requests; first: {} ({})".format(
+                    len(errors), errors[0]["issue"], errors[0]["detail"])
+            elif remaining and limit is not None and total_attempted >= limit:
+                report[name]["detail"] = "Requested limit of {} attempts reached".format(limit)
             elif remaining and previous_remaining is not None and remaining >= previous_remaining:
                 report[name]["detail"] = "Collection made no further progress"
         finally:
@@ -193,6 +198,8 @@ def run(cfg, args):
         print("Jira changelog history: {} ({} issues completed; {} remaining){}".format(
             history["coverage"], history["completed"], history["remaining"],
             "; " + history["detail"] if history.get("detail") else ""))
+        for error in history.get("errors") or []:
+            print("  {}: {}".format(error["issue"], error["detail"]))
     if report.get("jira_comments") is not None:
         comments = report["jira_comments"]
         print("Jira comments: {} ({} issues completed; {} remaining){}".format(
