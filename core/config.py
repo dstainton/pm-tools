@@ -312,6 +312,28 @@ def _validate_confluence_tree(cfg):
     for key in ("team_page_id", "root_page_id"):
         if key in block:
             _validate_page_id(f"`confluence.{key}`", block.get(key))
+    scopes = block.get("scopes")
+    if scopes is not None:
+        if not isinstance(scopes, list):
+            sys.exit("`confluence.scopes` must be a list.")
+        for index, scope in enumerate(scopes):
+            label = f"confluence.scopes[{index}]"
+            if not isinstance(scope, dict):
+                sys.exit(f"{label} must be a mapping.")
+            kind = scope.get("type")
+            if kind not in ("space", "page_tree"):
+                sys.exit(f"{label}.type must be space or page_tree.")
+            space = scope.get("space_key") or scope.get("space") or block.get("space")
+            if kind == "space" and not space:
+                sys.exit(f"{label} requires a space_key.")
+            if kind == "page_tree" and not (scope.get("page_id") or
+                                             scope.get("root_page_id") or
+                                             scope.get("title") or
+                                             scope.get("root_title")):
+                sys.exit(f"{label} requires a page_id or title.")
+            for key in ("page_id", "root_page_id"):
+                if key in scope:
+                    _validate_page_id(f"{label}.{key}", scope[key])
     skip = block.get("skip")
     if skip is not None and not (
             isinstance(skip, list) and all(isinstance(item, (str, int)) for item in skip)):
