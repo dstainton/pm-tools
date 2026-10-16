@@ -77,7 +77,7 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
             path = Path(folder) / "store.sqlite"
             with patch.object(cp.sources, "fetch_confluence_page",
                               return_value=root):
-                with patch.object(cp.sources, "list_confluence_inventory",
+                with patch.object(cp.sources, "list_confluence_page_descendants",
                                   side_effect=repeat):
                     result = cp.crawl(cfg, path, max_rows=100)
                 self.assertEqual(calls, [None, "cursor1"])
