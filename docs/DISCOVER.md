@@ -136,4 +136,15 @@ Run `pm discover --concept-graph --project APS --export`. This first, determinis
 
 ### Optional local-model graph review
 
-To evaluate explicit typed graph edges with a local OpenAI-compatible chat endpoint, set `PM_LOCAL_MODEL_URL` to the full localhost HTTP chat completions URL and `PM_LOCAL_MODEL_NAME` to the locally loaded model identifier. Then run `pm discover --concept-graph-model --project APS --export`. This makes **no remote model calls**: non-localhost URLs are rejected. The opt-in reviewer sends up to eight cited excerpts per graph edge and reviews the first 20 ranked typed edges. Responses must be valid JSON, use a controlled relationship type, and cite only the provided source references. Invalid or unavailable model responses are recorded as unresolved errors rather than accepted. Model descriptions are untrusted candidate interpretations, never confirmed facts, and no registry or configuration is modified. This initial stage reviews explicit graph edges only, not every co-occurring term pair; semantic candidate discovery remains separate future work. Never expose the local endpoint to untrusted networks.
+Run `pm discover --concept-graph-model --project APS --export` to review cited
+candidate edges with the **existing** `model:` configuration in
+`~/.pm-tools/config.yaml`. There is no separate model setup. The reviewer
+calls `core.model.call_model`, sharing the existing endpoint, model ID,
+authentication, timeout, JSON sampling, non-thinking settings, run budget, and
+model cache. It reviews up to 20 candidate edges and requests structured
+relationship proposals grounded in the supplied citations. All classifications
+remain unconfirmed; invalid responses are marked unresolved and no confirmed
+concept registry or product configuration changes. The configured inference
+endpoint should remain local, as with other pm-tools model operations. This
+stage classifies existing explicit graph candidates; it does not yet discover
+new relationships from unstructured narrative.
