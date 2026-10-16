@@ -121,3 +121,7 @@ Run `pm discover --concept-clusters --project APS --export` after `--alias-candi
 ### Contextual terminology relationship proposals
 
 `pm discover --term-relationships --project APS --export` scans previously indexed Jira and Confluence text for explicit, sentence-bounded wording such as `APS P2P (formerly SDX)`, `X renamed to Y`, and `X replaces Y`. It returns cited, unconfirmed relationships with verbatim evidence excerpts, counts, and original project scope. Co-occurrence alone never implies equivalence. The tool does not automatically adopt a rename or update any confirmed alias mapping. Results are candidates for human review, not semantic similarity scores. The discovery summary distinguishes this offline evidence analysis from live API retrieval.
+
+### Candidate terminology evidence evaluation
+
+Run `pm discover --evaluate-terms --project APS --export` to generate conservative terminology pairs from explicit rename/replacement claims and competing acronym expansions in the local indexed registry. For each pair, a bounded offline scan retrieves passages mentioning both terms, preserves Jira/Confluence citations, and flags explicit claims, possible distinctions, and co-occurrence. Contradictory claims yield `conflicting_evidence`. All classifications are **unconfirmed evidence triage**, not semantic equivalence or automated name adoption. A local language-model classification stage and broader candidate generation from historical references remain future work. The default caps are 100 pairs and 8 evidence passages per pair.

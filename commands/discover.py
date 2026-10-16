@@ -207,6 +207,18 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
+    if getattr(args, "evaluate_terms", False):
+        from core import discovery_term_evaluation, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.isfile(db_file):
+            raise SystemExit("Local evidence index missing; index Jira or Confluence first.")
+        progress.start("Evaluating cited terminology candidates")
+        try:
+            report["term_evaluations"] = discovery_term_evaluation.evaluate(
+                db_file, project=getattr(args, "project", None))
+        finally:
+            progress.finish()
     if getattr(args, "term_relationships", False):
         from core import discovery_term_relationships, paths
         import os
@@ -261,6 +273,13 @@ def run(cfg, args):
                 print("  Incomplete scope: {} ({})".format(
                     scope.get("space") or scope.get("root_id"),
                     scope.get("detail") or scope["status"]))
+    if report.get("term_evaluations") is not None:
+        item = report["term_evaluations"]
+        print("Terminology candidate evaluations: {}".format(item["pairs_generated"]))
+        for entry in item["evaluations"]:
+            print("  {} <> {} [{}; {} cited passages; {}]".format(
+                entry["a"], entry["b"], entry["assessment"],
+                entry["evidence_count"], entry["project"]))
     if report.get("term_relationships") is not None:
         item = report["term_relationships"]
         print("Offline source evidence: {} indexed documents examined (not live retrieval)".format(
@@ -360,6 +379,14 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("term_evaluations") is not None:
+                stream.write("\n## Unconfirmed terminology evidence evaluations\n\n")
+                for item in report["term_evaluations"]["evaluations"]:
+                    stream.write("- {} <> {}: {} [{}]\n".format(
+                        item["a"], item["b"], item["assessment"], item["project"]))
+                    for evidence in item["evidence"]:
+                        stream.write("  - {} [{}]: {}\n".format(
+                            evidence["citation"], evidence["signal"], evidence["excerpt"]))
             if report.get("term_relationships") is not None:
                 stream.write("\n## Unconfirmed terminology relationships\n\n")
                 for relation in report["term_relationships"]["relationships"]:
