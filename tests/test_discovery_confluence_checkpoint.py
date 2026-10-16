@@ -42,7 +42,7 @@ class CheckpointTests(unittest.TestCase):
             finally:
                 db.close()
 
-    def test_tree_does_not_store_siblings(self):
+    def test_tree_does_not_discard_server_filtered_results_when_ancestors_are_incomplete(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "store.sqlite"
             cfg = {"confluence": {"scopes": [
@@ -56,11 +56,12 @@ class CheckpointTests(unittest.TestCase):
                                   return_value=(rows, False)):
                     result = cp.crawl(cfg, path)
             self.assertEqual(result[0]["status"], "complete")
+            self.assertEqual(result[0]["ancestry_metadata_warnings"], 1)
             db = sqlite3.connect(str(path))
             try:
                 ids = {x[0] for x in db.execute(
                     "SELECT content_id FROM confluence_inventory_items")}
-                self.assertEqual(ids, {"1", "2"})
+                self.assertEqual(ids, {"1", "2", "3"})
             finally:
                 db.close()
 
