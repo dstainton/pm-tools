@@ -316,7 +316,9 @@ def run(cfg, args):
                 edge["project"], edge["independent_sources"]))
     if report.get("model_graph_review") is not None:
         item = report["model_graph_review"]
-        print("Local model reviewed {} of {} typed edges (unconfirmed)".format(
+        print("Contextual candidates: {} (not yet confirmed)".format(
+            len(report.get("contextual_candidates", []))))
+        print("Local model reviewed {} of {} evidence candidates (unconfirmed)".format(
             item["reviewed"], item["total_edges"]))
         for edge in item["results"]:
             print("  {} -> {}: {} [{}]".format(
@@ -448,6 +450,8 @@ def run(cfg, args):
             if report.get("model_graph_review") is not None:
                 item = report["model_graph_review"]
                 stream.write("\n## Local model review (unconfirmed)\n\n")
+                stream.write("- Contextual candidates generated: {}\n".format(
+                    len(report.get("contextual_candidates", []))))
                 stream.write("- Model: {}. Reviewed {} of {} edges.\n".format(
                     item["model_name"], item["reviewed"], item["total_edges"]))
                 for edge in item["results"]:
