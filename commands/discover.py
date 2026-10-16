@@ -1,4 +1,5 @@
 """Read-only discovery of configured products and workstreams."""
+import json
 from core import discovery, output, progress
 
 
@@ -207,7 +208,8 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
-    if getattr(args, "concept_graph", False) or getattr(args, "concept_graph_model", False):
+    if (getattr(args, "concept_graph", False) or getattr(args, "concept_graph_model", False)
+            or getattr(args, "concept_graph_thinking_compare", False)):
         from core import discovery_concept_graph, paths
         import os
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
@@ -219,7 +221,8 @@ def run(cfg, args):
                 db_file, project=getattr(args, "project", None))
         finally:
             progress.finish()
-    if getattr(args, "concept_graph_model", False):
+    if (getattr(args, "concept_graph_model", False)
+            or getattr(args, "concept_graph_thinking_compare", False)):
         from core import discovery_local_model
         progress.start("Reviewing source-cited relationships with local model")
         try:
@@ -234,8 +237,13 @@ def run(cfg, args):
                      (e["project"], frozenset((e["from"].casefold(), e["to"].casefold())))
                      not in seen]
             review_graph = dict(report["concept_graph"], relationships=existing + extra)
-            report["model_graph_review"] = discovery_local_model.review(
-                review_graph, cfg, max_edges=40)
+            if getattr(args, "concept_graph_thinking_compare", False):
+                from core import discovery_thinking_comparison
+                report["thinking_comparison"] = discovery_thinking_comparison.compare(
+                    review_graph, cfg, max_edges=8)
+            else:
+                report["model_graph_review"] = discovery_local_model.review(
+                    review_graph, cfg, max_edges=40)
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
@@ -314,6 +322,15 @@ def run(cfg, args):
             print("  {} --{}--> {} [{}; {} independent source(s)]".format(
                 edge["from"], edge["type"], edge["to"],
                 edge["project"], edge["independent_sources"]))
+    if report.get("thinking_comparison") is not None:
+        comparison = report["thinking_comparison"]
+        print("Thinking comparison: {} candidates, same evidence, no cached responses".format(
+            comparison["reviewed"]))
+        for mode in ("off", "on"):
+            stats = comparison["modes"][mode]
+            print("  {}: {} valid, {} repaired, {} failures, {:.1f}s".format(
+                mode, stats["valid"], stats["repaired"], stats["failures"], stats["seconds"]))
+        print("  Different relationships: {}".format(comparison["different_types"]))
     if report.get("model_graph_review") is not None:
         item = report["model_graph_review"]
         print("Contextual candidates: {} (not yet confirmed)".format(
@@ -447,6 +464,9 @@ def run(cfg, args):
                     for evidence in edge["evidence"]:
                         stream.write("  - {}: {}\n".format(
                             evidence["citation"], evidence["excerpt"]))
+            if report.get("thinking_comparison") is not None:
+                stream.write("\n## Thinking on/off comparison (unconfirmed)\n\n")
+                stream.write("```json\n" + json.dumps(report["thinking_comparison"], indent=2) + "\n```\n")
             if report.get("model_graph_review") is not None:
                 item = report["model_graph_review"]
                 stream.write("\n## Local model review (unconfirmed)\n\n")
