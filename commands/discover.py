@@ -224,7 +224,7 @@ def run(cfg, args):
         progress.start("Reviewing source-cited relationships with local model")
         try:
             report["model_graph_review"] = discovery_local_model.review(
-                report["concept_graph"])
+                report["concept_graph"], cfg)
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
