@@ -35,7 +35,7 @@ class FullConfluenceIndexTests(unittest.TestCase):
                             page_id + "</p>"}}}
             with patch.object(checkpoint.sources, "fetch_confluence_page",
                               side_effect=fetch), \
-                 patch.object(checkpoint.sources, "list_confluence_inventory",
+                 patch.object(checkpoint.sources, "list_confluence_page_descendants",
                               side_effect=pages), \
                  patch.object(indexer.sources, "list_confluence_comments",
                               return_value=([], False)):
