@@ -4,6 +4,7 @@ Uses identical candidate edges and bypasses response cache to avoid mode leakage
 Results remain unconfirmed. This does not establish model thinking capability.
 """
 import time
+from collections import Counter
 
 from core import discovery_local_model
 
@@ -32,6 +33,11 @@ def compare(graph, cfg, max_edges=8):
             "valid": sum(x.get("status") != "model_error" for x in outputs[label]),
             "repaired": sum(x.get("repair_attempted") is True for x in outputs[label]),
             "failures": sum(x.get("status") == "model_error" for x in outputs[label]),
+            "first_pass_valid": sum(x.get("first_pass_valid") is True
+                                    for x in outputs[label]),
+            "repair_reasons": dict(Counter(x.get("repair_reason", "unknown")
+                                           for x in outputs[label]
+                                           if x.get("repair_attempted"))),
             "seconds": round(time.monotonic() - started, 2),
         }
     comparisons = []
@@ -39,7 +45,10 @@ def compare(graph, cfg, max_edges=8):
         comparisons.append({
             "from": edge["from"], "to": edge["to"],
             "project": edge["project"],
-            "evidence_citations": [x["citation"] for x in (edge.get("evidence") or [])[:8]],
+            "evidence": [{"citation": x["citation"],
+                          "excerpt": x.get("excerpt", "")[:500],
+                          "relationship_signal": x.get("relationship_signal")}
+                         for x in (edge.get("evidence") or [])[:8]],
             "off": off, "on": on,
         })
     return {
@@ -50,5 +59,6 @@ def compare(graph, cfg, max_edges=8):
         "different_types": sum(
             item["off"].get("type") != item["on"].get("type") for item in comparisons),
         "comparisons": comparisons,
+        "thinking_verification": "unverified: enable_thinking request does not prove the server honoured the setting",
         "limitation": "Different outcomes are not proof of greater accuracy; manually assess evidence support.",
     }
