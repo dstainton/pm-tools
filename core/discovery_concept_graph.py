@@ -89,9 +89,9 @@ def discover(db_path, project=None, display_limit=100):
     identities.sort(key=lambda i: (i["project"] or "", i["canonical"].casefold()))
     return {
         "identity_total": len(identities),
-        "identities": identities[:display_limit],
+        "identities": identities,
         "relationship_total": len(relations),
-        "relationships": relations[:display_limit],
+        "relationships": relations,
         "identity_ambiguous_count": sum(bool(i["ambiguous_aliases"]) for i in identities),
         "method": "cited_candidate_graph_no_auto_confirmation",
     }
