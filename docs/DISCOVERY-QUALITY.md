@@ -27,6 +27,24 @@ the same eight candidates through two requested backend settings. It does not
 prove that the server honours its thinking flag. It is not a prerequisite for
 normal discovery.
 
+## Index scoped Confluence documents
+
+First populate the offline source index:
+
+```powershell
+pm discover --confluence-crawl --index-confluence --project APS
+```
+
+The combined command resumes checkpointed inventories within authorized
+page-tree scopes and indexes the resulting pages. It reports incomplete
+coverage rather than claiming that a partial collection is exhaustive.
+A standalone index command prefers a matching existing checkpoint.
+
+When all authorized Confluence scopes are page trees and the installation
+has exactly one configured Jira project, these documents are associated
+with that project for filtered discovery. For whole-space or multi-project
+scopes, no such association is inferred. Inspect the reported coverage.
+
 ## Trust boundaries
 
 1. The configured products and workstreams are **configuration facts**, not
