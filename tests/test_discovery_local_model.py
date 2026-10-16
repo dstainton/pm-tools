@@ -31,6 +31,16 @@ class LocalModelTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 discovery_local_model.classify(self.edge, self.cfg["model"])
 
+    def test_citation_outside_submitted_evidence_is_rejected(self):
+        edge = dict(self.edge, evidence=[
+            {"citation": "jira:APS-" + str(i), "excerpt": "Relevant passage."}
+            for i in range(10)])
+        answer = {"type": "related_to", "citations": ["jira:APS-9"],
+                  "confidence": "medium", "rationale": "Unsupported selection."}
+        with patch.object(model, "call_model", return_value=json.dumps(answer)):
+            with self.assertRaisesRegex(ValueError, "eight supplied"):
+                discovery_local_model.classify(edge, self.cfg["model"])
+
     def test_review_reuses_existing_model_settings(self):
         with patch.object(discovery_local_model, "classify",
                           return_value={"status": "no_evidence", "type": "unresolved",
