@@ -288,10 +288,10 @@ def run(cfg, args):
     if report.get("concept_graph") is not None:
         graph = report["concept_graph"]
         print("Candidate concept identities: {} (showing {})".format(
-            graph["identity_total"], len(graph["identities"])))
+            graph["identity_total"], min(100, len(graph["identities"]))))
         print("Typed candidate relationships: {} (showing {})".format(
-            graph["relationship_total"], len(graph["relationships"])))
-        for edge in graph["relationships"]:
+            graph["relationship_total"], min(100, len(graph["relationships"]))))
+        for edge in graph["relationships"][:100]:
             print("  {} --{}--> {} [{}; {} independent source(s)]".format(
                 edge["from"], edge["type"], edge["to"],
                 edge["project"], edge["independent_sources"]))
