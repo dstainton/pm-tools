@@ -1081,6 +1081,44 @@ def _confluence_block(cfg):
     return cfg or {}
 
 
+def list_confluence_page_descendants(cfg, page_id, cursor=None, limit=100):
+    """One Confluence Cloud v2 cursor-paginated tree page.
+
+    The v2 descendants endpoint includes all descendant depths. Follow only
+    the opaque cursor embedded in Atlassian's next link, never an arbitrary
+    server-supplied URL. It also returns folders and other content types;
+    callers should index only type=page.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    block = _confluence_block(cfg)
+    if not block.get("base_url"):
+        raise ValueError("Confluence connection missing")
+    if not str(page_id).isdigit():
+        raise ValueError("Confluence root page ID must be numeric")
+    params = {"limit": limit}
+    if cursor:
+        params["cursor"] = cursor
+    url = "{}/api/v2/pages/{}/descendants".format(
+        block["base_url"].rstrip("/"), page_id)
+    response = send(
+        "GET", url, params=params,
+        auth=(block["email"], block["api_token"]),
+        headers={"Accept": "application/json"}, timeout=60)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+        raise ValueError("Invalid Confluence v2 descendants response")
+    next_url = (payload.get("_links") or {}).get("next")
+    next_cursor = None
+    if next_url:
+        values = parse_qs(urlparse(next_url).query).get("cursor") or []
+        if len(values) != 1 or not values[0]:
+            raise ValueError("Confluence v2 descendants continuation lacks cursor")
+        next_cursor = values[0]
+    return payload["results"], next_cursor
+
+
 def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None, content_types=None):
     """One cached page of Confluence metadata plus server continuation flag.
 

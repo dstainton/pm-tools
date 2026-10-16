@@ -37,19 +37,19 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
                 db.commit()
             root = {"id": "100", "title": "Team", "space": {"key": "POSM"}}
             starts = []
-            def fetch(_cfg, _space, start=0, limit=25, ancestor_id=None):
-                starts.append(start)
+            def fetch(_cfg, page_id, cursor=None, limit=100):
+                starts.append(cursor)
                 return ([
-                    {"id": "200", "title": "Deep A",
+                    {"id": "200", "type": "page", "title": "Deep A",
                      "ancestors": [{"id": "999"}]},
-                    {"id": "201", "title": "Deep B", "ancestors": []},
-                ], False)
+                    {"id": "201", "type": "page", "title": "Deep B", "ancestors": []},
+                ], None)
             with patch.object(cp.sources, "fetch_confluence_page",
                               return_value=root):
-                with patch.object(cp.sources, "list_confluence_inventory",
+                with patch.object(cp.sources, "list_confluence_page_descendants",
                                   side_effect=fetch):
                     result = cp.crawl(cfg, path)
-            self.assertEqual(starts, [0])
+            self.assertEqual(starts, [None])
             self.assertEqual(result[0]["status"], "complete")
             self.assertTrue(result[0]["legacy_checkpoint_restarted"])
             self.assertEqual(result[0]["new_pages"], 2)
@@ -68,18 +68,19 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
             {"type": "page_tree", "space_key": "POSM", "page_id": "100"}]}}
         root = {"id": "100", "title": "Team", "space": {"key": "POSM"}}
         calls = []
-        def repeat(_cfg, _space, start=0, limit=25, ancestor_id=None):
-            calls.append(start)
-            return ([{"id": str(i), "title": "Page " + str(i),
-                      "ancestors": []} for i in range(200, 225)], True)
+        def repeat(_cfg, page_id, cursor=None, limit=100):
+            calls.append(cursor)
+            return ([{"id": str(i), "type": "page", "title": "Page " + str(i),
+                      "ancestors": []} for i in range(200, 225)],
+                    "cursor1" if cursor is None else "cursor2")
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "store.sqlite"
             with patch.object(cp.sources, "fetch_confluence_page",
                               return_value=root):
-                with patch.object(cp.sources, "list_confluence_inventory",
+                with patch.object(cp.sources, "list_confluence_page_descendants",
                                   side_effect=repeat):
                     result = cp.crawl(cfg, path, max_rows=100)
-                self.assertEqual(calls, [0, 25])
+                self.assertEqual(calls, [None, "cursor1"])
                 self.assertEqual(result[0]["status"], "incomplete")
                 self.assertIn("Repeated Confluence results", result[0]["error"])
                 self.assertEqual(result[0]["offset"], 25)
@@ -111,15 +112,15 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
             return [{"id": identifier} for identifier, name in names.items()
                     if name == title]
         calls = []
-        def search_pages(_cfg, space, start=0, limit=25, ancestor_id=None):
-            calls.append((start, ancestor_id))
-            self.assertEqual(ancestor_id, "100")
+        def search_pages(_cfg, page_id, cursor=None, limit=100):
+            calls.append((cursor, page_id))
+            self.assertEqual(page_id, "100")
             return ([
-                {"id": "200", "title": names["200"], "ancestors": []},
-                {"id": "300", "title": names["300"],
+                {"id": "200", "type": "page", "title": names["200"], "ancestors": []},
+                {"id": "300", "type": "page", "title": names["300"],
                  "ancestors": [{"id": "999"}]},
-                {"id": "400", "title": "Nested architecture page",
-                 "ancestors": []}], False)
+                {"id": "400", "type": "page", "title": "Nested architecture page",
+                 "ancestors": []}], None)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "store.sqlite"
             # The SDX scope already has a broken v1 checkpoint, as in APS.
@@ -137,10 +138,10 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
                               side_effect=fetch):
                 with patch.object(cp.sources, "search_confluence_by_title",
                                   side_effect=search):
-                    with patch.object(cp.sources, "list_confluence_inventory",
+                    with patch.object(cp.sources, "list_confluence_page_descendants",
                                       side_effect=search_pages):
                         results = cp.crawl(cfg, path)
-            self.assertEqual(calls, [(0, "100")])
+            self.assertEqual(calls, [(None, "100")])
             self.assertEqual([x["status"] for x in results],
                              ["complete", "complete", "complete"])
             self.assertEqual([x.get("covered_by") for x in results[1:]],

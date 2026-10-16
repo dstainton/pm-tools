@@ -48,12 +48,12 @@ class CheckpointTests(unittest.TestCase):
             cfg = {"confluence": {"scopes": [
                 {"type": "page_tree", "space_key": "DOC", "page_id": "1"}]}}
             root = {"id": "1", "title": "Root", "space": {"key": "DOC"}}
-            rows = [{"id": "2", "ancestors": [{"id": "1"}]},
-                    {"id": "3", "ancestors": [{"id": "999"}]}]
+            rows = [{"id": "2", "type": "page", "ancestors": [{"id": "1"}]},
+                    {"id": "3", "type": "page", "ancestors": [{"id": "999"}]}]
             with patch.object(cp.sources, "fetch_confluence_page",
                               return_value=root):
-                with patch.object(cp.sources, "list_confluence_inventory",
-                                  return_value=(rows, False)):
+                with patch.object(cp.sources, "list_confluence_page_descendants",
+                                  return_value=(rows, None)):
                     result = cp.crawl(cfg, path)
             self.assertEqual(result[0]["status"], "complete")
             self.assertEqual(result[0]["ancestry_metadata_warnings"], 1)
