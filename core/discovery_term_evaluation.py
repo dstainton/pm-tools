@@ -94,7 +94,7 @@ def generate(db_path, project=None, max_pairs=100):
             terms = known.get(scope, {})
             observed = [name for lower, name in terms.items() if
                         _phrase(text, name)]
-            codes = set(re.findall(r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\\s+[A-Z]{1,5}[0-9]{1,3})?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])", text))
+            codes = set(re.findall(r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3})?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])", text))
             for first in observed[:20]:
                 for second in sorted(codes)[:30]:
                     if first.casefold() == second.casefold():
@@ -143,7 +143,7 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
                 spans = _passages(text, a, b)
                 if not spans:
                     for term in (a, b):
-                        hit = re.search(r"(?<!\\w)" + re.escape(term) + r"(?!\\w)", text, re.I)
+                        hit = re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text, re.I)
                         if hit:
                             spans = [text[max(0, hit.start()-140):hit.end()+180]]
                             break
@@ -151,13 +151,13 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
                 signal = "single_term_mention"
                 if _phrase(excerpt, a) and _phrase(excerpt, b):
                     signal = "co_occurrence_only"
-                    sentences = re.split(r"(?<=[.!?])\\s+|[\\r\\n]+", excerpt)
+                    sentences = re.split(r"(?<=[.!?])\s+|[\r\n]+", excerpt)
                     matches = [m for sentence in sentences
                                for m in discovery_term_relationships._matches(sentence)]
                     if any({x.casefold(), y.casefold()} == {a.casefold(), b.casefold()}
                            for _, x, y in matches):
                         signal = "explicit_relationship"
-                    elif re.search(r"\\b(?:distinct|different|not the same|unrelated|separate)\\b",
+                    elif re.search(r"\b(?:distinct|different|not the same|unrelated|separate)\b",
                                    excerpt, re.I):
                         signal = "possible_distinction"
                 candidates.append({
