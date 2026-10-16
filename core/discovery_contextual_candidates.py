@@ -5,6 +5,15 @@ from collections import defaultdict
 
 from core import discovery_fts, discovery_concept_clusters
 
+# Signals prioritize passages worth reviewing, not confirmed relationships.
+RELATION_SIGNAL = re.compile(
+    r"\b(?:integrat(?:es?|ed|ion)|depend(?:s|ed|ency)?|consum(?:es?|ed)|"
+    r"provid(?:es?|ed)|deliver(?:s|ed)|part of|component of|"
+    r"connect(?:s|ed)|replac(?:es?|ed)|formerly|renam(?:es?|ed)|"
+    r"migrat(?:es?|ed|ion)|uses?|upstream|downstream|"
+    r"calls?|exchang(?:es?|ed)|publish(?:es|ed))\b", re.I)
+
+
 
 def candidates(db_path, project=None, limit=30):
     if limit < 1:
@@ -53,11 +62,15 @@ def candidates(db_path, project=None, limit=30):
                             "status": "candidate", "evidence": []})
                         if citation not in {x["citation"] for x in obj["evidence"]}:
                             obj["evidence"].append({"citation": citation, "kind": kind,
-                                "event_time": when, "excerpt": fragment.strip()})
+                                "event_time": when, "excerpt": fragment.strip(),
+                                "relationship_signal": bool(RELATION_SIGNAL.search(fragment))})
         output = list(matches.values())
         for item in output:
             item["independent_sources"] = len(item["evidence"])
-        output.sort(key=lambda x: (-x["independent_sources"], x["from"], x["to"]))
+            item["signal_sources"] = sum(bool(e.get("relationship_signal"))
+                                         for e in item["evidence"])
+        output.sort(key=lambda x: (-x["signal_sources"], -x["independent_sources"],
+                                   x["from"], x["to"]))
         return output[:limit]
     finally:
         db.close()
