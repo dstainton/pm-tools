@@ -38,7 +38,7 @@ class LocalModelTests(unittest.TestCase):
         answer = {"type": "related_to", "citations": ["jira:APS-9"],
                   "confidence": "medium", "rationale": "Unsupported selection."}
         with patch.object(model, "call_model", return_value=json.dumps(answer)):
-            with self.assertRaisesRegex(ValueError, "eight supplied"):
+            with self.assertRaisesRegex(ValueError, "supplied evidence excerpts"):
                 discovery_local_model.classify(edge, self.cfg["model"])
 
     def test_invalid_json_gets_one_repair_turn(self):
