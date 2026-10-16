@@ -21,7 +21,7 @@ def _decode(text):
     return data
 
 
-def classify(edge, model_cfg):
+def classify(edge, model_cfg, use_cache=True):
     """Use pm-tools' shared model client, caching, timeout and sampling."""
     from core import model
 
@@ -60,7 +60,8 @@ def classify(edge, model_cfg):
     )
     raw = model.call_model(
         model_cfg, instruction, json.dumps(prompt, ensure_ascii=False),
-        temperature=model_cfg.get("json_temperature", 0.2))
+        temperature=model_cfg.get("json_temperature", 0.2),
+        use_cache=use_cache)
     try:
         result = _validate(model.strip_thinking(raw), refs)
         result["repair_attempted"] = False

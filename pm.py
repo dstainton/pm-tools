@@ -731,6 +731,8 @@ def build_parser():
                             help="Index authorized Confluence page bodies with explicit coverage")
     p_discover.add_argument("--index-jira", action="store_true",
                             help="Index stored Jira issues, comments and history offline")
+    p_discover.add_argument("--concept-graph-thinking-compare", action="store_true",
+                            help="Compare thinking on/off using the same cited candidate evidence")
     p_discover.add_argument("--concept-graph-model", action="store_true",
                             help="Review cited typed edges with opt-in localhost LLM")
     p_discover.add_argument("--concept-graph", action="store_true",
