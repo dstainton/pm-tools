@@ -12,6 +12,15 @@ from core import discovery_concept_clusters, discovery_fts, discovery_term_relat
 from core.discovery_identity import IdentityIndex
 from core.discovery_contextual_candidates import _relationship
 
+# Capture explicit dependencies to external tokens absent from the registry.
+EXPLICIT_TOKENS = (
+    ("depends_on", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+depends\s+on\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
+    ("integrates_with", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+integrates\s+with\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
+    ("part_of", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+is\s+part\s+of\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
+    ("delivered_by", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+is\s+delivered\s+by\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
+)
+
+
 
 def discover(db_path, project=None, display_limit=100):
     if display_limit < 1:
@@ -57,6 +66,10 @@ def discover(db_path, project=None, display_limit=100):
             for fragment in [title or ""] + re.split(r"(?<=[.!?])\s+|[\r\n]+", body or ""):
                 if not 15 <= len(fragment) <= 500:
                     continue
+                for relation, pattern in EXPLICIT_TOKENS:
+                    for match in pattern.finditer(fragment):
+                        add(scope, match.group("a"), match.group("b"), relation,
+                            cite, kind, when, fragment)
                 hits = identity.mentions(scope, fragment)
                 if len(hits) > 6:
                     continue
