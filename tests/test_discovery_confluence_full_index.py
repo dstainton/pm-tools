@@ -19,13 +19,14 @@ class FullConfluenceIndexTests(unittest.TestCase):
             path = Path(root) / "index.sqlite"
             cfg = {"jira": {"project": "APS"}, "confluence": {"scopes": [
                 {"type": "page_tree", "space_key": "POSM", "page_id": "100"}]}}
-            def pages(_cfg, _space, start=0, limit=25, ancestor_id=None):
-                self.assertEqual(ancestor_id, "100")
+            def pages(_cfg, page_id, cursor=None, limit=100):
+                self.assertEqual(page_id, "100")
+                start = int(cursor) if cursor else 0
                 rows = [{"id": str(n + 101), "title": "Item " + str(n),
                          "type": "page", "ancestors": [{"id": "100"}]}
                         for n in range(start, min(125, start + limit))]
-                return rows, start + len(rows) < 125
-
+                next_cursor = str(start + len(rows)) if start + len(rows) < 125 else None
+                return rows, next_cursor
             def fetch(_cfg, page_id):
                 return {"id": page_id, "title": "Page " + page_id,
                         "type": "page", "space": {"key": "POSM"},
