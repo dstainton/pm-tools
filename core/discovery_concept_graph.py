@@ -1,16 +1,19 @@
-"""Read-only, cited candidate concept graph from indexed evidence.
+"""Read-only, cited concept relationships from offline indexed documents.
 
-Identity hypotheses are separate from typed relationships. No candidate is
-promoted into the confirmed registry and co-occurrence cannot assert ownership.
+Candidate identity is canonical within one project. Strict textual relation
+patterns, rather than co-occurrence, generate typed candidate edges. No
+relationship becomes a confirmed fact or changes user configuration.
 """
 import re
 import sqlite3
 from collections import defaultdict
 
 from core import discovery_concept_clusters, discovery_fts, discovery_term_relationships
+from core.discovery_identity import IdentityIndex
+from core.discovery_contextual_candidates import _relationship
 
-
-RELATIONS = (
+# Capture explicit dependencies to external tokens absent from the registry.
+EXPLICIT_TOKENS = (
     ("depends_on", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+depends\s+on\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
     ("integrates_with", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+integrates\s+with\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
     ("part_of", re.compile(r"\b(?P<a>[A-Z][A-Z0-9]{1,9})\s+is\s+part\s+of\s+(?P<b>[A-Z][A-Z0-9]{1,9})\b")),
@@ -18,80 +21,86 @@ RELATIONS = (
 )
 
 
-def _token(text, term):
-    return re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text, re.I) is not None
-
 
 def discover(db_path, project=None, display_limit=100):
-    """Return complete candidate counts and bounded display, with citations."""
     if display_limit < 1:
         raise ValueError("display_limit must be positive")
     clusters = discovery_concept_clusters.clusters(db_path, project=project, limit=None)
-    identities = []
-    aliases = defaultdict(set)
-    for item in clusters:
-        identities.append({
-            "project": item["project"], "canonical": item["canonical"],
-            "aliases": item["aliases"], "status": item["review_status"],
-            "ambiguous_aliases": item["ambiguous_aliases"],
-            "citations": item["citations"], "concept_ids": item["concept_ids"]})
-        for term in item["aliases"]:
-            aliases[(item["project"], term.casefold())].add(item["canonical"])
+    identity = IdentityIndex(clusters)
+    identities = [{
+        "project": item["project"], "canonical": item["canonical"],
+        "aliases": item["aliases"], "status": item["review_status"],
+        "ambiguous_aliases": item["ambiguous_aliases"],
+        "citations": item["citations"], "concept_ids": item["concept_ids"]}
+        for item in clusters]
     edges = {}
+    documents = 0
+    sources = defaultdict(int)
+
+    def add(scope, a, b, relation, citation, kind, when, excerpt):
+        a, b = identity.resolve(scope, a), identity.resolve(scope, b)
+        if a.casefold() == b.casefold():
+            return
+        key = (scope, a.casefold(), b.casefold(), relation)
+        item = edges.setdefault(key, {
+            "project": scope, "from": a, "to": b, "type": relation,
+            "status": "candidate", "evidence": []})
+        if citation not in {e["citation"] for e in item["evidence"]}:
+            item["evidence"].append({
+                "citation": citation, "kind": kind, "event_time": when,
+                "excerpt": excerpt.strip()[:400]})
+
     db = sqlite3.connect(str(db_path))
     try:
         discovery_fts._init(db)
-        sql = """SELECT project, citation, kind, event_time, title, body
+        sql = """SELECT project, source, citation, kind, event_time, title, body
                  FROM discovery_fts_documents"""
         args = ()
         if project:
             sql += " WHERE project=?"
             args = (project,)
-        for scope, cite, kind, when, title, body in db.execute(sql, args):
-            # Titles are especially useful for structural/operational cues;
-            # source bodies may also state relationships explicitly.
+        sql += " ORDER BY project, citation"
+        for scope, source, cite, kind, when, title, body in db.execute(sql, args):
+            documents += 1
+            sources[source] += 1
             for fragment in [title or ""] + re.split(r"(?<=[.!?])\s+|[\r\n]+", body or ""):
-                if len(fragment) > 500:
+                if not 15 <= len(fragment) <= 500:
                     continue
-                for relation, pattern in RELATIONS:
+                for relation, pattern in EXPLICIT_TOKENS:
                     for match in pattern.finditer(fragment):
-                        a, b = match.group("a"), match.group("b")
-                        if a == b:
+                        add(scope, match.group("a"), match.group("b"), relation,
+                            cite, kind, when, fragment)
+                hits = identity.mentions(scope, fragment)
+                if len(hits) > 6:
+                    continue
+                for i, first in enumerate(hits):
+                    for second in hits[i + 1:]:
+                        if first[2].casefold() == second[2].casefold():
                             continue
-                        key = (scope, a, b, relation)
-                        edge = edges.setdefault(key, {
-                            "project": scope, "from": a, "to": b,
-                            "type": relation, "status": "candidate",
-                            "evidence": []})
-                        if not any(e["citation"] == cite for e in edge["evidence"]):
-                            edge["evidence"].append({
-                                "citation": cite, "kind": kind, "event_time": when,
-                                "excerpt": fragment.strip()[:300]})
-        # The explicit relationship parser remains a separate source of edges.
+                        relation, strength = _relationship(fragment, first, second)
+                        if strength == 3 and relation:
+                            add(scope, first[2], second[2], relation, cite,
+                                kind, when, fragment)
+        # Explicit rename records can contain previously unknown names; they
+        # are hypotheses and must not be auto-registered as aliases.
         for entry in discovery_term_relationships.propose(
                 db_path, project=project, limit=10000)["relationships"]:
-            relation = entry["relationship"]
-            key = (entry["project"], entry["from"], entry["to"], relation)
-            edge = edges.setdefault(key, {
-                "project": entry["project"], "from": entry["from"],
-                "to": entry["to"], "type": relation,
-                "status": "candidate", "evidence": []})
             for ev in entry["evidence"]:
-                if not any(e["citation"] == ev["citation"] for e in edge["evidence"]):
-                    edge["evidence"].append(ev)
+                add(entry["project"], entry["from"], entry["to"],
+                    entry["relationship"], ev["citation"], ev.get("kind"),
+                    ev.get("event_time"), ev.get("excerpt", ""))
     finally:
         db.close()
     relations = list(edges.values())
-    for edge in relations:
-        edge["independent_sources"] = len(edge["evidence"])
+    for item in relations:
+        item["independent_sources"] = len(item["evidence"])
     relations.sort(key=lambda e: (-e["independent_sources"], e["project"] or "",
                                   e["type"], e["from"], e["to"]))
     identities.sort(key=lambda i: (i["project"] or "", i["canonical"].casefold()))
     return {
-        "identity_total": len(identities),
-        "identities": identities,
-        "relationship_total": len(relations),
-        "relationships": relations,
+        "identity_total": len(identities), "identities": identities,
+        "relationship_total": len(relations), "relationships": relations,
         "identity_ambiguous_count": sum(bool(i["ambiguous_aliases"]) for i in identities),
-        "method": "cited_candidate_graph_no_auto_confirmation",
+        "indexed_documents": documents, "indexed_source_counts": dict(sources),
+        "method": "project_scoped_canonical_candidates_with_explicit_evidence",
     }

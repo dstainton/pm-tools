@@ -39,7 +39,7 @@ class ContextualAcronymTests(unittest.TestCase):
             found = contextual.candidates("unused", project="APS")
         self.assertFalse(any("DID" in (entry["from"], entry["to"]) for entry in found))
         self.assertTrue(any(
-            set((entry["from"], entry["to"])) == {"SDX", "ADR"}
+            set((entry["from"], entry["to"])) == {"Secure data exchange", "Authoritative data register"}
             and entry["signal_sources"] == 1
             for entry in found
         ))

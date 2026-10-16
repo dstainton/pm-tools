@@ -733,6 +733,8 @@ def build_parser():
                             help="Index stored Jira issues, comments and history offline")
     p_discover.add_argument("--concept-graph-thinking-compare", action="store_true",
                             help="Compare thinking on/off using the same cited candidate evidence")
+    p_discover.add_argument("--concept-graph-max-edges", type=int, default=24,
+                            help="Maximum local-model edge reviews (default 24; all candidates still exported)")
     p_discover.add_argument("--concept-graph-model", action="store_true",
                             help="Review cited typed edges with opt-in localhost LLM")
     p_discover.add_argument("--concept-graph", action="store_true",

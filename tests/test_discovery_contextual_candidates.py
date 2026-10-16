@@ -50,7 +50,7 @@ class ContextualCandidatesTests(unittest.TestCase):
                                    "jira:OTHER-1")
                 db.commit()
             result = discovery_contextual_candidates.candidates(path, project="APS")
-            match = [x for x in result if {x["from"], x["to"]} == {"ITK", "SDX"}]
+            match = [x for x in result if {x["from"], x["to"]} == {"Integration Toolkit", "Secure Data Exchange"}]
             self.assertEqual(len(match), 1)
             self.assertEqual(match[0]["type"], "unresolved")
             self.assertEqual(match[0]["status"], "candidate")

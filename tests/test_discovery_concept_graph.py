@@ -28,7 +28,7 @@ class ConceptGraphTests(unittest.TestCase):
             result = discovery_concept_graph.discover(path, project="APS")
             self.assertEqual(result["identity_total"], 1)
             edge = next(e for e in result["relationships"] if e["type"] == "depends_on")
-            self.assertEqual((edge["from"], edge["to"]), ("ITK", "SDX"))
+            self.assertEqual((edge["from"], edge["to"]), ("Integration Toolkit", "SDX"))
             self.assertEqual(edge["independent_sources"], 2)
             self.assertEqual(edge["status"], "candidate")
             self.assertEqual({x["citation"] for x in edge["evidence"]},

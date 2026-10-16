@@ -219,6 +219,9 @@ def run(cfg, args):
         try:
             report["concept_graph"] = discovery_concept_graph.discover(
                 db_file, project=getattr(args, "project", None))
+            from core import discovery_profile_leads
+            report["profile_leads"] = discovery_profile_leads.build(
+                db_file, cfg, project=getattr(args, "project", None))
         finally:
             progress.finish()
     if (getattr(args, "concept_graph_model", False)
@@ -228,7 +231,7 @@ def run(cfg, args):
         try:
             from core import discovery_contextual_candidates
             contextual = discovery_contextual_candidates.candidates(
-                db_file, project=getattr(args, "project", None), limit=20)
+                db_file, project=getattr(args, "project", None), limit=None)
             report["contextual_candidates"] = contextual
             existing = report["concept_graph"]["relationships"]
             seen = {(e["project"], frozenset((e["from"].casefold(), e["to"].casefold())))
@@ -243,7 +246,7 @@ def run(cfg, args):
                     review_graph, cfg, max_edges=8)
             else:
                 report["model_graph_review"] = discovery_local_model.review(
-                    review_graph, cfg, max_edges=40)
+                    review_graph, cfg, max_edges=getattr(args, "concept_graph_max_edges", 24))
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
@@ -312,6 +315,15 @@ def run(cfg, args):
                 print("  Incomplete scope: {} ({})".format(
                     scope.get("space") or scope.get("root_id"),
                     scope.get("detail") or scope["status"]))
+    if report.get("profile_leads") is not None:
+        leads = report["profile_leads"]
+        print("Offline evidence: {} indexed documents ({})".format(
+            leads["indexed_documents_scanned"],
+            ", ".join("{} {}".format(v, k) for k, v in leads["indexed_source_counts"].items()) or "none"))
+        for entity in leads["entities"]:
+            print("  {} ({}): {} potentially relevant document(s), {} descriptive lead(s)".format(
+                entity["name"], entity["kind"], entity["documents_matched"],
+                len(entity["leads"])))
     if report.get("concept_graph") is not None:
         graph = report["concept_graph"]
         print("Candidate concept identities: {} (showing {})".format(
@@ -447,6 +459,27 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("profile_leads") is not None:
+                leads = report["profile_leads"]
+                stream.write("\n## Indexed evidence for product and workstream definitions\n\n")
+                stream.write("- Indexed documents scanned: {}\n".format(
+                    leads["indexed_documents_scanned"]))
+                stream.write("- Sources: {}\n".format(", ".join(
+                    "{}: {}".format(k, v) for k, v in
+                    leads["indexed_source_counts"].items()) or "none"))
+                stream.write("- These are document navigation leads, not verified ownership or purpose claims.\n")
+                for entry in leads["entities"]:
+                    stream.write("\n### {} ({}, {})\n\n".format(
+                        entry["name"], entry["kind"], entry["abbrev"]))
+                    stream.write("- Documents mentioning full name: {}\n".format(
+                        entry["documents_matched"]))
+                    for lead in entry["leads"]:
+                        stream.write("- {} [{}]: {}\n".format(
+                            lead["citation"], lead["source"],
+                            lead["excerpt"].replace("\n", " ")))
+                    if not entry["leads"]:
+                        stream.write("- No descriptive passage found in the indexed evidence.\n")
+                stream.write("\n")
             if report.get("concept_graph") is not None:
                 graph = report["concept_graph"]
                 stream.write("\n## Unconfirmed typed concept graph\n\n")
@@ -467,6 +500,18 @@ def run(cfg, args):
             if report.get("thinking_comparison") is not None:
                 stream.write("\n## Thinking on/off comparison (unconfirmed)\n\n")
                 stream.write("```json\n" + json.dumps(report["thinking_comparison"], indent=2) + "\n```\n")
+            if report.get("contextual_candidates") is not None:
+                queue = report["contextual_candidates"]
+                stream.write("\n## Contextual candidate queue (all, unconfirmed)\n\n")
+                stream.write("- {} canonical candidate pairs found; not all are reviewed by the model.\n".format(len(queue)))
+                for edge in queue:
+                    stream.write("- {} <> {} [{}; {} strong, {} signal, {} source(s)]\n".format(
+                        edge["from"], edge["to"], edge["project"],
+                        edge["strong_sources"], edge["signal_sources"],
+                        edge["independent_sources"]))
+                    for hint in edge["relationship_hints"][:5]:
+                        stream.write("  - Candidate {}: {} -> {} ({})\n".format(
+                            hint["type"], hint["from"], hint["to"], hint["citation"]))
             if report.get("model_graph_review") is not None:
                 item = report["model_graph_review"]
                 stream.write("\n## Local model review (unconfirmed)\n\n")
@@ -474,6 +519,7 @@ def run(cfg, args):
                     len(report.get("contextual_candidates", []))))
                 stream.write("- Model: {}. Reviewed {} of {} edges.\n".format(
                     item["model_name"], item["reviewed"], item["total_edges"]))
+                stream.write("- Unreviewed candidate edges: {}\n".format(item["unreviewed"]))
                 for edge in item["results"]:
                     finding = edge["model"]
                     stream.write("- {} -> {}: {} [{}]. References: {}\n".format(
