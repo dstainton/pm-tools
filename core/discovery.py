@@ -79,7 +79,7 @@ def summary(report):
              "Source coverage: " + (report["coverage"] if report.get("enriched") else
                                     ("configuration + offline indexed evidence (no live retrieval)"
                                      if any(report.get(key) is not None for key in
-                                            ("concept_clusters", "term_relationships", "term_evaluations",
+                                            ("concept_clusters", "term_relationships", "term_evaluations", "concept_graph",
                                              "alias_candidates", "evidence_matches",
                                              "concept_matches")) else
                                      "configuration only (no Jira or document retrieval)"))]
@@ -160,7 +160,7 @@ def _evidence_lines(evidence):
 
 def markdown(report):
     offline = any(report.get(key) is not None for key in
-                  ("concept_clusters", "term_relationships", "term_evaluations", "alias_candidates",
+                  ("concept_clusters", "term_relationships", "term_evaluations", "concept_graph", "alias_candidates",
                    "evidence_matches", "concept_matches"))
     lines = ["# Product and workstream discovery", "",
              ("Phase 2B: bounded source examples, not confirmed ownership."

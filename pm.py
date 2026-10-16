@@ -731,6 +731,8 @@ def build_parser():
                             help="Index authorized Confluence page bodies with explicit coverage")
     p_discover.add_argument("--index-jira", action="store_true",
                             help="Index stored Jira issues, comments and history offline")
+    p_discover.add_argument("--concept-graph", action="store_true",
+                            help="Build unconfirmed typed concept graph from indexed evidence")
     p_discover.add_argument("--evaluate-terms", action="store_true",
                             help="Evaluate candidate terminology pairs against cited offline evidence")
     p_discover.add_argument("--term-relationships", action="store_true",

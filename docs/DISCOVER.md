@@ -129,3 +129,7 @@ Run `pm discover --evaluate-terms --project APS --export` to generate conservati
 ### Contextual evidence dossiers
 
 `--evaluate-terms` additionally proposes term/code comparisons from repeated mentions within at least two independent indexed documents when one term already belongs to the candidate concept registry. This can surface transitions without explicit `formerly` wording, but **co-mentions are not proof of equivalence**. Dossiers keep a single passage per source citation, preserve dates and source types, and can include single-term context; assessment remains unconfirmed. Candidate selection and evidence retrieval are bounded, and indexed content may be incomplete or stale.
+
+### Typed candidate concept graph
+
+Run `pm discover --concept-graph --project APS --export`. This first, deterministic graph stage reads the offline candidate concept registry and indexed Jira/Confluence documents. It preserves source-backed identity aliases and detects explicit, directed relationship statements such as `ITK depends on SDX`, `X integrates with Y`, `X is part of Y`, and `X is delivered by Y`, alongside cited historical-name and replacement claims. Each edge is **unconfirmed**. Incidental co-occurrence produces no typed edge. The CLI shows up to 100 identities and edges with complete totals reported separately; no approved mappings or configuration are changed. Broad semantic interpretation, model classification and full-corpus relationship discovery are not yet implemented.
