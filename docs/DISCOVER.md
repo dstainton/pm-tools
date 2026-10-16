@@ -148,3 +148,7 @@ concept registry or product configuration changes. The configured inference
 endpoint should remain local, as with other pm-tools model operations. This
 stage classifies existing explicit graph candidates; it does not yet discover
 new relationships from unstructured narrative.
+
+### Narrative relationship discovery (experimental)
+
+When `--concept-graph-model` is enabled, discovery now also extracts up to 20 review pairs from sentences containing at least two known, project-scoped concept names or abbreviations. These are **unresolved candidates**, not deterministic relationship assertions. The existing configured local model classifies cited narrative as well as explicit graph edges (up to 40 total model requests). A model classification is never promoted automatically. Errors distinguish invalid types, unsupported citations, and other malformed fields. This improves recall but cannot prove that the model is correct; review the cited excerpts and compare with deterministic findings before accepting relationships.

@@ -54,11 +54,16 @@ def classify(edge, model_cfg):
     cited = answer.get("citations")
     confidence = answer.get("confidence")
     rationale = answer.get("rationale")
-    if relation not in TYPES or not isinstance(cited, list) or any(
-            not isinstance(x, str) or x not in refs for x in cited):
-        raise ValueError("Invalid relationship type or ungrounded citation")
-    if confidence not in ("low", "medium", "high") or not isinstance(rationale, str):
-        raise ValueError("Invalid confidence or rationale")
+    if relation not in TYPES:
+        raise ValueError("Invalid relationship type: {!r}".format(str(relation)[:70]))
+    if not isinstance(cited, list):
+        raise ValueError("Citations must be a JSON array")
+    if any(not isinstance(x, str) or x not in refs for x in cited):
+        raise ValueError("Citation not present in supplied evidence")
+    if confidence not in ("low", "medium", "high"):
+        raise ValueError("Invalid confidence value")
+    if not isinstance(rationale, str):
+        raise ValueError("Missing rationale text")
     if relation != "unresolved" and not cited:
         raise ValueError("Relationship claim needs at least one supplied citation")
     return {"status": "unconfirmed_model_proposal", "type": relation,

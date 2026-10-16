@@ -223,8 +223,19 @@ def run(cfg, args):
         from core import discovery_local_model
         progress.start("Reviewing source-cited relationships with local model")
         try:
+            from core import discovery_contextual_candidates
+            contextual = discovery_contextual_candidates.candidates(
+                db_file, project=getattr(args, "project", None), limit=20)
+            report["contextual_candidates"] = contextual
+            existing = report["concept_graph"]["relationships"]
+            seen = {(e["project"], frozenset((e["from"].casefold(), e["to"].casefold())))
+                    for e in existing}
+            extra = [e for e in contextual if
+                     (e["project"], frozenset((e["from"].casefold(), e["to"].casefold())))
+                     not in seen]
+            review_graph = dict(report["concept_graph"], relationships=existing + extra)
             report["model_graph_review"] = discovery_local_model.review(
-                report["concept_graph"], cfg)
+                review_graph, cfg, max_edges=40)
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
@@ -305,7 +316,9 @@ def run(cfg, args):
                 edge["project"], edge["independent_sources"]))
     if report.get("model_graph_review") is not None:
         item = report["model_graph_review"]
-        print("Local model reviewed {} of {} typed edges (unconfirmed)".format(
+        print("Contextual candidates: {} (not yet confirmed)".format(
+            len(report.get("contextual_candidates", []))))
+        print("Local model reviewed {} of {} evidence candidates (unconfirmed)".format(
             item["reviewed"], item["total_edges"]))
         for edge in item["results"]:
             print("  {} -> {}: {} [{}]".format(
@@ -437,6 +450,8 @@ def run(cfg, args):
             if report.get("model_graph_review") is not None:
                 item = report["model_graph_review"]
                 stream.write("\n## Local model review (unconfirmed)\n\n")
+                stream.write("- Contextual candidates generated: {}\n".format(
+                    len(report.get("contextual_candidates", []))))
                 stream.write("- Model: {}. Reviewed {} of {} edges.\n".format(
                     item["model_name"], item["reviewed"], item["total_edges"]))
                 for edge in item["results"]:
