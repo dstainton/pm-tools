@@ -47,17 +47,20 @@ scopes, no such association is inferred. Inspect the reported coverage.
 
 ## Corrected Confluence crawl and recovery
 
-When updating from the earlier crawler, incomplete v1 inventory cursors
-(including unexpectedly large offsets with few saved pages) are reset to zero
-for a one-time verified re-scan. The stored unique page records and existing
-full-text index remain intact. Completed scopes are not reset.
+Previously, incomplete page-tree scans repeatedly returned the same 25 results
+at CQL offset 1000. Page-tree collection now uses the Confluence Cloud v2
+`GET /pages/{id}/descendants` endpoint and persists its opaque pagination
+cursor. This includes all descendant depths and is independent of CQL offset
+pagination. Non-page descendant types (folders, whiteboards, etc.) are skipped
+for body indexing while still advancing the cursor.
 
-The crawler now trusts the authorized server-side `ancestor` CQL constraint,
-including deeply nested descendants. Returned `ancestors` metadata is
-recorded for diagnostics, not used to drop otherwise matched pages.
+Incomplete legacy offset checkpoints are reset to the initial v2 cursor on
+upgrade. Already collected unique pages and the existing full-text index are
+retained. Completed scopes are not reset. Whole-space collection retains the
+bounded CQL offset approach.
 
-Repeated identical result pages across successive offsets fail safely with
-an `incomplete` status and a useful error rather than advancing indefinitely.
+Repeated identical result pages or a non-advancing cursor fail safely with
+`incomplete` status and a specific error rather than advancing indefinitely.
 The CLI reports accepted new pages, duplicate records and ancestry metadata
 warnings independently of the search offset.
 
