@@ -257,8 +257,39 @@ def indexed_inventory(cfg, db_path):
                         continue
                 matches.append((sid, scope, status, offset))
             if len(matches) != 1:
-                statuses.append({"scope": configured, "status": "unavailable",
-                                 "detail": "No unique checkpoint for this authorized scope"})
+                # A child tree intentionally skipped during crawling may have
+                # no cursor of its own. Resolve its unique root only from
+                # completed, already authorized ancestor inventory rows.
+                covered = []
+                if configured["type"] == "page_tree":
+                    for parent_id, parent in completed:
+                        if parent.get("type") != "page_tree":
+                            continue
+                        if (configured.get("space") and
+                                configured["space"] != parent.get("space")):
+                            continue
+                        if configured.get("root_id"):
+                            ids = [configured["root_id"]]
+                        elif configured.get("root_title"):
+                            ids = [r[0] for r in db.execute(
+                                """SELECT content_id FROM confluence_inventory_items
+                                   WHERE scope_id=? AND title=?""",
+                                (parent_id, configured["root_title"]))]
+                        else:
+                            ids = []
+                        for child_id in ids:
+                            if str(child_id) != parent.get("root_id") and db.execute(
+                                    """SELECT 1 FROM confluence_inventory_items
+                                       WHERE scope_id=? AND content_id=?""",
+                                    (parent_id, str(child_id))).fetchone():
+                                covered.append((str(child_id), parent))
+                if len({item[0] for item in covered}) == 1:
+                    statuses.append({"scope": configured, "status": "complete",
+                                     "covered_by": covered[0][1]["root_id"],
+                                     "detail": "Covered by complete ancestor page tree"})
+                else:
+                    statuses.append({"scope": configured, "status": "unavailable",
+                                     "detail": "No unique checkpoint for this authorized scope"})
                 continue
             sid, scope, status, offset = matches[0]
             parent = _is_covered(db, completed, scope) if status != "complete" else None
