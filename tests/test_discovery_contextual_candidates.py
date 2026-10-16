@@ -2,6 +2,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from core import discovery_concepts, discovery_contextual_candidates, discovery_fts
@@ -18,7 +19,7 @@ class ContextualCandidatesTests(unittest.TestCase):
                 discovery_concepts.register(path, key, title, project="APS")
                 discovery_concepts.alias(path, key, short, "abbreviation",
                                          "jira:APS-seed-" + key)
-            with sqlite3.connect(str(path)) as db:
+            with closing(sqlite3.connect(str(path))) as db:
                 discovery_fts._init(db)
                 for i, body in enumerate([
                     "ITK provides a catalogue of SDX service documentation.",
