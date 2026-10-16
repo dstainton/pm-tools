@@ -3,11 +3,13 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from argparse import Namespace
 from unittest.mock import patch
 
 from core import discovery_confluence_checkpoint as checkpoint
 from core import discovery_confluence_index as indexer
 from core import discovery_fts
+from commands import discover
 
 
 class FullConfluenceIndexTests(unittest.TestCase):
@@ -51,6 +53,28 @@ class FullConfluenceIndexTests(unittest.TestCase):
             self.assertEqual(indexed, 126)
             hits = discovery_fts.search(path, '"Secure Data Exchange"', project="APS")
             self.assertTrue(hits)
+
+    def test_explicit_crawl_and_index_resumes_until_complete(self):
+        cfg = {"jira": {"project": "APS"}, "products": [], "workstreams": []}
+        incomplete = [{"scope": {"type": "page_tree", "root_id": "100"},
+                       "status": "incomplete", "offset": 100, "processed": 100}]
+        complete = [{"scope": {"type": "page_tree", "root_id": "100"},
+                     "status": "complete", "offset": 125, "processed": 25}]
+        args = Namespace(project="APS", confluence_crawl=True,
+                         index_confluence=True, export=False)
+        with tempfile.TemporaryDirectory() as folder, \\
+             patch("core.paths.local_dir", return_value=folder), \\
+             patch("core.discovery_confluence_checkpoint.crawl",
+                   side_effect=[incomplete, complete]) as crawler, \\
+             patch("core.discovery_confluence_index.index",
+                   return_value={"indexed": 0, "comments_indexed": 0,
+                                 "changed": 0, "comments_changed": 0,
+                                 "inventory_coverage": "complete",
+                                 "complete": True, "errors": [], "scopes": []}) as index, \\
+             patch("builtins.print"):
+            discover.run(cfg, args)
+        self.assertEqual(crawler.call_count, 2)
+        index.assert_called_once()
 
     def test_whole_space_scope_not_attributed_to_a_jira_project(self):
         cfg = {"jira": {"project": "APS"}}
