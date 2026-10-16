@@ -142,9 +142,9 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                         raise ValueError("Confluence returned an empty page with a continuation link")
                     ids = tuple(str(row.get("id") or "") for row in rows)
                     if rows and ids in signatures:
-                        raise ValueError("Repeated Confluence results at offset {}: "
-                                         "the server/cache did not advance; stopped safely"
-                                         .format(offset))
+                        raise ValueError(
+                            "Repeated Confluence results at offset {}: "
+                            "the server/cache did not advance; stopped safely".format(offset))
                     if rows:
                         signatures.add(ids)
 
