@@ -13,17 +13,17 @@ from core import discovery_fts
 # Restrict matching to explicit entity-like labels. Broad case-insensitive spans
 # previously turned ordinary clauses into fictitious product relationships.
 HISTORICAL = re.compile(
-    r"(?P<new>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)\\s*"
-    r"\\(\\s*(?:formerly|previously|earlier called)\\s+"
-    r"(?P<old>[A-Za-z][A-Za-z0-9 /&.-]{1,70}?)\\s*\\)", re.I)
+    r"(?P<new>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)\s*"
+    r"\(\s*(?:formerly|previously|earlier called)\s+"
+    r"(?P<old>[A-Za-z][A-Za-z0-9 /&.-]{1,70}?)\s*\)", re.I)
 RENAMED = re.compile(
-    r"(?P<old>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)\\s+"
-    r"(?:was renamed to|has been renamed to|renamed to|is now called)\\s+"
-    r"(?P<new>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)(?=[;,\\n]|$)", re.I)
+    r"(?P<old>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)\s+"
+    r"(?:was renamed to|has been renamed to|renamed to|is now called)\s+"
+    r"(?P<new>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)(?=[;,\n]|$)", re.I)
 REPLACED = re.compile(
-    r"(?P<new>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)\\s+"
-    r"(?:replaces|supersedes)\\s+"
-    r"(?P<old>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)(?=[;,\\n]|$)", re.I)
+    r"(?P<new>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)\s+"
+    r"(?:replaces|supersedes)\s+"
+    r"(?P<old>[A-Za-z][A-Za-z0-9 /&.-]{1,90}?)(?=[;,\n]|$)", re.I)
 
 STOPWORDS = {"and", "how", "which", "this", "that", "since", "the",
              "a", "an", "who", "it", "they", "we", "you", "i",
@@ -55,7 +55,7 @@ def _matches(sentence):
     # the nearest clause delimiter to avoid swallowing preceding prose.
     for match in HISTORICAL.finditer(sentence):
         prefix = match.group("new")
-        prefix = re.split(r"[,;:]|\\s{2,}", prefix)[-1]
+        prefix = re.split(r"[,;:]|\s{2,}", prefix)[-1]
         new, old = _clean(prefix), _clean(match.group("old"))
         if _entity(new) and _entity(old):
             yield "historical_name", new, old
