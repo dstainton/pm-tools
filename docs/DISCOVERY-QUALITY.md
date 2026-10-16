@@ -45,6 +45,38 @@ has exactly one configured Jira project, these documents are associated
 with that project for filtered discovery. For whole-space or multi-project
 scopes, no such association is inferred. Inspect the reported coverage.
 
+## Corrected Confluence crawl and recovery
+
+When updating from the earlier crawler, incomplete v1 inventory cursors
+(including unexpectedly large offsets with few saved pages) are reset to zero
+for a one-time verified re-scan. The stored unique page records and existing
+full-text index remain intact. Completed scopes are not reset.
+
+The crawler now trusts the authorized server-side `ancestor` CQL constraint,
+including deeply nested descendants. Returned `ancestors` metadata is
+recorded for diagnostics, not used to drop otherwise matched pages.
+
+Repeated identical result pages across successive offsets fail safely with
+an `incomplete` status and a useful error rather than advancing indefinitely.
+The CLI reports accepted new pages, duplicate records and ancestry metadata
+warnings independently of the search offset.
+
+A completed ancestor team tree can also satisfy nested workstream scopes if
+its inventory explicitly contains their root pages. A shared Confluence
+space alone never authorizes this optimization. Covered child scopes are
+shown as complete without fetching the same descendant tree again.
+
+Use the existing collection command after updating the tool:
+
+```powershell
+pm update
+pm discover --confluence-crawl --index-confluence --project APS
+```
+
+Confirm the output reports plausible **new page counts**, `complete`
+inventory, and any remaining comment errors separately. A repaired
+checkpoint never discards previously indexed source documents.
+
 ## Trust boundaries
 
 1. The configured products and workstreams are **configuration facts**, not
