@@ -12,6 +12,9 @@ class _Rows:
     def __exit__(self, *args):
         pass
 
+    def close(self):
+        pass
+
     def execute(self, _query, _params):
         return [
             ("APS", "jira:APS-1", "comment", None, "",
