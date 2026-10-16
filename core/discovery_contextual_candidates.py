@@ -11,10 +11,14 @@ def candidates(db_path, project=None, limit=30):
         raise ValueError("limit must be positive")
     clusters = discovery_concept_clusters.clusters(db_path, project=project, limit=None)
     terms = defaultdict(set)
+    owners = defaultdict(set)
     for concept in clusters:
+        identity = (concept["project"], concept["canonical"].casefold())
         for value in [concept["canonical"]] + concept["aliases"]:
+            owners[(concept["project"], value.casefold())].add(identity)
             if len(value) >= 3 and value.casefold() not in ("api", "aps", "bc"):
                 terms[concept["project"]].add(value)
+    ambiguous = {key for key, identities in owners.items() if len(identities) > 1}
     matches = {}
     db = sqlite3.connect(str(db_path))
     try:
@@ -36,6 +40,12 @@ def candidates(db_path, project=None, limit=30):
                 for i, a in enumerate(sorted(hits)):
                     for b in sorted(hits)[i + 1:]:
                         if a.casefold() == b.casefold():
+                            continue
+                        if (owners[(scope, a.casefold())] &
+                                owners[(scope, b.casefold())]):
+                            continue
+                        if ((scope, a.casefold()) in ambiguous or
+                                (scope, b.casefold()) in ambiguous):
                             continue
                         key = (scope, a.casefold(), b.casefold())
                         obj = matches.setdefault(key, {
