@@ -195,6 +195,7 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                             (sid, json.dumps(scope, sort_keys=True), offset,
                              status, SCAN_VERSION))
                     entry["processed"] += len(rows)
+                    entry["offset"] = offset
                     entry["new_pages"] += new
                     entry["duplicates"] += duplicates
                     entry["ancestry_metadata_warnings"] += warnings
