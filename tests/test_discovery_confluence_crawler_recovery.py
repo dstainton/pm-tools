@@ -43,7 +43,7 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
                     {"id": "200", "type": "page", "title": "Deep A",
                      "ancestors": [{"id": "999"}]},
                     {"id": "201", "type": "page", "title": "Deep B", "ancestors": []},
-                ], False)
+                ], None)
             with patch.object(cp.sources, "fetch_confluence_page",
                               return_value=root):
                 with patch.object(cp.sources, "list_confluence_page_descendants",
