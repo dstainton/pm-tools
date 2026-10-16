@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from argparse import Namespace
+from contextlib import closing
 from unittest.mock import patch
 
 from core import discovery_confluence_checkpoint as checkpoint
@@ -46,7 +47,7 @@ class FullConfluenceIndexTests(unittest.TestCase):
             self.assertEqual(result["indexed"], 126)
             self.assertTrue(result["complete"])
             self.assertEqual(result["project_assignment"], "APS")
-            with sqlite3.connect(str(path)) as db:
+            with closing(sqlite3.connect(str(path))) as db:
                 indexed = db.execute(
                     "SELECT COUNT(*) FROM discovery_fts_documents "
                     "WHERE source='confluence' AND project='APS'").fetchone()[0]
