@@ -125,3 +125,7 @@ Run `pm discover --concept-clusters --project APS --export` after `--alias-candi
 ### Candidate terminology evidence evaluation
 
 Run `pm discover --evaluate-terms --project APS --export` to generate conservative terminology pairs from explicit rename/replacement claims and competing acronym expansions in the local indexed registry. For each pair, a bounded offline scan retrieves passages mentioning both terms, preserves Jira/Confluence citations, and flags explicit claims, possible distinctions, and co-occurrence. Contradictory claims yield `conflicting_evidence`. All classifications are **unconfirmed evidence triage**, not semantic equivalence or automated name adoption. A local language-model classification stage and broader candidate generation from historical references remain future work. The default caps are 100 pairs and 8 evidence passages per pair.
+
+### Contextual evidence dossiers
+
+`--evaluate-terms` additionally proposes term/code comparisons from repeated mentions within at least two independent indexed documents when one term already belongs to the candidate concept registry. This can surface transitions without explicit `formerly` wording, but **co-mentions are not proof of equivalence**. Dossiers keep a single passage per source citation, preserve dates and source types, and can include single-term context; assessment remains unconfirmed. Candidate selection and evidence retrieval are bounded, and indexed content may be incomplete or stale.
