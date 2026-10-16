@@ -41,6 +41,34 @@ class LocalModelTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "eight supplied"):
                 discovery_local_model.classify(edge, self.cfg["model"])
 
+    def test_invalid_json_gets_one_repair_turn(self):
+        valid = {"type": "depends_on", "citations": ["jira:APS-1"],
+                 "rationale": "Explicit dependency.", "confidence": "medium"}
+        with patch.object(model, "call_model", side_effect=[
+                '{"type": depends_on}', json.dumps(valid)]) as mocked:
+            result = discovery_local_model.classify(self.edge, self.cfg["model"])
+        self.assertTrue(result["repair_attempted"])
+        self.assertEqual(result["type"], "depends_on")
+        self.assertEqual(mocked.call_count, 2)
+        self.assertFalse(mocked.call_args.kwargs["use_cache"])
+
+    def test_ungrounded_repair_still_fails(self):
+        bad = {"type": "depends_on", "citations": ["jira:APS-99"],
+               "rationale": "Invented.", "confidence": "high"}
+        with patch.object(model, "call_model", side_effect=[
+                json.dumps(bad), json.dumps(bad)]) as mocked:
+            with self.assertRaisesRegex(ValueError, "repair failed"):
+                discovery_local_model.classify(self.edge, self.cfg["model"])
+        self.assertEqual(mocked.call_count, 2)
+
+    def test_valid_response_does_not_trigger_repair(self):
+        good = {"type": "unresolved", "citations": [],
+                "rationale": "No proven relation.", "confidence": "low"}
+        with patch.object(model, "call_model", return_value=json.dumps(good)) as mocked:
+            result = discovery_local_model.classify(self.edge, self.cfg["model"])
+        self.assertFalse(result["repair_attempted"])
+        self.assertEqual(mocked.call_count, 1)
+
     def test_review_reuses_existing_model_settings(self):
         with patch.object(discovery_local_model, "classify",
                           return_value={"status": "no_evidence", "type": "unresolved",
