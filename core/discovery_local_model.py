@@ -53,7 +53,9 @@ def classify(edge, model_cfg, use_cache=True):
         "6. citations must be an array of strings, even if empty.\n"
         "7. confidence must be one of low, medium, high.\n"
         "8. rationale must be one short sentence. No literal line breaks inside strings.\n"
-        "9. If type is unresolved, set citations to [] and confidence to low.\n"
+        "9. IMPORTANT: unresolved ALWAYS means citations=[] AND confidence=low, even when the input contains citations.\n"
+        "10. Do not cite evidence of mere co-occurrence. A named relationship must be established by the passage.\n"
+        "11. If evidence explicitly says X validates mappings against Y, do not treat it as mere co-occurrence.\n"
         "Valid unresolved example:\n"
         '{\\"type\\":\\"unresolved\\",\\"citations\\":[],\\"rationale\\":\\"The evidence does not establish a relationship.\\",\\"confidence\\":\\"low\\"}\n'
         "Now classify the supplied evidence. Return only the JSON object."
@@ -77,6 +79,7 @@ def classify(edge, model_cfg, use_cache=True):
             "Allowed types: " + ", ".join(sorted(TYPES)) + ".\n"
             "Allowed confidence: low, medium, high.\n"
             "Citations must be a JSON array using ONLY the exact allowed strings.\n"
+            "If the classification is unresolved, citations MUST be [] and confidence MUST be low.\n"
             "If a citation is invalid or uncertain, choose unresolved, [] and low.\n"
             "Use double quotes; escape all internal quotation marks and line breaks.\n"
             "Valid fallback: "

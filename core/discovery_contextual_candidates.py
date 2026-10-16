@@ -5,13 +5,20 @@ from collections import defaultdict
 
 from core import discovery_fts, discovery_concept_clusters
 
+# These valid acronyms also appear as ordinary English words. An unqualified
+# occurrence is not evidence of the named concept.
+AMBIGUOUS_WORD_ACRONYMS = {"DID", "IT", "MAP", "CAN", "HAS", "MAY", "WILL",
+                           "AS", "IN", "ON", "OR", "IF", "TO", "DO", "US"}
+
 # Signals prioritize passages worth reviewing, not confirmed relationships.
 RELATION_SIGNAL = re.compile(
     r"\b(?:integrat(?:es?|ed|ion)|depend(?:s|ed|ency)?|consum(?:es?|ed)|"
     r"provid(?:es?|ed)|deliver(?:s|ed)|part of|component of|"
     r"connect(?:s|ed)|replac(?:es?|ed)|formerly|renam(?:es?|ed)|"
     r"migrat(?:es?|ed|ion)|uses?|upstream|downstream|"
-    r"calls?|exchang(?:es?|ed)|publish(?:es|ed))\b", re.I)
+    r"calls?|exchang(?:es?|ed)|publish(?:es|ed)|mapping(?:s)?|"
+    r"maps? to|glossary|onboard(?:ing|ed)?|verified by|"
+    r"validated? against|source of truth)\b", re.I)
 
 
 
@@ -25,7 +32,8 @@ def candidates(db_path, project=None, limit=30):
         identity = (concept["project"], concept["canonical"].casefold())
         for value in [concept["canonical"]] + concept["aliases"]:
             owners[(concept["project"], value.casefold())].add(identity)
-            if len(value) >= 3 and value.casefold() not in ("api", "aps", "bc"):
+            if (len(value) >= 3 and value.casefold() not in ("api", "aps", "bc")
+                    and value.upper() not in AMBIGUOUS_WORD_ACRONYMS):
                 terms[concept["project"]].add(value)
     ambiguous = {key for key, identities in owners.items() if len(identities) > 1}
     matches = {}
@@ -66,6 +74,10 @@ def candidates(db_path, project=None, limit=30):
                                 "relationship_signal": bool(RELATION_SIGNAL.search(fragment))})
         output = list(matches.values())
         for item in output:
+            # Prefer explicitly relational passages within the model evidence cap.
+            # Preserve all source citations and never infer a relation here.
+            item["evidence"].sort(key=lambda ev: (not ev.get("relationship_signal"),
+                                                    ev["citation"]))
             item["independent_sources"] = len(item["evidence"])
             item["signal_sources"] = sum(bool(e.get("relationship_signal"))
                                          for e in item["evidence"])
