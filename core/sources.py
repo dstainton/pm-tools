@@ -1081,10 +1081,11 @@ def _confluence_block(cfg):
     return cfg or {}
 
 
-def list_confluence_page_descendants(cfg, page_id, cursor=None, limit=100):
+def list_confluence_page_descendants(cfg, page_id, cursor=None, limit=100, content_type="page"):
     """One Confluence Cloud v2 cursor-paginated tree page.
 
-    The v2 descendants endpoint includes all descendant depths. Follow only
+    The v2 descendants endpoints are content-type-specific (page, folder,
+    database, whiteboard, embed), and include all descendant depths. Follow only
     the opaque cursor embedded in Atlassian's next link, never an arbitrary
     server-supplied URL. It also returns folders and other content types;
     callers should index only type=page.
@@ -1095,12 +1096,17 @@ def list_confluence_page_descendants(cfg, page_id, cursor=None, limit=100):
     if not block.get("base_url"):
         raise ValueError("Confluence connection missing")
     if not str(page_id).isdigit():
-        raise ValueError("Confluence root page ID must be numeric")
+        raise ValueError("Confluence root content ID must be numeric")
+    endpoints = {"page": "pages", "folder": "folders",
+                 "whiteboard": "whiteboards", "database": "databases",
+                 "embed": "embeds"}
+    if content_type not in endpoints:
+        raise ValueError("Unsupported Confluence descendant root type: " + str(content_type))
     params = {"limit": limit}
     if cursor:
         params["cursor"] = cursor
-    url = "{}/api/v2/pages/{}/descendants".format(
-        block["base_url"].rstrip("/"), page_id)
+    url = "{}/api/v2/{}/{}/descendants".format(
+        block["base_url"].rstrip("/"), endpoints[content_type], page_id)
     response = send(
         "GET", url, params=params,
         auth=(block["email"], block["api_token"]),
