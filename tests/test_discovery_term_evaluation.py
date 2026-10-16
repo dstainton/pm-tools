@@ -63,6 +63,42 @@ class TermEvaluationTests(unittest.TestCase):
             self.assertEqual(match["independent_sources"], 3)
             self.assertEqual(len({e["citation"] for e in match["evidence"]}), 3)
 
+    def test_generic_distinction_elsewhere_does_not_disprove_pair(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "evidence.sqlite"
+            with closing(sqlite3.connect(str(path))) as db:
+                discovery_fts._init(db)
+                discovery_fts._put(
+                    db, "d", "d", "APS", "issue", None, None, "",
+                    "APS and SDX integration. Different environments require "
+                    "different API keys.", "jira:APS-8")
+                db.commit()
+            pair = {"project": "APS", "a": "APS", "b": "SDX",
+                    "basis": ["candidate"], "source_citations": []}
+            with patch.object(discovery_term_evaluation, "generate",
+                              return_value=[pair]):
+                result = discovery_term_evaluation.evaluate(path, project="APS")
+            self.assertEqual(result["evaluations"][0]["assessment"], "unresolved")
+
+    def test_distant_codes_do_not_generate_contextual_pairs(self):
+        from core import discovery_concepts
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "evidence.sqlite"
+            discovery_concepts.register(path, "c", "Secure Data Exchange",
+                                        project="APS")
+            discovery_concepts.alias(path, "c", "SDX", "abbreviation",
+                                     "jira:APS-1")
+            with closing(sqlite3.connect(str(path))) as db:
+                discovery_fts._init(db)
+                for i in range(3):
+                    body = "SDX gateway deployment. " + ("unrelated prose. " * 25) + "OWASP compliance."
+                    discovery_fts._put(db, str(i), str(i), "APS", "issue",
+                                       None, None, "", body, "jira:APS-" + str(i))
+                db.commit()
+            self.assertFalse(any(
+                {p["a"], p["b"]} == {"SDX", "OWASP"}
+                for p in discovery_term_evaluation.generate(path, project="APS")))
+
     def test_cooccurrence_does_not_become_equivalence(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "evidence.sqlite"

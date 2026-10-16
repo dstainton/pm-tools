@@ -89,18 +89,20 @@ def generate(db_path, project=None, max_pairs=100):
             args.append(project)
         for scope, citation, title, body in db.execute(sql, args):
             text = (title or "") + " " + (body or "")
-            if len(text) > 25000:
-                text = text[:25000]
             terms = known.get(scope, {})
-            observed = [name for lower, name in terms.items() if
-                        _phrase(text, name)]
-            codes = set(re.findall(r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3}[A-Z0-9]*)?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])", text))
-            for first in observed[:20]:
-                for second in sorted(codes)[:30]:
-                    if first.casefold() == second.casefold():
-                        continue
-                    key = (scope, first.casefold(), second.casefold())
-                    co_mentions[key].add(citation)
+            # Require local evidence rather than equating every acronym in a
+            # long issue/comment with every known term in that document.
+            for name in terms.values():
+                if not _phrase(text, name):
+                    continue
+                for hit in re.finditer(r"(?<!\w)" + re.escape(name) + r"(?!\w)", text, re.I):
+                    local = text[max(0, hit.start() - 110):min(len(text), hit.end() + 110)]
+                    codes = set(re.findall(
+                        r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3}[A-Z0-9]*)?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])",
+                        local))
+                    for code in codes:
+                        if name.casefold() != code.casefold():
+                            co_mentions[(scope, name.casefold(), code.casefold())].add(citation)
         for (scope, first, second), refs in co_mentions.items():
             if len(refs) < 2:
                 continue
@@ -116,6 +118,8 @@ def generate(db_path, project=None, max_pairs=100):
         db.close()
     return sorted(pairs.values(), key=lambda x: (
         0 if any(v.startswith("explicit:") for v in x["basis"]) else 1,
+        1 if any(v == "repeated_contextual_mention" for v in x["basis"]) and
+             (x["a"].upper() in {"APS", "API"} or x["b"].upper() in {"APS", "API"}) else 0,
         -x.get("contextual_sources", 0), x["project"] or "", x["a"], x["b"]))[:max_pairs]
 
 
@@ -158,8 +162,11 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
                     if any({x.casefold(), y.casefold()} == {a.casefold(), b.casefold()}
                            for _, x, y in matches):
                         signal = "explicit_relationship"
-                    elif re.search(r"\b(?:distinct|different|not the same|unrelated|separate)\b",
-                                   excerpt, re.I):
+                    elif any(
+                        _phrase(sentence, a) and _phrase(sentence, b)
+                        and re.search(r"\b(?:are|were|remain)\s+(?:distinct|different|unrelated|separate|not the same)\b",
+                                      sentence, re.I)
+                        for sentence in sentences):
                         signal = "possible_distinction"
                 candidates.append({
                     "citation": citation, "source": source, "kind": kind,
