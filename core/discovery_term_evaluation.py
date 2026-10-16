@@ -118,7 +118,9 @@ def generate(db_path, project=None, max_pairs=100):
         db.close()
     return sorted(pairs.values(), key=lambda x: (
         0 if any(v.startswith("explicit:") for v in x["basis"]) else 1,
-        1 if any(v == "repeated_contextual_mention" for v in x["basis"]) and\n             (x["a"].upper() in {"APS", "API"} or x["b"].upper() in {"APS", "API"}) else 0,\n        -x.get("contextual_sources", 0), x["project"] or "", x["a"], x["b"]))[:max_pairs]
+        1 if any(v == "repeated_contextual_mention" for v in x["basis"]) and
+             (x["a"].upper() in {"APS", "API"} or x["b"].upper() in {"APS", "API"}) else 0,
+        -x.get("contextual_sources", 0), x["project"] or "", x["a"], x["b"]))[:max_pairs]
 
 
 def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
