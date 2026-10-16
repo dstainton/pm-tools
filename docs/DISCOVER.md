@@ -117,3 +117,7 @@ Run `pm discover --confluence-crawl` repeatedly to resume a read-only, scope-bou
 ### Terminology candidate clustering
 
 Run `pm discover --concept-clusters --project APS --export` after `--alias-candidates`. The deterministic offline clustering groups candidate definitions only when their canonical names agree after conservative case, whitespace, punctuation, and program/programme spelling normalization within a source scope. Different names sharing an acronym are **not merged**; conflicting abbreviation meanings are explicitly marked ambiguous, with all source citations retained. Confirmed and candidate states remain distinct, and this report does not claim product ownership, formal renames, or contextual equivalence from mere co-occurrence. It is the first explainable grouping stage, not model-assisted semantic clustering.
+
+### Contextual terminology relationship proposals
+
+`pm discover --term-relationships --project APS --export` scans previously indexed Jira and Confluence text for explicit, sentence-bounded wording such as `APS P2P (formerly SDX)`, `X renamed to Y`, and `X replaces Y`. It returns cited, unconfirmed relationships with verbatim evidence excerpts, counts, and original project scope. Co-occurrence alone never implies equivalence. The tool does not automatically adopt a rename or update any confirmed alias mapping. Results are candidates for human review, not semantic similarity scores. The discovery summary distinguishes this offline evidence analysis from live API retrieval.
