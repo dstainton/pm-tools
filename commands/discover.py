@@ -207,6 +207,18 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
+    if getattr(args, "concept_graph", False):
+        from core import discovery_concept_graph, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.isfile(db_file):
+            raise SystemExit("Local evidence index missing; index Jira or Confluence first.")
+        progress.start("Discovering typed concept relationships")
+        try:
+            report["concept_graph"] = discovery_concept_graph.discover(
+                db_file, project=getattr(args, "project", None))
+        finally:
+            progress.finish()
     if getattr(args, "evaluate_terms", False):
         from core import discovery_term_evaluation, paths
         import os
@@ -273,6 +285,16 @@ def run(cfg, args):
                 print("  Incomplete scope: {} ({})".format(
                     scope.get("space") or scope.get("root_id"),
                     scope.get("detail") or scope["status"]))
+    if report.get("concept_graph") is not None:
+        graph = report["concept_graph"]
+        print("Candidate concept identities: {} (showing {})".format(
+            graph["identity_total"], len(graph["identities"])))
+        print("Typed candidate relationships: {} (showing {})".format(
+            graph["relationship_total"], len(graph["relationships"])))
+        for edge in graph["relationships"]:
+            print("  {} --{}--> {} [{}; {} independent source(s)]".format(
+                edge["from"], edge["type"], edge["to"],
+                edge["project"], edge["independent_sources"]))
     if report.get("term_evaluations") is not None:
         item = report["term_evaluations"]
         print("Terminology candidate evaluations: {}".format(item["pairs_generated"]))
@@ -379,6 +401,23 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("concept_graph") is not None:
+                graph = report["concept_graph"]
+                stream.write("\n## Unconfirmed typed concept graph\n\n")
+                stream.write("- Concept identities: {} (showing {})\n".format(
+                    graph["identity_total"], len(graph["identities"])))
+                stream.write("- Typed relationships: {} (showing {})\n".format(
+                    graph["relationship_total"], len(graph["relationships"])))
+                for item in graph["identities"]:
+                    stream.write("- Concept {} [{}] aliases: {} | citations: {}\n".format(
+                        item["canonical"], item["status"], ", ".join(item["aliases"]),
+                        ", ".join(item["citations"])))
+                for edge in graph["relationships"]:
+                    stream.write("- {} --{}--> {} [{}; candidate]\n".format(
+                        edge["from"], edge["type"], edge["to"], edge["project"]))
+                    for evidence in edge["evidence"]:
+                        stream.write("  - {}: {}\n".format(
+                            evidence["citation"], evidence["excerpt"]))
             if report.get("term_evaluations") is not None:
                 stream.write("\n## Unconfirmed terminology evidence evaluations\n\n")
                 for item in report["term_evaluations"]["evaluations"]:
