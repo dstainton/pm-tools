@@ -159,12 +159,19 @@ def _evidence_lines(evidence):
 
 
 def markdown(report):
+    offline = any(report.get(key) is not None for key in
+                  ("concept_clusters", "term_relationships", "alias_candidates",
+                   "evidence_matches", "concept_matches"))
     lines = ["# Product and workstream discovery", "",
              ("Phase 2B: bounded source examples, not confirmed ownership."
               if report.get("enriched") else
+              "Configured profiles plus offline indexed evidence; no live source requests."
+              if offline else
               "Phase 2A: configured facts only. No Jira, Confluence, SharePoint, "
               "or model was queried. Membership does not prove business ownership."),
-             "", "- Coverage: " + report["coverage"],
+             "", "- Coverage: " + (
+                 "configuration + offline indexed evidence (no live retrieval)"
+                 if offline and not report.get("enriched") else report["coverage"]),
              "- Project filter: " + (report["scope_project"] or "none"), "",
              "## Configured profiles", ""]
     if not report["products"]:
@@ -232,8 +239,11 @@ def markdown(report):
                   ("- Source availability and timestamps are shown where retrieved; "
                    "Jira Epic examples are bounded and not exhaustive."
                    if report.get("enriched") else
-                   "- No linked documents were read, and their availability or freshness "
-                   "was not checked."),
+                   ("- Offline indexed documents were analyzed; no live source freshness "
+                    "or availability verification was performed."
+                    if offline else
+                    "- No linked documents were read, and their availability or freshness "
+                    "was not checked.")),
                   "- Missing descriptions and boundaries are unknown, not inferred "
                   "from product names, components, or labels.",
                   "- No issue classifications or configuration changes are proposed.",
