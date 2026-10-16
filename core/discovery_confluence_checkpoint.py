@@ -12,7 +12,7 @@ from core import discovery_inventory, sources
 
 # v1/v2 used offset-based CQL page-tree searches; three APS scopes repeated
 # at offset 1000. Restart incomplete old cursors via the v2 descendants API.
-SCAN_VERSION = 3
+SCAN_VERSION = 4
 
 
 def _init(db):
@@ -32,6 +32,12 @@ def _init(db):
         scope_id TEXT NOT NULL, content_id TEXT NOT NULL, space TEXT,
         title TEXT, content_type TEXT, updated TEXT, ancestors TEXT,
         PRIMARY KEY(scope_id, content_id))""")
+    # Track all hierarchy nodes to recognize covered nested folder roots, but
+    # index only actual page bodies. Never fetch folders as pages or comments.
+    db.execute("""CREATE TABLE IF NOT EXISTS confluence_inventory_nodes (
+        scope_id TEXT NOT NULL, content_id TEXT NOT NULL,
+        title TEXT, content_type TEXT,
+        PRIMARY KEY(scope_id, content_id))""")
     db.commit()
 
 
@@ -50,9 +56,12 @@ def _is_covered(db, complete_scopes, child_scope):
             continue
         if parent.get("space") != child_scope.get("space"):
             continue
-        if db.execute("""SELECT 1 FROM confluence_inventory_items
+        if db.execute("""SELECT 1 FROM confluence_inventory_nodes
+                         WHERE scope_id=? AND content_id=?
+                         UNION
+                         SELECT 1 FROM confluence_inventory_items
                          WHERE scope_id=? AND content_id=?""",
-                      (parent_id, child_id)).fetchone():
+                      (parent_id, child_id, parent_id, child_id)).fetchone():
             return parent
     return None
 
@@ -96,6 +105,19 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                        FROM confluence_inventory_cursor WHERE scope_id=?""",
                     (sid,)).fetchone()
                 offset, status, version, cursor = record if record else (0, "pending", SCAN_VERSION, None)
+                # Page-tree v3 inventories lacked folder-root handling and
+                # did not retain non-page nodes. Revalidate even those marked
+                # complete, without discarding previously indexed documents.
+                if (record and version < SCAN_VERSION
+                        and scope["type"] == "page_tree"):
+                    with db:
+                        db.execute("""UPDATE confluence_inventory_cursor
+                                      SET offset=0, cursor=NULL, status='pending', error=NULL,
+                                          scan_version=? WHERE scope_id=?""",
+                                   (SCAN_VERSION, sid))
+                    offset, status, cursor = 0, "pending", None
+                    entry["legacy_checkpoint_restarted"] = True
+
                 if status == "complete":
                     entry.update(status="complete", offset=offset, scope=scope)
                     completed.append((sid, scope))
@@ -114,11 +136,8 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                 if record and version < SCAN_VERSION:
                     with db:
                         db.execute("""UPDATE confluence_inventory_cursor
-                                      SET offset=0, cursor=NULL, status='pending', error=NULL,
-                                          scan_version=? WHERE scope_id=?""",
+                                      SET scan_version=? WHERE scope_id=?""",
                                    (SCAN_VERSION, sid))
-                    offset, status, cursor = 0, "pending", None
-                    entry["legacy_checkpoint_restarted"] = True
 
                 emit(scope, "collecting", offset, 0, scope_index, len(scopes))
                 if root:
