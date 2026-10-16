@@ -65,6 +65,7 @@ def classify(edge, model_cfg, use_cache=True):
     try:
         result = _validate(model.strip_thinking(raw), refs)
         result["repair_attempted"] = False
+        result["first_pass_valid"] = True
         return result
     except ValueError as first_error:
         # Give small local models one chance to fix malformed JSON or
@@ -97,6 +98,8 @@ def classify(edge, model_cfg, use_cache=True):
                 "Initial response invalid: {}; repair failed: {}".format(
                     first_error, repair_error)) from repair_error
         result["repair_attempted"] = True
+        result["first_pass_valid"] = False
+        result["repair_reason"] = str(first_error)[:250]
         return result
 
 
