@@ -207,7 +207,7 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
-    if getattr(args, "concept_graph", False):
+    if getattr(args, "concept_graph", False) or getattr(args, "concept_graph_model", False):
         from core import discovery_concept_graph, paths
         import os
         db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
@@ -217,6 +217,14 @@ def run(cfg, args):
         try:
             report["concept_graph"] = discovery_concept_graph.discover(
                 db_file, project=getattr(args, "project", None))
+        finally:
+            progress.finish()
+    if getattr(args, "concept_graph_model", False):
+        from core import discovery_local_model
+        progress.start("Reviewing source-cited relationships with local model")
+        try:
+            report["model_graph_review"] = discovery_local_model.review(
+                report["concept_graph"])
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
@@ -295,6 +303,14 @@ def run(cfg, args):
             print("  {} --{}--> {} [{}; {} independent source(s)]".format(
                 edge["from"], edge["type"], edge["to"],
                 edge["project"], edge["independent_sources"]))
+    if report.get("model_graph_review") is not None:
+        item = report["model_graph_review"]
+        print("Local model reviewed {} of {} typed edges (unconfirmed)".format(
+            item["reviewed"], item["total_edges"]))
+        for edge in item["results"]:
+            print("  {} -> {}: {} [{}]".format(
+                edge["from"], edge["to"], edge["model"]["type"],
+                edge["model"]["status"]))
     if report.get("term_evaluations") is not None:
         item = report["term_evaluations"]
         print("Terminology candidate evaluations: {}".format(item["pairs_generated"]))
@@ -418,6 +434,21 @@ def run(cfg, args):
                     for evidence in edge["evidence"]:
                         stream.write("  - {}: {}\n".format(
                             evidence["citation"], evidence["excerpt"]))
+            if report.get("model_graph_review") is not None:
+                item = report["model_graph_review"]
+                stream.write("\n## Local model review (unconfirmed)\n\n")
+                stream.write("- Model: {}. Reviewed {} of {} edges.\n".format(
+                    item["model_name"], item["reviewed"], item["total_edges"]))
+                for edge in item["results"]:
+                    finding = edge["model"]
+                    stream.write("- {} -> {}: {} [{}]. References: {}\n".format(
+                        edge["from"], edge["to"], finding["type"], finding["status"],
+                        ", ".join(finding.get("citations", []))))
+                    if finding.get("rationale"):
+                        stream.write("  - Rationale (model interpretation): {}\n".format(
+                            finding["rationale"]))
+                    if finding.get("error"):
+                        stream.write("  - Error: {}\n".format(finding["error"]))
             if report.get("term_evaluations") is not None:
                 stream.write("\n## Unconfirmed terminology evidence evaluations\n\n")
                 for item in report["term_evaluations"]["evaluations"]:
