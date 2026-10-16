@@ -79,20 +79,20 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
                 with patch.object(cp.sources, "list_confluence_inventory",
                                   side_effect=repeat):
                     result = cp.crawl(cfg, path, max_rows=100)
-            self.assertEqual(calls, [0, 25])
-            self.assertEqual(result[0]["status"], "incomplete")
-            self.assertIn("Repeated Confluence results", result[0]["error"])
-            self.assertEqual(result[0]["offset"], 25)
-            self.assertEqual(result[0]["new_pages"], 25)
-            with closing(sqlite3.connect(str(path))) as db:
-                checkpoint = db.execute(
-                    "SELECT offset,status,error FROM confluence_inventory_cursor"
-                ).fetchone()
-                retained = db.execute(
-                    "SELECT COUNT(*) FROM confluence_inventory_items").fetchone()[0]
-            self.assertEqual(checkpoint[0:2], (25, "incomplete"))
-            self.assertIn("Repeated", checkpoint[2])
-            self.assertEqual(retained, 26)
+                self.assertEqual(calls, [0, 25])
+                self.assertEqual(result[0]["status"], "incomplete")
+                self.assertIn("Repeated Confluence results", result[0]["error"])
+                self.assertEqual(result[0]["offset"], 25)
+                self.assertEqual(result[0]["new_pages"], 25)
+                with closing(sqlite3.connect(str(path))) as db:
+                    checkpoint = db.execute(
+                        "SELECT offset,status,error FROM confluence_inventory_cursor"
+                    ).fetchone()
+                    retained = db.execute(
+                        "SELECT COUNT(*) FROM confluence_inventory_items").fetchone()[0]
+                self.assertEqual(checkpoint[0:2], (25, "incomplete"))
+                self.assertIn("Repeated", checkpoint[2])
+                self.assertEqual(retained, 26)
 
     def test_completed_parent_covers_children_with_old_or_missing_checkpoints(self):
         cfg = {"confluence": {"scopes": [
