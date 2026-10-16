@@ -2,6 +2,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from core import discovery_fts, discovery_term_relationships
@@ -11,7 +12,7 @@ class ContextualTermRelationshipTests(unittest.TestCase):
     def test_explicit_change_across_sources_and_scope(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "evidence.sqlite"
-            with sqlite3.connect(str(path)) as db:
+            with closing(sqlite3.connect(str(path))) as db:
                 discovery_fts._init(db)
                 examples = [
                     ("j1", "APS", "jira:APS-19",
@@ -42,7 +43,7 @@ class ContextualTermRelationshipTests(unittest.TestCase):
     def test_no_equality_from_cooccurrence_and_no_auto_confirm(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "evidence.sqlite"
-            with sqlite3.connect(str(path)) as db:
+            with closing(sqlite3.connect(str(path))) as db:
                 discovery_fts._init(db)
                 discovery_fts._put(db, "d1", "d1", "APS", "issue", None, None,
                                    "", "SDX is often discussed near APS P2P.",
