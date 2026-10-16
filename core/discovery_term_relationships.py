@@ -56,12 +56,7 @@ def _matches(sentence):
     for match in HISTORICAL.finditer(sentence):
         prefix = match.group("new")
         prefix = re.split(r"[,;:]|\\s{2,}", prefix)[-1]
-        # Prefer the smallest capitalized suffix, e.g. 'OrgBook', rather than
-        # treating introductory text as part of the product name.
-        words = prefix.split()
-        while len(words) > 1 and not _entity(" ".join(words)):
-            words.pop(0)
-        new, old = _clean(" ".join(words)), _clean(match.group("old"))
+        new, old = _clean(prefix), _clean(match.group("old"))
         if _entity(new) and _entity(old):
             yield "historical_name", new, old
     for pattern, relation in ((RENAMED, "renamed_to"),
