@@ -91,7 +91,7 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
                     sql, (item["project"],)):
                 for excerpt in _passages((title or "") + ". " + (body or ""), a, b):
                     classification = "co_occurrence_only"
-                    explicit_matches = [match for sentence in re.split(r"(?<=[.!?])\\s+|[\\r\\n]+", excerpt)
+                    explicit_matches = [match for sentence in re.split(r"(?<=[.!?])\s+|[\r\n]+", excerpt)
                                         for match in discovery_term_relationships._matches(sentence)]
                     if any({x.casefold(), y.casefold()} == {a.casefold(), b.casefold()}
                            for _, x, y in explicit_matches):
