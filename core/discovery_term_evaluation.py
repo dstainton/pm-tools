@@ -104,7 +104,7 @@ def generate(db_path, project=None, max_pairs=100):
         for (scope, first, second), refs in co_mentions.items():
             if len(refs) < 2:
                 continue
-            a, b = sorted((known[scope][first], second))
+            a, b = sorted((known[scope][first], second.upper()))
             key = (scope, a.casefold(), b.casefold())
             record = pairs.setdefault(key, {
                 "project": scope, "a": a, "b": b,
