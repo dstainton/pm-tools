@@ -1,8 +1,8 @@
 """Checkpointed, bounded Confluence page inventory respecting configured scope.
 
-This collector is independent of the older capped metadata report. Every run
-continues at a persisted CQL offset; the current scope is bound to a fingerprint
-of the authorized root and space. No content is downloaded or modified.
+Page trees use Confluence Cloud v2 cursor-paginated descendants. Whole-space
+scopes retain bounded CQL offsets. Checkpoints remain bound to the authorized
+root and space. No content is downloaded or modified.
 """
 import hashlib
 import json
@@ -10,20 +10,24 @@ import sqlite3
 
 from core import discovery_inventory, sources
 
-# v1 silently dropped valid CQL matches and could advance indefinitely over
-# repeated pages. Restart incomplete v1 offsets once, without deleting pages.
-SCAN_VERSION = 2
+# v1/v2 used offset-based CQL page-tree searches; three APS scopes repeated
+# at offset 1000. Restart incomplete old cursors via the v2 descendants API.
+SCAN_VERSION = 3
 
 
 def _init(db):
     db.execute("""CREATE TABLE IF NOT EXISTS confluence_inventory_cursor (
         scope_id TEXT PRIMARY KEY, scope_json TEXT NOT NULL,
         offset INTEGER NOT NULL, status TEXT NOT NULL, error TEXT,
-        scan_version INTEGER NOT NULL DEFAULT 1)""")
+        scan_version INTEGER NOT NULL DEFAULT 1,
+        cursor TEXT)""")
     if "scan_version" not in {row[1] for row in db.execute(
             "PRAGMA table_info(confluence_inventory_cursor)")}:
         db.execute("ALTER TABLE confluence_inventory_cursor "
                    "ADD COLUMN scan_version INTEGER NOT NULL DEFAULT 1")
+    if "cursor" not in {row[1] for row in db.execute(
+            "PRAGMA table_info(confluence_inventory_cursor)")}:
+        db.execute("ALTER TABLE confluence_inventory_cursor ADD COLUMN cursor TEXT")
     db.execute("""CREATE TABLE IF NOT EXISTS confluence_inventory_items (
         scope_id TEXT NOT NULL, content_id TEXT NOT NULL, space TEXT,
         title TEXT, content_type TEXT, updated TEXT, ancestors TEXT,
@@ -54,11 +58,10 @@ def _is_covered(db, complete_scopes, child_scope):
 
 
 def crawl(cfg, db_path, max_rows=100, on_progress=None):
-    """Resume bounded, source-cited CQL traversal without trusting ancestry JSON.
+    """Resume bounded page-tree cursor or space-offset collection.
 
-    Stop on repeated page batches instead of advancing meaningless offsets.
-    Legacy incomplete cursors are rescanned from zero exactly once, preserving
-    existing inventory and already indexed evidence.
+    Broken legacy CQL page-tree offsets are replaced with v2 descendant cursors
+    once, while preserving previously indexed source documents.
     """
     if max_rows < 1:
         raise ValueError("max_rows must be positive")
@@ -89,10 +92,10 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                 scope, root = resolved if isinstance(resolved, tuple) else (resolved, None)
                 sid = _identity(scope)
                 record = db.execute(
-                    """SELECT offset, status, scan_version
+                    """SELECT offset, status, scan_version, cursor
                        FROM confluence_inventory_cursor WHERE scope_id=?""",
                     (sid,)).fetchone()
-                offset, status, version = record if record else (0, "pending", SCAN_VERSION)
+                offset, status, version, cursor = record if record else (0, "pending", SCAN_VERSION, None)
                 if status == "complete":
                     entry.update(status="complete", offset=offset, scope=scope)
                     completed.append((sid, scope))
@@ -111,10 +114,10 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                 if record and version < SCAN_VERSION:
                     with db:
                         db.execute("""UPDATE confluence_inventory_cursor
-                                      SET offset=0, status='pending', error=NULL,
+                                      SET offset=0, cursor=NULL, status='pending', error=NULL,
                                           scan_version=? WHERE scope_id=?""",
                                    (SCAN_VERSION, sid))
-                    offset, status = 0, "pending"
+                    offset, status, cursor = 0, "pending", None
                     entry["legacy_checkpoint_restarted"] = True
 
                 emit(scope, "collecting", offset, 0, scope_index, len(scopes))
@@ -134,10 +137,19 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                 signatures = set()
                 remaining = max_rows
                 while remaining:
-                    rows, more = sources.list_confluence_inventory(
-                        cfg, scope.get("space"), start=offset,
-                        limit=min(25, remaining),
-                        ancestor_id=scope["root_id"] if scope["type"] == "page_tree" else None)
+                    if scope["type"] == "page_tree":
+                        rows, next_cursor = sources.list_confluence_page_descendants(
+                            cfg, scope["root_id"], cursor=cursor,
+                            limit=min(100, remaining))
+                        more = next_cursor is not None
+                        if more and next_cursor == cursor:
+                            raise ValueError(
+                                "Confluence v2 descendants returned the same cursor twice")
+                    else:
+                        rows, more = sources.list_confluence_inventory(
+                            cfg, scope["space"], start=offset,
+                            limit=min(25, remaining))
+                        next_cursor = None
                     if not rows and more:
                         raise ValueError("Confluence returned an empty page with a continuation link")
                     ids = tuple(str(row.get("id") or "") for row in rows)
@@ -156,8 +168,11 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                         pid = str(row.get("id") or "")
                         if not pid:
                             continue
-                        # The server-side CQL 'ancestor' predicate is the scope
-                        # authority; expanded ancestry may omit deep parents.
+                        # v2 descendants includes all depths; ignore non-pages
+                        # while still advancing its opaque cursor correctly.
+                        if scope["type"] == "page_tree" and row.get("type") != "page":
+                            continue
+                        # In legacy CQL space searches ancestry is only metadata.
                         ancestors = [str(a.get("id")) for a in
                                      (row.get("ancestors") or [])
                                      if isinstance(a, dict) and a.get("id")]
@@ -176,7 +191,7 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                             (row.get("version") or {}).get("when"),
                             json.dumps(ancestors)))
 
-                    if rows and not to_write:
+                    if rows and not to_write and scope["type"] != "page_tree":
                         raise ValueError("Confluence returned only results without page IDs")
                     offset += len(rows)
                     remaining -= len(rows)
@@ -186,14 +201,16 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                             (scope_id,content_id,space,title,content_type,updated,ancestors)
                             VALUES(?,?,?,?,?,?,?)""", to_write)
                         db.execute("""INSERT INTO confluence_inventory_cursor
-                            (scope_id,scope_json,offset,status,error,scan_version)
-                            VALUES(?,?,?,?,NULL,?)
+                            (scope_id,scope_json,offset,status,error,scan_version,cursor)
+                            VALUES(?,?,?,?,NULL,?,?)
                             ON CONFLICT(scope_id) DO UPDATE SET
                                 scope_json=excluded.scope_json,
                                 offset=excluded.offset, status=excluded.status,
-                                error=NULL, scan_version=excluded.scan_version""",
+                                error=NULL, scan_version=excluded.scan_version,
+                                cursor=excluded.cursor""",
                             (sid, json.dumps(scope, sort_keys=True), offset,
-                             status, SCAN_VERSION))
+                             status, SCAN_VERSION, next_cursor))
+                    cursor = next_cursor
                     entry["processed"] += len(rows)
                     entry["offset"] = offset
                     entry["new_pages"] += new
