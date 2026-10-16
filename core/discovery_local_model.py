@@ -28,13 +28,14 @@ def classify(edge, model_cfg):
     excerpts = edge.get("evidence") or []
     if not excerpts:
         return {"status": "no_evidence", "type": "unresolved", "citations": []}
-    refs = {e["citation"] for e in excerpts}
+    supplied = excerpts[:8]
+    refs = {e["citation"] for e in supplied}
     prompt = {
         "from": edge["from"], "to": edge["to"],
         "deterministic_type": edge.get("type"),
         "evidence": [{"citation": x["citation"], "excerpt": x.get("excerpt", "")[:500],
                       "date": x.get("event_time"), "kind": x.get("kind")}
-                     for x in excerpts[:8]],
+                     for x in supplied],
     }
     instruction = (
         "Review an unconfirmed concept relationship using ONLY the cited source "
@@ -44,7 +45,10 @@ def classify(edge, model_cfg):
         "unresolved. Prefer unresolved over guessing. Direction is FROM to TO. "
         "Output one JSON object: type, citations (exact strings from evidence), "
         "rationale (one sentence), confidence (low/medium/high). "
-        "Incidental mentions alone never establish a relationship."
+        "Incidental mentions alone never establish a relationship. "
+        "Copy citation strings exactly from evidence, including punctuation. "
+        "If no specific relationship is supported, return type unresolved and "
+        "citations []. Do not invent or reformat source identifiers."
     )
     raw = model.call_model(
         model_cfg, instruction, json.dumps(prompt, ensure_ascii=False),
@@ -59,7 +63,7 @@ def classify(edge, model_cfg):
     if not isinstance(cited, list):
         raise ValueError("Citations must be a JSON array")
     if any(not isinstance(x, str) or x not in refs for x in cited):
-        raise ValueError("Citation not present in supplied evidence")
+        raise ValueError("Citation not present in the eight supplied evidence excerpts")
     if confidence not in ("low", "medium", "high"):
         raise ValueError("Invalid confidence value")
     if not isinstance(rationale, str):
