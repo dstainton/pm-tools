@@ -62,15 +62,15 @@ class FullConfluenceIndexTests(unittest.TestCase):
                      "status": "complete", "offset": 125, "processed": 25}]
         args = Namespace(project="APS", confluence_crawl=True,
                          index_confluence=True, export=False)
-        with tempfile.TemporaryDirectory() as folder, \\
-             patch("core.paths.local_dir", return_value=folder), \\
+        with tempfile.TemporaryDirectory() as folder, \
+             patch("core.paths.local_dir", return_value=folder), \
              patch("core.discovery_confluence_checkpoint.crawl",
-                   side_effect=[incomplete, complete]) as crawler, \\
+                   side_effect=[incomplete, complete]) as crawler, \
              patch("core.discovery_confluence_index.index",
                    return_value={"indexed": 0, "comments_indexed": 0,
                                  "changed": 0, "comments_changed": 0,
                                  "inventory_coverage": "complete",
-                                 "complete": True, "errors": [], "scopes": []}) as index, \\
+                                 "complete": True, "errors": [], "scopes": []}) as index, \
              patch("builtins.print"):
             discover.run(cfg, args)
         self.assertEqual(crawler.call_count, 2)
