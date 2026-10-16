@@ -94,7 +94,7 @@ def generate(db_path, project=None, max_pairs=100):
             terms = known.get(scope, {})
             observed = [name for lower, name in terms.items() if
                         _phrase(text, name)]
-            codes = set(re.findall(r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3})?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])", text))
+            codes = set(re.findall(r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3}[A-Z0-9]*)?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])", text))
             for first in observed[:20]:
                 for second in sorted(codes)[:30]:
                     if first.casefold() == second.casefold():
@@ -110,12 +110,13 @@ def generate(db_path, project=None, max_pairs=100):
                 "project": scope, "a": a, "b": b,
                 "basis": [], "source_citations": []})
             record["basis"].append("repeated_contextual_mention")
+            record["contextual_sources"] = len(refs)
             record["source_citations"] = sorted(set(record["source_citations"]) | refs)
     finally:
         db.close()
     return sorted(pairs.values(), key=lambda x: (
         0 if any(v.startswith("explicit:") for v in x["basis"]) else 1,
-        x["project"] or "", x["a"], x["b"]))[:max_pairs]
+        -x.get("contextual_sources", 0), x["project"] or "", x["a"], x["b"]))[:max_pairs]
 
 
 def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
