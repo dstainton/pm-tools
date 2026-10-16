@@ -31,6 +31,21 @@ class ThinkingComparisonTests(unittest.TestCase):
         self.assertEqual(result["reviewed"], 1)
         self.assertEqual(result["different_types"], 1)
         self.assertEqual(result["modes"]["on"]["valid"], 1)
+        self.assertIn("thinking_verification", result)
+        self.assertEqual(result["comparisons"][0]["evidence"][0]["citation"], "DOC-1")
+
+    def test_repair_causes_are_reported(self):
+        graph = {"relationships": [{"from": "A", "to": "B", "project": "APS",
+                                     "evidence": [{"citation": "DOC-1", "excerpt": "A uses B"}]}]}
+        cfg = {"model": {"endpoint": "http://localhost/test", "name": "local"}}
+        reply = {"status": "unconfirmed_model_proposal", "type": "related_to",
+                 "citations": ["DOC-1"], "rationale": "A uses B.",
+                 "confidence": "medium", "repair_attempted": True,
+                 "first_pass_valid": False, "repair_reason": "Invalid JSON: test"}
+        with patch("core.discovery_local_model.classify", return_value=reply):
+            result = discovery_thinking_comparison.compare(graph, cfg)
+        self.assertEqual(result["modes"]["on"]["repair_reasons"]["Invalid JSON: test"], 1)
+        self.assertEqual(result["modes"]["off"]["first_pass_valid"], 0)
 
     def test_failures_are_recorded_not_confirmed(self):
         graph = {"relationships": [
