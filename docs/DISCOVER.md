@@ -152,3 +152,7 @@ new relationships from unstructured narrative.
 ### Narrative relationship discovery (experimental)
 
 When `--concept-graph-model` is enabled, discovery now also extracts up to 20 review pairs from sentences containing at least two known, project-scoped concept names or abbreviations. These are **unresolved candidates**, not deterministic relationship assertions. The existing configured local model classifies cited narrative as well as explicit graph edges (up to 40 total model requests). A model classification is never promoted automatically. Errors distinguish invalid types, unsupported citations, and other malformed fields. This improves recall but cannot prove that the model is correct; review the cited excerpts and compare with deterministic findings before accepting relationships.
+
+### Small-model JSON validation and repair
+
+The local graph classifier now requests a fixed four-field JSON object, including an explicit unresolved example, and uses the configured non-thinking JSON sampling. If JSON parsing or schema/citation validation fails, it makes **one additional inference call** containing the original response, the validation error and the exact allowed citations. The model is asked to correct the output; the corrected object must pass all the original validation rules. No unsupported citation is accepted and no model output is automatically confirmed. Repair calls are uncached to allow a genuine correction; a failed repair is reported as an error with both failure reasons.
