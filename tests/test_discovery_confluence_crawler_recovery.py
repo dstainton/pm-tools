@@ -138,7 +138,7 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
                               side_effect=fetch):
                 with patch.object(cp.sources, "search_confluence_by_title",
                                   side_effect=search):
-                    with patch.object(cp.sources, "list_confluence_inventory",
+                    with patch.object(cp.sources, "list_confluence_page_descendants",
                                       side_effect=search_pages):
                         results = cp.crawl(cfg, path)
             self.assertEqual(calls, [(None, "100")])
