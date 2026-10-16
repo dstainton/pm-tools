@@ -207,6 +207,14 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
+    if getattr(args, "term_relationships", False):
+        from core import discovery_term_relationships, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.isfile(db_file):
+            raise SystemExit("Local evidence index missing; index Jira or Confluence first.")
+        report["term_relationships"] = discovery_term_relationships.propose(
+            db_file, project=getattr(args, "project", None))
     if getattr(args, "concept_clusters", False):
         from core import discovery_concept_clusters, paths
         import os
@@ -253,6 +261,17 @@ def run(cfg, args):
                 print("  Incomplete scope: {} ({})".format(
                     scope.get("space") or scope.get("root_id"),
                     scope.get("detail") or scope["status"]))
+    if report.get("term_relationships") is not None:
+        item = report["term_relationships"]
+        print("Offline source evidence: {} indexed documents examined (not live retrieval)".format(
+            item["examined_documents"]))
+        print("Candidate terminology relationships: {} (showing {})".format(
+            item["total_candidates"], len(item["relationships"])))
+        for relation in item["relationships"]:
+            citation = relation["evidence"][0]["citation"]
+            print("  {}: {} -> {} [{}; {} source(s); {}]".format(
+                relation["relationship"], relation["from"], relation["to"],
+                relation["project"], relation["evidence_count"], citation))
     if report.get("concept_clusters") is not None:
         entries = report["concept_clusters"]
         print("Concept candidate clusters: {}".format(len(entries)))
@@ -341,6 +360,14 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("term_relationships") is not None:
+                stream.write("\n## Unconfirmed terminology relationships\n\n")
+                for relation in report["term_relationships"]["relationships"]:
+                    stream.write("- {}: {} -> {} [{}; {} source(s)]\n".format(
+                        relation["relationship"], relation["from"], relation["to"],
+                        relation["project"], relation["evidence_count"]))
+                    for ev in relation["evidence"]:
+                        stream.write("  - {}: {}\n".format(ev["citation"], ev["excerpt"]))
             if report.get("concept_clusters") is not None:
                 stream.write("\n## Candidate terminology clusters\n\n")
                 for item in report["concept_clusters"]:
