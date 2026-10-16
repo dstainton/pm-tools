@@ -35,6 +35,34 @@ class TermEvaluationTests(unittest.TestCase):
             self.assertEqual({e["citation"] for e in match["evidence"]},
                              {"jira:APS-10", "confluence:11"})
 
+    def test_contextual_pair_has_independent_source_dossier(self):
+        from core import discovery_concepts
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "evidence.sqlite"
+            discovery_concepts.register(path, "sdx", "Secure Data Exchange", project="APS")
+            discovery_concepts.alias(path, "sdx", "SDX", "abbreviation",
+                                     "jira:APS-1")
+            with closing(sqlite3.connect(str(path))) as db:
+                discovery_fts._init(db)
+                samples = [
+                    ("jira:APS-10", "SDX and APS P2P integration planning", "2025-01-01"),
+                    ("jira:APS-11", "APS P2P work follows SDX discovery", "2026-01-01"),
+                    ("jira:APS-12", "SDX and APS P2P review the same dependencies", "2026-02-01"),
+                ]
+                for idx, (citation, body, when) in enumerate(samples):
+                    discovery_fts._put(db, "doc" + str(idx), "key", "APS", "issue",
+                                       when, when, "", body, citation)
+                db.commit()
+            pairs = discovery_term_evaluation.generate(path, project="APS")
+            self.assertTrue(any({p["a"], p["b"]} == {"SDX", "APS P2P"}
+                                for p in pairs))
+            result = discovery_term_evaluation.evaluate(path, project="APS")
+            match = next(p for p in result["evaluations"]
+                         if {p["a"], p["b"]} == {"SDX", "APS P2P"})
+            self.assertEqual(match["assessment"], "unresolved")
+            self.assertEqual(match["independent_sources"], 3)
+            self.assertEqual(len({e["citation"] for e in match["evidence"]}), 3)
+
     def test_cooccurrence_does_not_become_equivalence(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "evidence.sqlite"

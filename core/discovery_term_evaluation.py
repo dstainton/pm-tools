@@ -68,9 +68,55 @@ def generate(db_path, project=None, max_pairs=100):
                 record["basis"].append("competing_expansion:" + alias)
                 record["source_citations"] = sorted(set(
                     record["source_citations"] + first["citations"] + second["citations"]))
+    # Discover name/code transitions by repeated, independent source references.
+    # One side must already be a known concept or alias; the other is an
+    # uppercase product-like code. Mere co-mention generates a review pair,
+    # never an assertion of equivalence.
+    known = defaultdict(dict)
+    for cluster in clusters:
+        scope = cluster["project"]
+        for term in [cluster["canonical"]] + cluster["aliases"]:
+            if len(term) >= 3:
+                known[scope][term.casefold()] = term
+    co_mentions = defaultdict(set)
+    db = sqlite3.connect(str(db_path))
+    try:
+        discovery_fts._init(db)
+        sql = "SELECT project, citation, title, body FROM discovery_fts_documents"
+        args = []
+        if project:
+            sql += " WHERE project=?"
+            args.append(project)
+        for scope, citation, title, body in db.execute(sql, args):
+            text = (title or "") + " " + (body or "")
+            if len(text) > 25000:
+                text = text[:25000]
+            terms = known.get(scope, {})
+            observed = [name for lower, name in terms.items() if
+                        _phrase(text, name)]
+            codes = set(re.findall(r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3}[A-Z0-9]*)?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])", text))
+            for first in observed[:20]:
+                for second in sorted(codes)[:30]:
+                    if first.casefold() == second.casefold():
+                        continue
+                    key = (scope, first.casefold(), second.casefold())
+                    co_mentions[key].add(citation)
+        for (scope, first, second), refs in co_mentions.items():
+            if len(refs) < 2:
+                continue
+            a, b = sorted((known[scope][first], second.upper()))
+            key = (scope, a.casefold(), b.casefold())
+            record = pairs.setdefault(key, {
+                "project": scope, "a": a, "b": b,
+                "basis": [], "source_citations": []})
+            record["basis"].append("repeated_contextual_mention")
+            record["contextual_sources"] = len(refs)
+            record["source_citations"] = sorted(set(record["source_citations"]) | refs)
+    finally:
+        db.close()
     return sorted(pairs.values(), key=lambda x: (
         0 if any(v.startswith("explicit:") for v in x["basis"]) else 1,
-        x["project"] or "", x["a"], x["b"]))[:max_pairs]
+        -x.get("contextual_sources", 0), x["project"] or "", x["a"], x["b"]))[:max_pairs]
 
 
 def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
@@ -87,24 +133,46 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
             evidence = []
             sql = """SELECT citation, source, kind, event_time, title, body
                      FROM discovery_fts_documents WHERE project IS ? ORDER BY citation"""
+            # Collect one passage per independent citation, favouring both-term
+            # mentions. A repeated snippet from one comment is one source.
+            candidates = []
             for citation, source, kind, when, title, body in db.execute(
                     sql, (item["project"],)):
-                for excerpt in _passages((title or "") + ". " + (body or ""), a, b):
-                    classification = "co_occurrence_only"
-                    explicit_matches = [match for sentence in re.split(r"(?<=[.!?])\s+|[\r\n]+", excerpt)
-                                        for match in discovery_term_relationships._matches(sentence)]
+                text = (title or "") + ". " + (body or "")
+                if not (_phrase(text, a) or _phrase(text, b)):
+                    continue
+                spans = _passages(text, a, b)
+                if not spans:
+                    for term in (a, b):
+                        hit = re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text, re.I)
+                        if hit:
+                            spans = [text[max(0, hit.start()-140):hit.end()+180]]
+                            break
+                excerpt = spans[0].strip()[:380]
+                signal = "single_term_mention"
+                if _phrase(excerpt, a) and _phrase(excerpt, b):
+                    signal = "co_occurrence_only"
+                    sentences = re.split(r"(?<=[.!?])\s+|[\r\n]+", excerpt)
+                    matches = [m for sentence in sentences
+                               for m in discovery_term_relationships._matches(sentence)]
                     if any({x.casefold(), y.casefold()} == {a.casefold(), b.casefold()}
-                           for _, x, y in explicit_matches):
-                        classification = "explicit_relationship"
+                           for _, x, y in matches):
+                        signal = "explicit_relationship"
                     elif re.search(r"\b(?:distinct|different|not the same|unrelated|separate)\b",
                                    excerpt, re.I):
-                        classification = "possible_distinction"
-                    evidence.append({
-                        "citation": citation, "source": source, "kind": kind,
-                        "event_time": when, "signal": classification,
-                        "excerpt": excerpt.strip()[:380]})
-                    if len(evidence) >= max_evidence:
-                        break
+                        signal = "possible_distinction"
+                candidates.append({
+                    "citation": citation, "source": source, "kind": kind,
+                    "event_time": when, "signal": signal, "excerpt": excerpt})
+            priority = {"explicit_relationship": 0, "possible_distinction": 1,
+                        "co_occurrence_only": 2, "single_term_mention": 3}
+            candidates.sort(key=lambda x: (priority[x["signal"]],
+                         x["event_time"] or "", x["citation"]))
+            seen = set()
+            for candidate in candidates:
+                if candidate["citation"] not in seen:
+                    seen.add(candidate["citation"])
+                    evidence.append(candidate)
                 if len(evidence) >= max_evidence:
                     break
             signals = {x["signal"] for x in evidence}
@@ -118,6 +186,7 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
                 assessment = "unresolved"
             output.append(dict(item, assessment=assessment,
                                evidence=evidence, evidence_count=len(evidence),
+                               independent_sources=len(seen),
                                status="candidate"))
         return {"pairs_generated": len(pairs), "evaluations": output,
                 "method": "bounded_deterministic_evidence_triage"}
