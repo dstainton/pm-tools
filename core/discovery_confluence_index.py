@@ -12,6 +12,26 @@ from html.parser import HTMLParser
 from core import discovery_fts, discovery_inventory, discovery_confluence_checkpoint, sources
 
 
+def _single_scoped_project(cfg, inventory):
+    """Map a dedicated page-tree scope to its sole configured Jira project.
+
+    Never apply this to whole-space searches or multi-project configurations,
+    where membership cannot be safely inferred.
+    """
+    scopes = [row.get("scope", row) for row in inventory.get("scopes") or []]
+    if not scopes or any(scope.get("type") != "page_tree" for scope in scopes):
+        return None
+    projects = set()
+    jira = (cfg.get("jira") or {}).get("project")
+    if jira:
+        projects.add(str(jira))
+    for entry in (cfg.get("products") or []) + (cfg.get("workstreams") or []):
+        project = entry.get("project") or entry.get("jira_project")
+        if project:
+            projects.add(str(project))
+    return next(iter(projects)) if len(projects) == 1 else None
+
+
 class _Text(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -68,7 +88,7 @@ def _blogs(cfg, inventory, cap):
     return results, status
 
 
-def _comments(cfg, db, parent_id, space, parent_title, cap):
+def _comments(cfg, db, parent_id, space, parent_title, cap, project=None):
     """Index direct comments with per-parent bounded pagination and citations."""
     start = updated = count = 0
     while start < cap:
@@ -89,7 +109,7 @@ def _comments(cfg, db, parent_id, space, parent_title, cap):
             when = (comment.get("version") or {}).get("when")
             with db:
                 updated += int(discovery_fts._put(
-                    db, "confluence:comment:" + cid, cid, space,
+                    db, "confluence:comment:" + cid, cid, project or space,
                     "confluence_comment",
                     (comment.get("history") or {}).get("createdDate"), when,
                     parent_title + " comment " + cid, body,
@@ -104,14 +124,29 @@ def _comments(cfg, db, parent_id, space, parent_title, cap):
     return count, updated, "Comments beyond per-parent cap"
 
 
-def index(cfg, db_path, cap=100, use_checkpoint=False):
-    """Fetch scoped pages, index independently, and report failures explicitly."""
+def index(cfg, db_path, cap=100, use_checkpoint="auto"):
+    """Index pages in authorized scopes, preferring persisted crawl checkpoints.
+
+    A complete checkpoint allows indexing all collected pages, not just the
+    first cap search rows. Incomplete checkpoints remain partial, never
+    falsely declared complete. Without a checkpoint the original bounded
+    metadata inventory remains available for compatibility.
+    """
     report = {}
-    if use_checkpoint:
-        inventory = discovery_confluence_checkpoint.indexed_inventory(cfg, db_path)
+    checkpoint = None
+    if use_checkpoint is not False:
+        checkpoint = discovery_confluence_checkpoint.indexed_inventory(cfg, db_path)
+    checkpoint_found = bool(checkpoint and any(
+        scope.get("status") in ("complete", "incomplete")
+        for scope in checkpoint["scopes"]))
+    if use_checkpoint is True or (use_checkpoint == "auto" and checkpoint_found):
+        inventory = checkpoint
+        inventory_mode = "checkpoint"
     else:
         discovery_inventory.build(cfg, report, cap=cap)
         inventory = report["inventory"]
+        inventory_mode = "bounded"
+    project_assignment = _single_scoped_project(cfg, inventory)
     blogs, blog_scopes = _blogs(cfg, inventory, cap)
     db = sqlite3.connect(str(db_path))
     indexed = changed = comments_indexed = comments_changed = 0
@@ -139,13 +174,13 @@ def index(cfg, db_path, cap=100, use_checkpoint=False):
                 with db:
                     changed += int(discovery_fts._put(
                         db, "confluence:" + page.get("type", "page") + ":" + pid,
-                        pid, space, "confluence_" + page.get("type", "page"),
+                        pid, project_assignment or space, "confluence_" + page.get("type", "page"),
                         (fetched.get("history") or {}).get("createdDate"), version,
                         title, body, "confluence:" + pid, source="confluence"))
                 indexed += 1
                 try:
                     found, modified, limitation = _comments(
-                        cfg, db, pid, space, title, cap)
+                        cfg, db, pid, space, title, cap, project=project_assignment)
                     comments_indexed += found
                     comments_changed += modified
                     if limitation:
@@ -157,6 +192,8 @@ def index(cfg, db_path, cap=100, use_checkpoint=False):
                 errors.append({"id": pid, "detail": "{}: {}".format(
                     type(exc).__name__, str(exc)[:160])})
         return {"indexed": indexed, "changed": changed,
+                "inventory_mode": inventory_mode,
+                "project_assignment": project_assignment or "Confluence space",
                 "comments_indexed": comments_indexed, "comments_changed": comments_changed,
                 "inventory_coverage": inventory["coverage"],
                 "scopes": inventory["scopes"] + blog_scopes, "errors": errors,

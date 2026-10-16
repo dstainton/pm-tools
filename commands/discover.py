@@ -195,8 +195,22 @@ def run(cfg, args):
                 item["index"], item["total"], item["name"], item["status"],
                 item["processed"], item["offset"]))
         try:
-            report["confluence_crawl"] = discovery_confluence_checkpoint.crawl(
-                cfg, db_file, on_progress=show_crawl)
+            # The combined crawl+index request is an explicit full-source
+            # operation. Resume checkpoint pages until all authorized scopes
+            # are complete or collection stops making forward progress.
+            rounds = 200 if getattr(args, "index_confluence", False) else 1
+            previous = None
+            for _ in range(rounds):
+                batch = discovery_confluence_checkpoint.crawl(
+                    cfg, db_file, on_progress=show_crawl)
+                report["confluence_crawl"] = batch
+                if not batch or all(row["status"] == "complete" for row in batch):
+                    break
+                state = tuple((str(row.get("scope")), row.get("offset", 0),
+                               row["status"]) for row in batch)
+                if state == previous:
+                    break
+                previous = state
         finally:
             progress.finish()
     if getattr(args, "index_confluence", False):
