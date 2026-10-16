@@ -223,8 +223,19 @@ def run(cfg, args):
         from core import discovery_local_model
         progress.start("Reviewing source-cited relationships with local model")
         try:
+            from core import discovery_contextual_candidates
+            contextual = discovery_contextual_candidates.candidates(
+                db_file, project=getattr(args, "project", None), limit=20)
+            report["contextual_candidates"] = contextual
+            existing = report["concept_graph"]["relationships"]
+            seen = {(e["project"], frozenset((e["from"].casefold(), e["to"].casefold())))
+                    for e in existing}
+            extra = [e for e in contextual if
+                     (e["project"], frozenset((e["from"].casefold(), e["to"].casefold())))
+                     not in seen]
+            review_graph = dict(report["concept_graph"], relationships=existing + extra)
             report["model_graph_review"] = discovery_local_model.review(
-                report["concept_graph"], cfg)
+                review_graph, cfg, max_edges=40)
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
