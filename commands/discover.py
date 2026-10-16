@@ -198,11 +198,14 @@ def run(cfg, args):
             # The combined crawl+index request is an explicit full-source
             # operation. Resume checkpoint pages until all authorized scopes
             # are complete or collection stops making forward progress.
-            rounds = 200 if getattr(args, "index_confluence", False) else 1
+            # Larger bounded rounds avoid resolving each page-tree root after
+            # every four HTTP pages. Total combined cap remains 20,000 rows.
+            rounds = 40 if getattr(args, "index_confluence", False) else 1
             previous = None
             for _ in range(rounds):
                 batch = discovery_confluence_checkpoint.crawl(
-                    cfg, db_file, on_progress=show_crawl)
+                    cfg, db_file, max_rows=500 if rounds > 1 else 100,
+                    on_progress=show_crawl)
                 report["confluence_crawl"] = batch
                 if not batch or all(row["status"] == "complete" for row in batch):
                     break
@@ -313,9 +316,18 @@ def run(cfg, args):
     print(discovery.summary(report), end="")
     if report.get("confluence_crawl") is not None:
         for item in report["confluence_crawl"]:
-            print("Confluence crawl: {} ({} rows this run, offset {}){}".format(
-                item["status"], item["processed"], item.get("offset", 0),
-                "; " + item["error"] if item.get("error") else ""))
+            scope = item.get("scope") or {}
+            label = (scope.get("root_title") or scope.get("root_id")
+                     or scope.get("space") or "unknown")
+            note = ("; covered by completed ancestor {}".format(item["covered_by"])
+                    if item.get("covered_by") else "")
+            print("Confluence crawl: {} [{}] ({} rows this round, offset {}; "
+                  "{} new, {} duplicates, {} ancestry metadata warnings){}{}".format(
+                      item["status"], label, item["processed"],
+                      item.get("offset", 0), item.get("new_pages", 0),
+                      item.get("duplicates", 0),
+                      item.get("ancestry_metadata_warnings", 0), note,
+                      "; " + item["error"] if item.get("error") else ""))
     if report.get("confluence_index") is not None:
         entry = report["confluence_index"]
         print("Confluence evidence: {} pages/blogs, {} comments indexed; {} content and {} comments changed; inventory {}, complete: {}, errors: {}".format(
@@ -327,7 +339,9 @@ def run(cfg, args):
         for scope in entry["scopes"]:
             if scope.get("status") != "complete":
                 print("  Incomplete scope: {} ({})".format(
-                    scope.get("space") or scope.get("root_id"),
+                    (scope.get("scope") or scope).get("root_title")
+                    or (scope.get("scope") or scope).get("root_id")
+                    or (scope.get("scope") or scope).get("space"),
                     scope.get("detail") or scope["status"]))
     if report.get("profile_leads") is not None:
         leads = report["profile_leads"]
