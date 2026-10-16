@@ -81,16 +81,16 @@ class DescendantClientTests(unittest.TestCase):
                         "SELECT cursor FROM confluence_inventory_cursor").fetchone()[0],
                         "next-page")
                 second = cp.crawl(cfg, path, max_rows=3)
-            self.assertEqual(calls, [(None, 3), ("next-page", 3)])
-            self.assertEqual(first[0]["status"], "incomplete")
-            self.assertEqual(first[0]["new_pages"], 2)
-            self.assertEqual(second[0]["status"], "complete")
-            self.assertEqual(second[0]["new_pages"], 1)
-            with closing(sqlite3.connect(str(path))) as db:
-                kinds = dict(db.execute(
-                    "SELECT content_id,content_type FROM confluence_inventory_items"))
-            self.assertEqual(set(kinds), {"100", "200", "400", "500"})
-            self.assertEqual(set(kinds.values()), {"page"})
+                self.assertEqual(calls, [(None, 3), ("next-page", 3)])
+                self.assertEqual(first[0]["status"], "incomplete")
+                self.assertEqual(first[0]["new_pages"], 2)
+                self.assertEqual(second[0]["status"], "complete")
+                self.assertEqual(second[0]["new_pages"], 1)
+                with closing(sqlite3.connect(str(path))) as db:
+                    kinds = dict(db.execute(
+                        "SELECT content_id,content_type FROM confluence_inventory_items"))
+                self.assertEqual(set(kinds), {"100", "200", "400", "500"})
+                self.assertEqual(set(kinds.values()), {"page"})
 
 
 if __name__ == "__main__":
