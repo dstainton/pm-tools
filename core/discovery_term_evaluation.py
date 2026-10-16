@@ -95,10 +95,10 @@ def generate(db_path, project=None, max_pairs=100):
             for name in terms.values():
                 if not _phrase(text, name):
                     continue
-                for hit in re.finditer(r"(?<!\\w)" + re.escape(name) + r"(?!\\w)", text, re.I):
+                for hit in re.finditer(r"(?<!\w)" + re.escape(name) + r"(?!\w)", text, re.I):
                     local = text[max(0, hit.start() - 110):min(len(text), hit.end() + 110)]
                     codes = set(re.findall(
-                        r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\\s+[A-Z]{1,5}[0-9]{1,3}[A-Z0-9]*)?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])",
+                        r"(?<![A-Za-z0-9])(?:[A-Z]{2,8}(?:\s+[A-Z]{1,5}[0-9]{1,3}[A-Z0-9]*)?|[A-Z]{2,6}[0-9]{1,3})(?![A-Za-z0-9])",
                         local))
                     for code in codes:
                         if name.casefold() != code.casefold():
@@ -162,8 +162,11 @@ def evaluate(db_path, project=None, max_pairs=100, max_evidence=8):
                     if any({x.casefold(), y.casefold()} == {a.casefold(), b.casefold()}
                            for _, x, y in matches):
                         signal = "explicit_relationship"
-                    elif re.search(r"\b(?:distinct|different|not the same|unrelated|separate)\b",
-                                   excerpt, re.I):
+                    elif any(
+                        _phrase(sentence, a) and _phrase(sentence, b)
+                        and re.search(r"\b(?:are|were|remain)\s+(?:distinct|different|unrelated|separate|not the same)\b",
+                                      sentence, re.I)
+                        for sentence in sentences):
                         signal = "possible_distinction"
                 candidates.append({
                     "citation": citation, "source": source, "kind": kind,
