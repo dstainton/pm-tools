@@ -1109,7 +1109,7 @@ def list_confluence_inventory(cfg, space, start=0, limit=25, ancestor_id=None, c
         return {"results": payload.get("results") or [],
                 "has_more": bool((payload.get("_links") or {}).get("next"))}
     from core import pages
-    data = pages.cache_fetch(cfg, "confluence-inventory",
+    data = pages.cache_fetch(cfg, "confluence-inventory-v2",
                              (space, str(ancestor_id) if ancestor_id is not None else None, cql, start, limit), fetch)
     return data["results"], data["has_more"]
 
