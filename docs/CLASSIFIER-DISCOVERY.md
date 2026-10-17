@@ -50,7 +50,7 @@ classification:
   task: clustering
   taxonomy_version: pm-broad-v1
   batch_size: 8
-  timeout: 120
+  timeout: 240
 ```
 
 Google's [EmbeddingGemma 300M model card](https://ai.google.dev/gemma/docs/embeddinggemma/model_card) specifies `task: classification | query: {content}` for standard classification and `task: clustering | query: {content}` for clustering. For **custom, domain-specific labels**, Google's later [embedding guidance](https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers) recommends clustering prompts for prototype similarity rather than assuming the standard classification task generalizes to arbitrary category names. Both document taxonomy prototypes and evidence units receive the *same* selected prefix. The initial default is therefore `clustering`; `classification` remains a configurable experiment.
@@ -64,3 +64,8 @@ Lemonade's [embedding endpoint](https://lemonade-server.ai/docs/api/openai/) sup
 ```
 
 Run without `--limit` after validating the local model and performance. Pass `--config path/to/config.yaml` to apply your YAML `classification:` overrides. The classifier consumes the current indexed observations, including title-only Jira issues, without keyword exclusion. Existing legacy Confluence flattening and missing structure are not fixed by this model feature: the separate scoped source reindex remains necessary. The prototype retains per-source citations and cache keys in the SQLite index; it does not extract authoritative claims or create a graph.
+
+
+### Lemonade FLM request compatibility
+
+Lemonade FLM returned one 768-dimensional vector in a warm single-input request, but timed out on a request containing all eight taxonomy descriptions. The classifier now submits one scalar input per HTTP call (including each taxonomy prototype), rather than a list, to avoid unsupported or slow FLM batching. An initial cold model load was observed at about 133 seconds, so the configured per-request timeout is 240 seconds. This is a compatibility workaround, not proof that batching is unsupported on all Lemonade versions. Prototype embeddings are currently recomputed at the start of runs with uncached evidence; persistent prototype vector caching remains follow-up work.
