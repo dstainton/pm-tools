@@ -1,6 +1,6 @@
 # PM knowledge graph: proposed architecture
 
-**Status:** Target direction agreed, implementation and technology selection not yet authorized (2026-10-16).
+**Status:** Long-term knowledge-graph direction. Discovery now follows [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md), selected 2026-10-17. Graph implementation and technology selection remain unapproved.
 
 **Goal:** Build a reusable, local-first, provenance-rich knowledge foundation for product discovery, roadmap and dependency analysis, decision histories, risks, interest-holder mapping, impact assessments and reporting.
 
@@ -16,11 +16,12 @@ APS ingestion collected 4,381 Jira issues, 8,963 comments, 23,683 changelog reco
 
 1. **Collection:** Existing, scoped source adapters and incremental checkpoints.
 2. **Structured evidence:** Original document/issue fields; Confluence section and table boundaries; Jira labels and Confluence content labels as distinct indexed metadata; author/source identity, timestamps, content hash, permissions, citations and stable source spans.
-3. **Entities:** Product, service, capability, workstream, team, Jira component, Jira label, Confluence label, initiative, issue, decision, interest-holder and source. A product can also have an associated workstream; these are not mutually exclusive kinds.
-4. **Source-level claims:** Subject, predicate, object, negation, temporal validity, source span and uncertainty. Distinguish planned, operational, deprecated, contradicted and unknown.
-5. **Reconciliation and temporal property graph:** Resolve aliases carefully, track identity through time, conflicts, superseded decisions and graph edge provenance.
-6. **Evidence retrieval and GraphRAG:** Scope-aware lexical/hybrid retrieval, graph traversals and evidence-backed synthesis, with citations and explicit abstention.
-7. **PM features:** Discovery, assessment, classification, dependency/roadmap impacts, decision support, risk, interest-holder analysis, reporting and stewardship.
+3. **Hierarchical classification:** All in-scope evidence units go to a local broad multi-label classifier without deterministic relevance filtering; specialist classifiers then examine relevant and uncertain branches, with versioned taxonomies and explicit errors/abstentions.
+4. **Entities:** Product, service, capability, workstream, team, Jira component, Jira label, Confluence label, initiative, issue, decision, interest-holder and source. A product can also have an associated workstream; these are not mutually exclusive kinds.
+5. **Source-level claims:** Subject, predicate, object, negation, temporal validity, source span and uncertainty. Distinguish planned, operational, deprecated, contradicted and unknown.
+6. **Reconciliation and temporal property graph:** Resolve aliases carefully, track identity through time, conflicts, superseded decisions and graph edge provenance.
+7. **Evidence retrieval and GraphRAG:** Downstream graph queries, graph traversals and cited synthesis after classifier-based evidence discovery and validated extraction. Lexical search may support browsing or graph queries, but must not prefilter initial classifier ingestion.
+8. **PM features:** Discovery, assessment, classification, dependency/roadmap impacts, decision support, risk, interest-holder analysis, reporting and stewardship.
 
 Important predicates include `provides`, `part_of`, `depends_on`, `used_by`, `owned_by`, `implements`, `replaces`, `historical_name` and `contradicts`. The direction and semantics must be defined, not inferred from co-occurrence.
 
@@ -36,7 +37,7 @@ Important predicates include `provides`, `part_of`, `depends_on`, `used_by`, `ow
 
 ## Technology qualification
 
-**Leading candidate:** Neo4j GraphRAG with a Neo4j property graph. **Alternatives:** Graphiti for temporal/incremental knowledge, LlamaIndex property-graph capabilities and a limited SQLite baseline. Microsoft GraphRAG is an architectural reference.
+**Candidate for later qualification, not selected:** Neo4j GraphRAG with a Neo4j property graph. **Alternatives:** Graphiti for temporal/incremental knowledge, LlamaIndex property-graph capabilities and a limited SQLite baseline. Microsoft GraphRAG is an architectural reference.
 
 Evaluate with the *same frozen corpus*: quality, local-model integration, temporal validity, hybrid search, incremental refresh, provenance, licensing, packaging/Windows support and operating complexity. Keep graph store and retrieval interfaces replaceable. No hosted inference or graph service without separate approval. A future accepted ADR must authorize the concrete stack.
 

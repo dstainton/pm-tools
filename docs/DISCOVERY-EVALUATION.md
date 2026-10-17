@@ -1,6 +1,6 @@
 # Discovery and knowledge-graph evaluation
 
-**Status:** Proposed reference benchmark and release gates, 2026-10-16. Targets require owner acceptance.
+**Status:** Updated for owner-selected hierarchical classifier-first discovery, 2026-10-17. Targets remain proposed until accepted. Targets require owner acceptance.
 
 ## Purpose
 
@@ -26,11 +26,17 @@ Create a versioned, human-reviewed APS benchmark of approximately 20–30 divers
 
 These are **project proposals**, not universal industry standards.
 
+## Classifier-first evaluation principles
+
+No deterministic relevance prefilter may exclude evidence before broad classification. Every in-scope evidence unit is sent to the broad multi-label classifier or explicitly counted as a processing failure. Specialist routing is based on broad classification, including uncertain and multi-label cases. Score and report false negatives at each routing level; sample items assigned `other` or `uncertain` for missed relevance. Separate relevance, evidence strength, source authority and temporal applicability; an uncalibrated model score is not a probability that a claim is true. Cache results using content revision, taxonomy/prompt version and model identity. Keep classification independent of subsequent grounded claim extraction.
+
+Human-reviewed reference cases measure broad/specialist category precision and recall, routing recall, abstention quality, category confusion, negative cases, exact citation support and temporal errors. Report source coverage and failures, not just model scores. The earlier `discovery_benchmark_select` method is a historical deterministic baseline and must not control candidate routing.
+
 ## Evaluation order
 
 1. Confirm structured normalization, Jira/Confluence label preservation, and exact passage reconstruction.
-2. Measure retrieval independent of generation.
-3. Qualify local models using short, known source sections (including false claims, negative language, uncertainty and schema compliance). Record model version, context budget, token usage if available and errors.
+2. Qualify broad multi-label classification against every evidence unit and reviewed category annotations. Measure recall, false positives and uncertain/other audit samples.
+3. Qualify specialist classifier routing and source relevance on short, known sections (including negative language, historical material, uncertainty and schema compliance). Record model version, taxonomy/prompt version, context budget, token usage if available and errors.
 4. Evaluate citation-to-claim factual support, not citation existence alone.
 5. Evaluate identity, direction, temporal reconciliation and graph queries.
 6. Validate end-to-end product discovery, dependency impact and decision history.
