@@ -334,6 +334,12 @@ def run(cfg, args):
             entry["indexed"], entry["comments_indexed"], entry["changed"],
             entry["comments_changed"], entry["inventory_coverage"],
             entry["complete"], len(entry["errors"])))
+        print("  Drafts excluded: {}; published pages recovered via v2: {}".format(
+            len(entry.get("drafts_skipped") or []), len(entry.get("v2_fallbacks") or [])))
+        for item in entry.get("drafts_skipped") or []:
+            print("  Draft excluded: {} ({})".format(item["id"], item["title"]))
+        for item in entry.get("v2_fallbacks") or []:
+            print("  Published v2 fallback: {} ({})".format(item["id"], item["title"]))
         for item in entry["errors"][:10]:
             print("  {}: {}".format(item["id"], item["detail"]))
         for scope in entry["scopes"]:

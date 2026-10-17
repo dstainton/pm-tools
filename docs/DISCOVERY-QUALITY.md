@@ -86,6 +86,32 @@ Confirm the output reports plausible **new page counts**, `complete`
 inventory, and any remaining comment errors separately. A repaired
 checkpoint never discards previously indexed source documents.
 
+## Unpublished pages and v1 content 404 responses
+
+The v2 descendants API includes a page `status` field. The crawler stores
+this metadata for newly encountered page rows, while the body indexer remains
+responsible for verifying published content before adding evidence.
+
+If the v1 page-content endpoint returns 404, the indexer checks the current
+v2 page with `body-format=storage`. It indexes that content **only** when
+v2 explicitly reports `status=current` and returns a readable storage body.
+If no current page exists, it performs a **metadata-only** v2
+`get-draft=true` probe. Only an explicit `status=draft` response
+counts as a confirmed excluded draft. It never retrieves or indexes the
+unpublished draft body. A page that cannot be confirmed current or draft
+remains an error and keeps evidence completeness false.
+
+The index output reports confirmed draft exclusions and published v2
+fallbacks, including their page IDs and titles. Those results are also
+recorded as page status in the local checkpoint table. Confirmed drafts do
+not count as missing evidence; unavailable or restricted pages still do.
+The migration adds a nullable status column without deleting existing
+inventory or full-text records.
+
+Run `pm discover --index-confluence --project APS` after updating
+without repeating the completed Confluence crawl. No write requests are
+sent to Atlassian.
+
 ## Trust boundaries
 
 1. The configured products and workstreams are **configuration facts**, not

@@ -100,6 +100,7 @@ class FolderRootTests(unittest.TestCase):
                     VALUES(?,?,?,?,NULL,3,NULL)""",
                     (sid, json.dumps(scope, sort_keys=True), 12, "complete"))
                 db.execute("""INSERT INTO confluence_inventory_items
+                    (scope_id,content_id,space,title,content_type,updated,ancestors)
                     VALUES(?,?,?,?,?,?,?)""",
                     (sid, "200", "POSM", "Folder root", "folder", None, "[]"))
                 db.commit()
