@@ -39,3 +39,9 @@ These are **project proposals**, not universal industry standards.
 A zero-claim response where evidence unambiguously supports claims is a **recall failure**. Keep raw evaluation runs locally with reproducible settings. Human annotation remains the authority; a second model may assist but not replace validation.
 
 **First authorized implementation slice after approval:** ontology, benchmark format and evaluation runner only. Graph technology selection and extraction implementation follow their gates.
+
+## Phase 2A implementation artifacts
+
+The initial ontology and benchmark implementation are at [PM Ontology](PM-ONTOLOGY.md) and [Benchmark Format](BENCHMARK-FORMAT.md). The evaluator is `python -m core.discovery_benchmark evaluate --reference ... --predictions ...`; it validates reviewer status and provenance, reports exact-match entity/claim precision and recall, and counts missing predictions as false negatives. It is **not** an LLM judge and cannot establish semantic entailment or retrieval quality on its own.
+
+No sensitive APS corpus or purportedly human-reviewed annotations is committed in this phase. Reference annotation and owner acceptance are the remaining Phase 2A gates before selecting or installing graph infrastructure.
