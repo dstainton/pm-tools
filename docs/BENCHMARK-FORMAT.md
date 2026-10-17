@@ -8,9 +8,11 @@ Use UTF-8 JSON files with `schema_version: 1`:
 - **Reference file:** `{"schema_version":1,"cases":[...]}`
 - **Predictions:** `{"schema_version":1,"predictions":[...]}`
 
-Every reference case must have a unique `case_id`, `split` (`development` or `holdout`), `source` (project, citation, revision, span start/end, exact source quote), and `expected` with `entities` and `claims` arrays. Entities are objects with `id`, `name`, and a nonempty list of `roles`. Claims are objects with `subject_id`, `predicate`, `object` (ID or string), `polarity`, `modality`, and `evidence_quote`. Optional `explanation` clarifies negative cases. `reviewed_by` and `reviewed_at` must be present and nonempty for an authoritative case; unreviewed demonstrations are marked `illustrative_only:true` and are **never scored**.
+Every reference case must have a unique `case_id`, `split` (`development` or `holdout`), `source` (project, citation, revision, span start/end, exact source quote), and optional source-scoped `jira_labels` or `confluence_labels` arrays, and `expected` with `entities` and `claims` arrays. Entities are objects with `id`, `name`, and a nonempty list of `roles`. Claims are objects with `subject_id`, `predicate`, `object` (ID or string), `polarity`, `modality`, and `evidence_quote`. Optional `explanation` clarifies negative cases. `reviewed_by` and `reviewed_at` must be present and nonempty for an authoritative case; unreviewed demonstrations are marked `illustrative_only:true` and are **never scored**.
 
 Prediction entries contain `case_id`, `entities`, and `claims` in the same form, with claims also carrying `citation`. Predictions may leave arrays empty; abstentions must not be hidden.
+
+Add reference cases where labels correctly improve document retrieval and others where labels alone are misleading. Preserve their originating source and never score a label value as a source-backed product identity without additional evidence.
 
 ## Validation
 
