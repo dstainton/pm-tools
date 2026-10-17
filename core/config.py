@@ -35,6 +35,14 @@ SECTION_DEFAULTS = {
         "total_timeout": 3600,
         "enable_thinking": False,
     },
+    "classification": {
+        "endpoint": "http://127.0.0.1:13305/v1/embeddings",
+        "model": "embed-gemma-300m-FLM",
+        "task": "clustering",
+        "taxonomy_version": "pm-broad-v1",
+        "batch_size": 8,
+        "timeout": 120,
+    },
     "output": {
         "directory": HOME + "/out",
         "file": "weekly_report_{date}.md",
