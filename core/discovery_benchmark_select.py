@@ -26,6 +26,22 @@ BUCKETS = (
 
 def _source_labels(db, project, source, source_key):
     if source != "jira":
+        try:
+            row = db.execute("""SELECT metadata_json FROM discovery_source_structure
+                WHERE doc_id LIKE 'confluence:%' AND
+                      doc_id NOT LIKE 'confluence:comment:%'
+                      AND doc_id IN (
+                        SELECT doc_id FROM discovery_fts_documents
+                        WHERE citation=? AND project=?)""",
+                ("confluence:" + source_key, project)).fetchone()
+        except sqlite3.OperationalError:
+            row = None
+        if row:
+            metadata = json.loads(row[0])
+            if metadata.get("label_status") == "available":
+                return {"confluence_labels": metadata.get("labels", []),
+                        "label_status": "available"}
+            return {"label_status": "not_available"}
         return {"label_status": "not_indexed"}
     try:
         row = db.execute(
@@ -170,6 +186,24 @@ def select(db_path, project, target=26):
             }
             source_info.update(_source_labels(
                 db, project, row["source"], row["source_key"]))
+            if row["source"] == "jira":
+                try:
+                    normalized = db.execute(
+                        "SELECT metadata_json FROM discovery_source_structure WHERE doc_id=?",
+                        ("jira:issue:" + row["source_key"],)).fetchone()
+                except sqlite3.OperationalError:
+                    normalized = None
+                source_info["normalization_status"] = (
+                    "structured" if normalized else "legacy_flattened")
+                if normalized:
+                    meta = json.loads(normalized[0])
+                    source_info["jira_components"] = meta.get("components", [])
+                    source_info["jira_issue_type"] = meta.get("issue_type")
+                    source_info["jira_parent"] = meta.get("parent")
+            else:
+                source_info["normalization_status"] = (
+                    "structured" if source_info["label_status"] in
+                    ("available", "not_available") else "legacy_flattened")
             cases.append({
                 "case_id": "candidate-{:03d}".format(n),
                 "split": "unassigned",
