@@ -52,6 +52,11 @@ class FtsTests(unittest.TestCase):
             db = sqlite3.connect(str(path))
             try:
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM jira_raw_issues").fetchone()[0], 1)
+                body = db.execute("SELECT body FROM discovery_fts_documents WHERE doc_id=?", ("jira:issue:APS-1",)).fetchone()[0]
+                self.assertEqual(body, "Kong access policies")
+                metadata = db.execute("SELECT metadata_json FROM discovery_source_structure WHERE doc_id=?", ("jira:issue:APS-1",)).fetchone()[0]
+                self.assertEqual(json.loads(metadata)["labels"], ["api"])
+                self.assertEqual(json.loads(metadata)["components"], ["Platform"])
             finally:
                 db.close()
 

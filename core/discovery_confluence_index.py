@@ -221,12 +221,21 @@ def index(cfg, db_path, cap=100, use_checkpoint="auto"):
                 labels = ((fetched.get("metadata") or {}).get("labels") or {}).get("results") or []
                 names = [label.get("name") for label in labels
                          if isinstance(label, dict) and label.get("name")]
-                body = " ".join(filter(None, [body, " ".join(names)]))
                 version = (fetched.get("version") or {}).get("when")
                 title = fetched.get("title") or page["title"]
                 with db:
+                    doc_id = "confluence:" + page.get("type", "page") + ":" + pid
+                    discovery_fts._structure(db, doc_id, {
+                        "labels": names, "space": space,
+                        "parent_id": page.get("parent_id"),
+                        "content_type": page.get("type", "page"),
+                        "label_status": "available" if
+                            (fetched.get("metadata") or {}).get("labels") is not None
+                            else "not_available",
+                    }, {"storage_html": ((fetched.get("body") or {}).get("storage") or {}).get("value"),
+                        "body_text": body})
                     changed += int(discovery_fts._put(
-                        db, "confluence:" + page.get("type", "page") + ":" + pid,
+                        db, doc_id,
                         pid, project_assignment or space, "confluence_" + page.get("type", "page"),
                         (fetched.get("history") or {}).get("createdDate"), version,
                         title, body, "confluence:" + pid, source="confluence"))

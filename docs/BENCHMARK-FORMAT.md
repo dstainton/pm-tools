@@ -65,3 +65,10 @@ The previous private candidate pack remains a valid historical sample, but shoul
 ```powershell
 & "$env:LOCALAPPDATA\pipx\pipx\venvs\pm-tools\Scripts\python.exe" -m core.discovery_benchmark_select --db "$env:USERPROFILE\.pm-tools\discovery_jira.sqlite" --project APS --output "$env:USERPROFILE\.pm-tools\benchmark\aps-candidates-v2.json" --target 26
 ```
+
+
+## Structured evidence normalization
+
+The evidence index now stores source-specific structured metadata separately from indexed body text in `discovery_source_structure`. For Jira issue observations, the index body contains only the description, and the original ADF, labels, components, issue type and parent are retained separately. Raw Jira payloads already captured locally support offline reindexing without another Jira API crawl. An issue with no description must not be treated as a positive source-supported capability case merely because its labels or components contain keywords.
+
+Confluence indexing retains the fetched storage HTML and page labels in the structured store, no longer concatenating labels into prose. Existing flattened Confluence observations cannot be safely separated into text and tags without access to the original storage response: a subsequent scoped reindex of already authorized pages is necessary. This PR does not pretend to reconstruct lost Confluence label provenance offline. The candidate selector labels existing flattened observations as `legacy_flattened` until reindexed. A separate labels FTS index preserves label-based search without adding metadata tokens to the body.
