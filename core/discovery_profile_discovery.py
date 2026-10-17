@@ -15,9 +15,12 @@ from core import discovery_fts
 CAPABILITY = re.compile(
     r"\b(?:purpose|objective|goal|provides?|consumes?|capabilit\w*|responsib\w*|"
     r"scope|boundar\w*|supports?|enables?|used by|out of scope|integrat\w*)\b", re.I)
+# Only explicitly labelled product/workstream/capability headings qualify.
+# Generic "Service: https://..." and "Gateway Service: represents..." are
+# field definitions, not evidence of a newly named product.
 HEADING = re.compile(
-    r"\b(?P<label>Product|Workstream|Capability|Service)\s*(?:\d{1,2})?\s*:\s*"
-    r"(?P<name>[A-Z][A-Za-z0-9][A-Za-z0-9 /&+().-]{2,65})", re.I)
+    r"\b(?P<label>(?i:Product|Workstream|Capability))\s*(?:\d{1,2})?\s*:\s*"
+    r"(?P<name>[A-Z][A-Za-z0-9][A-Za-z0-9 /&+().-]{2,65})")
 END = re.compile(
     r"\s+(?:Owner|Purpose|Provides|Consumes|Used by|Scope|Responsibilities|"
     r"Boundaries|Outcomes|Dependencies)\s*:", re.I)
@@ -151,7 +154,13 @@ def _evidence(db, project, names):
             signal = max((len(CAPABILITY.findall(p)) for p in passages), default=0)
             title_hit = bool(matcher.search(header))
             class_rank = 0 if source == "confluence" else 1
-            score = (class_rank, -int(title_hit), -min(signal, 10), citation)
+            # Explicit named capability/product definitions outrank meeting
+            # notes, roadmap prose and accidental mentions of an entity.
+            named_definition = re.search(
+                r"\b(?:Capability\s*\d{1,2}|Product|Workstream)\s*:\s*" +
+                re.escape(prepared_row["name"]) + r"\b", content, re.I)
+            score = (0 if named_definition else 1, class_rank,
+                     -int(title_hit), -min(signal, 10), citation)
             if source == "jira":
                 grouping = "jira:" + str(source_key)
             else:
@@ -211,11 +220,21 @@ def discover(db_path, cfg, project, max_candidates=40, evidence_per_candidate=5)
             entry["sources"].add("confluence_label")
             entry["labels"].update(item["labels"])
             entry["seed_citations"].update(item["citations"])
-        # Reject component-only singletons. Configuration is a search hint,
-        # never evidence of owning a capability.
+        # Every Jira component is useful for locating issue evidence, but a
+        # component alone is not proof of a product or workstream. In
+        # particular "user", "research", "client", "Gateway" and "operational"
+        # are ordinary work classifications, not candidate service identities.
+        # Keep their distribution as separate review leads, never model
+        # inference targets or unconfirmed product claims.
+        component_only = [
+            {"name": value["name"], "issue_count": value["component_issues"],
+             "citations": sorted(value["seed_citations"])[:3]}
+            for value in names.values()
+            if value["sources"] == {"jira_component"}]
+        component_only.sort(key=lambda item: (-item["issue_count"], item["name"]))
         names = {
             key: value for key, value in names.items()
-            if value["sources"] != {"jira_component"} or value["component_issues"] >= 2
+            if value["sources"] != {"jira_component"}
         }
         prepared = _evidence(db, project, names)
         all_candidates = []
@@ -252,11 +271,12 @@ def discover(db_path, cfg, project, max_candidates=40, evidence_per_candidate=5)
         return {"project": project, "total_candidates": len(all_candidates),
                 "candidates": all_candidates[:max_candidates],
                 "unreviewed_candidates": max(0, len(all_candidates) - max_candidates),
-                "discovery_method": "labelled_confluence_and_jira_components",
+                "discovery_method": "labelled_confluence_and_configured_names",
+                "component_leads": component_only, "component_leads_count": len(component_only),
                 "model_review": None, "config_unchanged": True,
                 "notes": [
                     "Names, observed labels and membership are unconfirmed.",
-                    "Components do not establish product ownership.",
+                    "Jira-only components remain separate navigation leads, not candidate profiles.",
                     "Only indexed published page bodies and Jira issues provide primary evidence.",
                     "Candidates beyond the display cap are not yet included in this report.",
                 ]}
