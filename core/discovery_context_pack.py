@@ -44,7 +44,7 @@ def _definition_section(body, term):
     """
     regex = re.compile(
         r"\b(?:Capability\s+\d{1,2}|Product|Workstream)\s*:\s*" +
-        re.escape(term) + r"(?:\s+\([A-Z][A-Z0-9-]{1,10}\))?\b", re.I)
+        re.escape(term) + r"\b(?:\s+\([A-Z][A-Z0-9-]{1,10}\))?", re.I)
     match = regex.search(body)
     if not match:
         return None
