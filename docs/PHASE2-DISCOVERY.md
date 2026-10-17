@@ -1,8 +1,14 @@
 # Phase 2 design: Product and workstream discovery
 
-**Status:** Proposal for owner review. Design approval does not authorize implementation or activate Phase 2.
+**Status:** Historical Phase 2 discovery proposal, superseded as the main architecture by the reusable [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md) direction (2026-10-16). Keep for requirements and compatibility constraints, not as authorization to implement its earlier classification-first design.
+
+**Before further implementation:** use the updated [Roadmap](../ROADMAP.md), [Evaluation](DISCOVERY-EVALUATION.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md). Products, workstreams, capabilities and Jira components must not be conflated. A product may have an associated workstream, not an exclusive single kind.
 
 **Authority:** [North Star](../NORTH_STAR.md), [Roadmap](../ROADMAP.md), [Architecture](ARCHITECTURE.md), and [Agent guidance](../AGENTS.md).
+
+## Applicability of this historical design
+
+Preserve its read-only workflow, evidence provenance, incomplete configuration support and human review requirements. The original minimum product knowledge model and discovery flow are inputs to the new ontology and benchmark, not the approved extraction/storage design.
 
 ## Outcome and central question
 
