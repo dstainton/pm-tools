@@ -172,7 +172,7 @@ def _reconcile(candidate, cfg):
         return {"status": "not_configured", "configured_kind": None}
     labels = candidate["observed_labels"]
     conflict = bool(labels and named["kind"] not in labels and
-                    ({"product", "workstream"} & set(labels)))
+                    ({"product", "workstream", "capability", "service"} & set(labels)))
     return {"status": "kind_conflict" if conflict else "configured_match",
             "configured_kind": named["kind"]}
 
