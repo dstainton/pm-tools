@@ -13,13 +13,23 @@ An **entity** has a stable opaque ID, one canonical display name, zero or more e
 | capability | Ability or function a product/service/organization provides | Jira label |
 | workstream | Delivery and planning grouping | Product ownership implied by component |
 | team | Group accountable for work/operation | Jira project |
-| stakeholder | Person, role or organization involved in decisions | Keyword mention |
+| interest_holder | Person, group, role or organization with an interest in or affected by a product or decision | Keyword mention |
 | initiative | Bounded strategic/delivery endeavour | General topic |
 | decision | Recorded choice, rationale and status | Brainstorming possibility |
 | source_document | Immutable identified source revision | Inferred summary |
 | source_section | Exact span within a source revision | Character window with unmarked omissions |
 | jira_issue | Recorded Jira work item | Product definition by itself |
 | jira_component | Jira issue classification field value | Product identity by itself |
+| jira_label | Jira issue label value used for categorization, discovery and retrieval | Product identity by itself |
+| confluence_label | Confluence content label used for categorization, navigation and retrieval | Product ownership by itself |
+
+## Labels as first-class source metadata
+
+Preserve **Jira issue labels** and **Confluence page/blog labels** as source-scoped, many-to-many metadata, with their exact spelling, source identifier, revision or observation timestamp, and source-system type. A label may appear on numerous issues or pages and can carry useful signals about product domains, technologies, themes, delivery concerns, and discovery terminology. Labels must be searchable, filterable, and usable as candidate-generation and retrieval signals, separately from the document body and from Jira components.
+
+Do not discard labels during normalization or append them to prose as if they were narrative statements. A label is evidence of **classification by the source**, not by itself proof of product identity, ownership, responsibilities or an architectural relationship. Repeated labels may strengthen a discovery hypothesis, but supported claims still require corroborating source content and citations. Record changes to labels over time where source history supports it.
+
+For Confluence, distinguish **labels** from headings, hierarchy, page properties and content text. For Jira, distinguish **labels** from components, issue types, parent/Epic relations and description text.
 
 ## Claims, evidence and direction
 
