@@ -31,6 +31,12 @@ Stop and ask the owner when work would change the North Star, activate a future 
 - Prefer straightforward changes and small reviewable PRs. No speculative refactors.
 - Follow [CLI progress and feedback](docs/CLI-PROGRESS.md): any command with noticeable work must show stage-level progress before slow operations, maintain useful feedback, and cleanly report completion or failure. Test this behaviour.
 
+## Knowledge graph work discipline
+
+Read [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md) and the proposed graph [decision](docs/decisions/0001-pm-knowledge-graph-foundation.md) before touching any discovery, inference or graph code. Do not continue patching the experimental classifier without an explicitly approved architecture/evaluation task. Do not merge PR #98 on the basis of the previous design or passing syntax/unit tests alone. Distinguish a strategic direction from permission to choose Neo4j, Graphiti, a hosted service or an inference model.
+
+Require benchmark evidence for semantic changes, including false identities, unsupported claims, missing positives, negation, temporal conflicts and incorrect directional edges. Preserve source structure and field separation, source permissions, and local-first behaviour.
+
 ## Verification
 
 - Read all directly affected callers, renderers, and tests, not only the first reported failure.
