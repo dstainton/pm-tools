@@ -38,3 +38,17 @@ The command returns an error for malformed inputs, missing cases, unknown IDs, u
 6. Compare graph stacks against the *same frozen benchmark*.
 
 See [Discovery Evaluation](DISCOVERY-EVALUATION.md), [PM Ontology](PM-ONTOLOGY.md) and [Roadmap](../ROADMAP.md).
+
+## Private APS candidate selection (new)
+
+Use the already populated local index to select up to 26 diverse source excerpts for annotation without another crawl:
+
+```powershell
+python -m core.discovery_benchmark_select --db "$env:USERPROFILE\.pm-tools\discovery_jira.sqlite" --project APS --output "$env:USERPROFILE\.pm-tools\benchmark\aps-candidates.json" --target 26
+```
+
+This creates a **private, unreviewed selection manifest**, not an accepted benchmark. It samples capability definitions, APS P2P, APS Platform, Integration Toolkit, dependencies and negative/ambiguous cases, deduplicates by citation, and records exact offsets into the *current indexed body*, its digest, Jira labels when the raw issue inventory contains them, and a source quote. It does **not** infer answers or mark anyone as reviewer. Confluence content labels are not stored in the current flattened FTS schema; the manifest explicitly marks their availability as `not_indexed` instead of inventing them. Capturing them is part of the subsequent structured-source work.
+
+The selection is deterministic but heuristic, and its excerpts inherit limitations of the currently flattened index. Verify each source against the original document when annotating. A short source or an index with fewer matching documents yields fewer than 26 cases without artificial padding. The tool refuses to overwrite an existing review pack. Keep this JSON private and off the public repository; the existing `core.discovery_benchmark` evaluator deliberately rejects its illustrative, unreviewed cases.
+
+Human reviewers subsequently choose source spans, add exact annotations, assign development/holdout splits, and record reviewed identity and date before any accepted accuracy claims.
