@@ -33,6 +33,7 @@ def _name(value):
     name = re.sub(r"\s+", " ", str(value or "")).strip(" :;.,-")
     # Labels in a flattened page must not swallow the next labelled section.
     name = END.split(name, maxsplit=1)[0].strip(" :;.,-")
+    name = re.split(r"\\s+(?:High-Level Objective|High Level Objective|Owner|Purpose|Provides|Consumes|Used by|Together they)\\b", name, maxsplit=1, flags=re.I)[0].strip(" :;.,-")
     name = re.sub(r"\s+\((?:ITK|SDX|APS|P2P|ADR|BCDC)\)$", "", name)
     if not 3 <= len(name) <= 66 or _normal(name) in GENERIC:
         return None
