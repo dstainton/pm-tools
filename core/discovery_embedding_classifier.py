@@ -44,28 +44,23 @@ def _cosine(a, b):
 
 
 def _embeddings(endpoint, model, texts, timeout):
-    result = requests.post(endpoint, json={
-        "model": model, "input": texts, "encoding_format": "float"
-    }, timeout=timeout)
-    result.raise_for_status()
-    payload = result.json()
-    values = payload.get("data")
-    if not isinstance(values, list) or len(values) != len(texts):
-        raise ValueError("Embedding response count mismatch")
-    indexed = {}
-    for part in values:
-        index = part.get("index")
-        vector = part.get("embedding")
-        if (not isinstance(index, int) or index in indexed or
-                not isinstance(vector, list) or not vector or
-                not all(isinstance(x, (float, int)) and math.isfinite(x)
+    """Send one input per request for FLM backends without reliable batching."""
+    output = []
+    for value in texts:
+        result = requests.post(endpoint, json={
+            "model": model, "input": value, "encoding_format": "float"
+        }, timeout=timeout)
+        result.raise_for_status()
+        data = result.json().get("data")
+        if not isinstance(data, list) or len(data) != 1:
+            raise ValueError("Expected one embedding per request")
+        vector = data[0].get("embedding")
+        if (not isinstance(vector, list) or not vector or
+                not all(isinstance(x, (int, float)) and math.isfinite(x)
                         for x in vector)):
             raise ValueError("Malformed embedding response")
-        indexed[index] = vector
-    if set(indexed) != set(range(len(texts))):
-        raise ValueError("Missing embedding indices")
-    return [indexed[i] for i in range(len(texts))]
-
+        output.append(vector)
+    return output
 
 def _init(db):
     db.execute("""CREATE TABLE IF NOT EXISTS discovery_classifications (

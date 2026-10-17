@@ -45,7 +45,7 @@ classification:
   task: "clustering"
   taxonomy_version: "pm-broad-v1"
   batch_size: 8
-  timeout: 120
+  timeout: 240
 
 model:
   endpoint: "http://127.0.0.1:11434/v1/chat/completions"

@@ -41,7 +41,7 @@ SECTION_DEFAULTS = {
         "task": "clustering",
         "taxonomy_version": "pm-broad-v1",
         "batch_size": 8,
-        "timeout": 120,
+        "timeout": 240,
     },
     "output": {
         "directory": HOME + "/out",
