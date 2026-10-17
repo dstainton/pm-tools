@@ -17,7 +17,8 @@ def sample():
                           "roles": ["service"]}],
             "claims": [{"subject_id": "demo:service", "predicate": "provides",
                         "object": "API lookup", "polarity": "positive",
-                        "modality": "actual"}]}}
+                        "modality": "actual",
+                        "evidence_quote": "provides API lookup"}]}}
     prediction = {
         "case_id": "synth-1", "entities": copy.deepcopy(case["expected"]["entities"]),
         "claims": [dict(case["expected"]["claims"][0],
@@ -54,6 +55,12 @@ class BenchmarkTests(unittest.TestCase):
         ref, pred = sample()
         pred["predictions"][0]["claims"][0]["citation"] = "jira:OTHER-1"
         with self.assertRaisesRegex(ValueError, "citation"):
+            evaluate(ref, pred)
+
+    def test_quote_outside_source_span_rejected(self):
+        ref, pred = sample()
+        pred["predictions"][0]["claims"][0]["evidence_quote"] = "invented wording"
+        with self.assertRaisesRegex(ValueError, "source span"):
             evaluate(ref, pred)
 
     def test_unreviewed_reference_rejected(self):
