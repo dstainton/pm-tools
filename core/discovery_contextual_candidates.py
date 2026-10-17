@@ -109,8 +109,8 @@ def candidates(db_path, project=None, limit=30):
                                          if item["_group"] == group), None)
                         if previous is None:
                             record["evidence"].append(candidate)
-                        elif ((candidate["_priority"], -strength, citation) <
-                              (previous["_priority"], -previous["signal_strength"],
+                        elif ((-strength, candidate["_priority"], citation) <
+                              (-previous["signal_strength"], previous["_priority"],
                                previous["citation"])):
                             record["evidence"].remove(previous)
                             record["evidence"].append(candidate)
