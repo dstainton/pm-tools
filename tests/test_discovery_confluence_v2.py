@@ -64,7 +64,7 @@ class DescendantClientTests(unittest.TestCase):
             {"id": "400", "type": "page", "title": "Nested page",
              "parentId": "300", "depth": 2}]
         calls = []
-        def fetch(_cfg, page_id, cursor=None, limit=100):
+        def fetch(_cfg, page_id, cursor=None, limit=100, content_type="page"):
             calls.append((cursor, limit))
             if cursor is None:
                 return first_pages, "next-page"
