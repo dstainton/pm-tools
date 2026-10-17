@@ -122,7 +122,7 @@ def _lookup(db, project, citations, terms, max_found):
         for query in (" AND ".join(clauses), *clauses):
             sql = (
                 "SELECT " + columns +
-                " FROM discovery_fts f JOIN discovery_fts_documents d ON f.doc_id=d.doc_id "
+                " FROM discovery_fts JOIN discovery_fts_documents d ON discovery_fts.doc_id=d.doc_id "
                 "WHERE discovery_fts MATCH ? AND d.project=? "
                 "AND ((d.source='confluence' AND d.kind IN "
                 "('confluence_page','confluence_blogpost','confluence_blog')) "
