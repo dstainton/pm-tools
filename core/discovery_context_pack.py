@@ -186,7 +186,9 @@ def build(db_path, project, terms, citations=(), max_chars=DEFAULT_CONTEXT_CHARS
             continue
         priority = discovery_evidence_priority.priority(source, kind)
         signals = min(12, len(RELATION.findall(body[:35000])))
-        score = (priority, -found, -signals, 0 if citation in seeds else 1,
+        # Preserve evidence that originally motivated this proposal before
+        # broader FTS hits. Then favour published source authority and clarity.
+        score = (0 if citation in seeds else 1, priority, -found, -signals,
                  citation)
         eligible.append((score, (source, kind, key, citation, title, body, when)))
     eligible.sort(key=lambda item: item[0])
