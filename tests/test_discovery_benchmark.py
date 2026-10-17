@@ -51,6 +51,31 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(report["claims"]["false_positive"], 1)
         self.assertEqual(report["claims"]["false_negative"], 1)
 
+    def test_interest_holder_role_and_both_label_sources(self):
+        ref, pred = sample()
+        ref["cases"][0]["source"]["jira_labels"] = ["delivery", "identity"]
+        ref["cases"][0]["source"]["confluence_labels"] = ["architecture"]
+        role = {"id": "demo:interest", "name": "Service Consumers",
+                "roles": ["interest_holder"]}
+        ref["cases"][0]["expected"]["entities"].append(role)
+        pred["predictions"][0]["entities"].append(role.copy())
+        result = evaluate(ref, pred)
+        self.assertEqual(result["entities"]["recall"], 1.0)
+
+    def test_malformed_jira_or_confluence_labels_rejected(self):
+        for key in ("jira_labels", "confluence_labels"):
+            with self.subTest(key=key):
+                ref, pred = sample()
+                ref["cases"][0]["source"][key] = "not-an-array"
+                with self.assertRaisesRegex(ValueError, key):
+                    evaluate(ref, pred)
+
+    def test_deprecated_stakeholder_role_rejected(self):
+        ref, pred = sample()
+        ref["cases"][0]["expected"]["entities"][0]["roles"] = ["stakeholder"]
+        with self.assertRaisesRegex(ValueError, "roles"):
+            evaluate(ref, pred)
+
     def test_invalid_citation_rejected(self):
         ref, pred = sample()
         pred["predictions"][0]["claims"][0]["citation"] = "jira:OTHER-1"
