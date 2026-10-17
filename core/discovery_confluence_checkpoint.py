@@ -12,7 +12,7 @@ from core import discovery_inventory, sources
 
 # v1/v2 used offset-based CQL page-tree searches; three APS scopes repeated
 # at offset 1000. Restart incomplete old cursors via the v2 descendants API.
-SCAN_VERSION = 3
+SCAN_VERSION = 4
 
 
 def _init(db):
@@ -32,6 +32,12 @@ def _init(db):
         scope_id TEXT NOT NULL, content_id TEXT NOT NULL, space TEXT,
         title TEXT, content_type TEXT, updated TEXT, ancestors TEXT,
         PRIMARY KEY(scope_id, content_id))""")
+    # Track all hierarchy nodes to recognize covered nested folder roots, but
+    # index only actual page bodies. Never fetch folders as pages or comments.
+    db.execute("""CREATE TABLE IF NOT EXISTS confluence_inventory_nodes (
+        scope_id TEXT NOT NULL, content_id TEXT NOT NULL,
+        title TEXT, content_type TEXT,
+        PRIMARY KEY(scope_id, content_id))""")
     db.commit()
 
 
@@ -50,9 +56,12 @@ def _is_covered(db, complete_scopes, child_scope):
             continue
         if parent.get("space") != child_scope.get("space"):
             continue
-        if db.execute("""SELECT 1 FROM confluence_inventory_items
+        if db.execute("""SELECT 1 FROM confluence_inventory_nodes
+                         WHERE scope_id=? AND content_id=?
+                         UNION
+                         SELECT 1 FROM confluence_inventory_items
                          WHERE scope_id=? AND content_id=?""",
-                      (parent_id, child_id)).fetchone():
+                      (parent_id, child_id, parent_id, child_id)).fetchone():
             return parent
     return None
 
@@ -96,6 +105,19 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                        FROM confluence_inventory_cursor WHERE scope_id=?""",
                     (sid,)).fetchone()
                 offset, status, version, cursor = record if record else (0, "pending", SCAN_VERSION, None)
+                # Page-tree v3 inventories lacked folder-root handling and
+                # did not retain non-page nodes. Revalidate even those marked
+                # complete, without discarding previously indexed documents.
+                if (record and version < SCAN_VERSION
+                        and scope["type"] == "page_tree"):
+                    with db:
+                        db.execute("""UPDATE confluence_inventory_cursor
+                                      SET offset=0, cursor=NULL, status='pending', error=NULL,
+                                          scan_version=? WHERE scope_id=?""",
+                                   (SCAN_VERSION, sid))
+                    offset, status, cursor = 0, "pending", None
+                    entry["legacy_checkpoint_restarted"] = True
+
                 if status == "complete":
                     entry.update(status="complete", offset=offset, scope=scope)
                     completed.append((sid, scope))
@@ -114,22 +136,27 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                 if record and version < SCAN_VERSION:
                     with db:
                         db.execute("""UPDATE confluence_inventory_cursor
-                                      SET offset=0, cursor=NULL, status='pending', error=NULL,
-                                          scan_version=? WHERE scope_id=?""",
+                                      SET scan_version=? WHERE scope_id=?""",
                                    (SCAN_VERSION, sid))
-                    offset, status, cursor = 0, "pending", None
-                    entry["legacy_checkpoint_restarted"] = True
 
                 emit(scope, "collecting", offset, 0, scope_index, len(scopes))
                 if root:
+                    root_type = str(root.get("type") or "page").lower()
                     with db:
-                        db.execute("""INSERT OR IGNORE INTO confluence_inventory_items
-                            (scope_id,content_id,space,title,content_type,updated,ancestors)
-                            VALUES(?,?,?,?,?,?,?)""", (
-                                sid, str(root["id"]), scope.get("space"),
-                                root.get("title") or "", root.get("type") or "page",
-                                (root.get("version") or {}).get("when"),
-                                json.dumps([])))
+                        db.execute("""INSERT OR REPLACE INTO confluence_inventory_nodes
+                            (scope_id,content_id,title,content_type)
+                            VALUES(?,?,?,?)""", (
+                                sid, str(root["id"]), root.get("title") or "", root_type))
+                        if root_type == "page":
+                            db.execute("""INSERT OR IGNORE INTO confluence_inventory_items
+                                (scope_id,content_id,space,title,content_type,updated,ancestors)
+                                VALUES(?,?,?,?,?,?,?)""", (
+                                    sid, str(root["id"]), scope.get("space"),
+                                    root.get("title") or "", root_type,
+                                    (root.get("version") or {}).get("when"),
+                                    json.dumps([])))
+                else:
+                    root_type = "page"
 
                 known_ids = {r[0] for r in db.execute(
                     "SELECT content_id FROM confluence_inventory_items WHERE scope_id=?",
@@ -140,7 +167,7 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                     if scope["type"] == "page_tree":
                         rows, next_cursor = sources.list_confluence_page_descendants(
                             cfg, scope["root_id"], cursor=cursor,
-                            limit=min(100, remaining))
+                            limit=min(100, remaining), content_type=root_type)
                         more = next_cursor is not None
                         if more and next_cursor == cursor:
                             raise ValueError(
@@ -164,14 +191,19 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                     duplicates = 0
                     warnings = 0
                     to_write = []
+                    node_rows = []
                     for row in rows:
                         pid = str(row.get("id") or "")
                         if not pid:
                             continue
-                        # v2 descendants includes all depths; ignore non-pages
-                        # while still advancing its opaque cursor correctly.
-                        if scope["type"] == "page_tree" and row.get("type") != "page":
-                            continue
+                        kind = str(row.get("type") or "page").lower()
+                        if scope["type"] == "page_tree":
+                            node_rows.append((
+                                sid, pid, row.get("title") or "", kind))
+                            # v2 returns other node types, including folders.
+                            # Store them for coverage, not for page indexing.
+                            if kind != "page":
+                                continue
                         # In legacy CQL space searches ancestry is only metadata.
                         ancestors = [str(a.get("id")) for a in
                                      (row.get("ancestors") or [])
@@ -197,6 +229,10 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                     remaining -= len(rows)
                     status = "complete" if not more else "incomplete"
                     with db:
+                        if node_rows:
+                            db.executemany("""INSERT OR REPLACE INTO confluence_inventory_nodes
+                                (scope_id,content_id,title,content_type)
+                                VALUES(?,?,?,?)""", node_rows)
                         db.executemany("""INSERT OR REPLACE INTO confluence_inventory_items
                             (scope_id,content_id,space,title,content_type,updated,ancestors)
                             VALUES(?,?,?,?,?,?,?)""", to_write)
@@ -289,16 +325,24 @@ def indexed_inventory(cfg, db_path):
                             ids = [configured["root_id"]]
                         elif configured.get("root_title"):
                             ids = [r[0] for r in db.execute(
-                                """SELECT content_id FROM confluence_inventory_items
+                                """SELECT content_id FROM confluence_inventory_nodes
+                                   WHERE scope_id=? AND title=?
+                                   UNION
+                                   SELECT content_id FROM confluence_inventory_items
                                    WHERE scope_id=? AND title=?""",
-                                (parent_id, configured["root_title"]))]
+                                (parent_id, configured["root_title"],
+                                 parent_id, configured["root_title"]))]
                         else:
                             ids = []
                         for child_id in ids:
                             if str(child_id) != parent.get("root_id") and db.execute(
-                                    """SELECT 1 FROM confluence_inventory_items
+                                    """SELECT 1 FROM confluence_inventory_nodes
+                                       WHERE scope_id=? AND content_id=?
+                                       UNION
+                                       SELECT 1 FROM confluence_inventory_items
                                        WHERE scope_id=? AND content_id=?""",
-                                    (parent_id, str(child_id))).fetchone():
+                                    (parent_id, str(child_id),
+                                     parent_id, str(child_id))).fetchone():
                                 covered.append((str(child_id), parent))
                 if len({item[0] for item in covered}) == 1:
                     statuses.append({"scope": configured, "status": "complete",
@@ -318,7 +362,8 @@ def indexed_inventory(cfg, db_path):
             statuses.append({"scope": configured, "status": status, "offset": offset})
             for pid, space, title, kind in db.execute(
                     """SELECT content_id,space,title,content_type
-                       FROM confluence_inventory_items WHERE scope_id=?""", (sid,)):
+                       FROM confluence_inventory_items
+                       WHERE scope_id=? AND content_type='page'""", (sid,)):
                 pages[pid] = {"id": pid, "space": space, "title": title,
                               "type": kind}
         return {"pages": list(pages.values()), "scopes": statuses,

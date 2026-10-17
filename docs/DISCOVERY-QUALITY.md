@@ -51,12 +51,18 @@ Previously, incomplete page-tree scans repeatedly returned the same 25 results
 at CQL offset 1000. Page-tree collection now uses the Confluence Cloud v2
 `GET /pages/{id}/descendants` endpoint and persists its opaque pagination
 cursor. This includes all descendant depths and is independent of CQL offset
-pagination. Non-page descendant types (folders, whiteboards, etc.) are skipped
-for body indexing while still advancing the cursor.
+pagination. The collector dispatches by the root's actual content type, for example
+`/pages/{id}/descendants` for an APS page and
+`/folders/{id}/descendants` for SDX or ITK folder roots. Non-page nodes
+are retained in a lightweight hierarchy inventory so completed ancestor
+trees can safely cover nested folder scopes. Only actual pages are sent to
+body and comment indexing.
 
-Incomplete legacy offset checkpoints are reset to the initial v2 cursor on
-upgrade. Already collected unique pages and the existing full-text index are
-retained. Completed scopes are not reset. Whole-space collection retains the
+Old incomplete page-tree checkpoints and previously completed v3 page-tree
+scopes are revalidated once under content-type-aware crawling. All prior
+page records and full-text evidence are retained; folder root records are
+excluded from page-body indexing. After migration, completed v4 scopes
+are not rescanned. Whole-space collection retains the
 bounded CQL offset approach.
 
 Repeated identical result pages or a non-advancing cursor fail safely with
