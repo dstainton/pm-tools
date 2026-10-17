@@ -30,6 +30,12 @@ Primarily a product manager working with Jira and, optionally, Confluence and Sh
 - **Extend rather than duplicate.** Prefer shared retrieval, normalized facts, and existing commands over overlapping clients, pipelines, and reporting systems.
 - **Explain the limits.** No false confidence in estimates, forecasts, model classifications, or data freshness.
 
+## Reusable product knowledge
+
+A local-first, source-grounded PM knowledge graph is the long-term shared foundation for discovery, dependency and roadmap analysis, decision history, risk, stakeholder insight and evidence-backed reporting. Preserve original sources, exact citations, temporal context and human approval. The graph supplements, not replaces, Jira/Confluence or the product manager's judgement. A GraphRAG implementation is a means, not the outcome: benchmark product-management accuracy before adopting infrastructure.
+
+See [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md) and [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md).
+
 ## What success looks like
 
 A new product manager can connect Jira, establish an honest baseline, discover unclaimed and outdated work, review prioritized evidence-backed suggestions, and improve the backlog without losing history or control.
