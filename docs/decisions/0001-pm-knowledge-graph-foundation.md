@@ -6,11 +6,11 @@
 
 ## Context
 
-Recent APS discovery experiments found complete Jira/Confluence evidence but poor semantic results: false product names, zero supported claims for core capabilities and misattributed purposes. Jira components, workstreams and products were treated as interchangeable. Large inference prompts did not resolve those modelling and retrieval defects. The owner wants the knowledge base to support future product management workflows, not just initial discovery.
+Recent APS discovery experiments found complete Jira/Confluence evidence but poor semantic results: false product names, zero supported claims for core capabilities and misattributed purposes. Jira components, labels, workstreams and products were treated as interchangeable. Large inference prompts did not resolve those modelling and retrieval defects. The owner wants the knowledge base to support future product management workflows, not just initial discovery.
 
 ## Proposed decision
 
-Adopt a **local-first, evidence-first, temporal property-graph and GraphRAG architecture** as the intended common knowledge foundation for pm-tools. Reuse existing collectors, raw evidence, FTS and local models. Preserve original structure and exact cited spans; extract source-level claims before assembling product profiles and graph relationships; separate inferred, conflicting, historical and accepted claims.
+Adopt a **local-first, evidence-first, temporal property-graph and GraphRAG architecture** as the intended common knowledge foundation for pm-tools. Reuse existing collectors, raw evidence, FTS and local models. Preserve original structure, Jira/Confluence labels as separately typed metadata, and exact cited spans; extract source-level claims before assembling product profiles and graph relationships; separate inferred, conflicting, historical and accepted claims.
 
 Neo4j GraphRAG is the leading candidate, **not yet a selected dependency**. Compare Graphiti, LlamaIndex and/or SQLite against an accepted evaluation benchmark before choosing graph infrastructure. Preserve current CLI and configuration semantics unless a separate migration is accepted. No new hosted model, graph service or data disclosure is authorized.
 
