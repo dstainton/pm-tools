@@ -37,6 +37,8 @@ def _init(db):
     db.execute("""CREATE TABLE IF NOT EXISTS discovery_source_structure (
         doc_id TEXT PRIMARY KEY, digest TEXT NOT NULL,
         metadata_json TEXT NOT NULL, structure_json TEXT NOT NULL)""")
+    db.execute("""CREATE VIRTUAL TABLE IF NOT EXISTS discovery_labels_fts
+        USING fts5(doc_id UNINDEXED, labels, tokenize=\'unicode61\')""")
     db.commit()
 
 
@@ -44,6 +46,11 @@ def _structure(db, doc_id, metadata, structure):
     digest = hashlib.sha256(json.dumps(
         [metadata, structure], sort_keys=True, ensure_ascii=False
     ).encode("utf-8")).hexdigest()
+    db.execute("DELETE FROM discovery_labels_fts WHERE doc_id=?", (doc_id,))
+    labels = metadata.get("labels") or []
+    if labels:
+        db.execute("INSERT INTO discovery_labels_fts(doc_id, labels) VALUES (?,?)",
+                   (doc_id, " ".join(labels)))
     db.execute("""INSERT OR REPLACE INTO discovery_source_structure
         (doc_id,digest,metadata_json,structure_json) VALUES (?,?,?,?)""",
         (doc_id, digest, json.dumps(metadata, ensure_ascii=False),
@@ -156,6 +163,28 @@ def search(db_path, query, limit=20, project=None, kind=None):
             params.append(kind)
         sql += " ORDER BY score, d.doc_id LIMIT ?"
         params.append(limit)
-        return [dict(row) for row in db.execute(sql, params)]
+        hits = [dict(row) for row in db.execute(sql, params)]
+        labels_sql = """SELECT d.source_key, d.project, d.kind, d.event_time,
+                        d.citation, d.title, d.title AS excerpt,
+                        bm25(discovery_labels_fts) AS score
+                FROM discovery_labels_fts JOIN discovery_fts_documents d
+                  ON d.doc_id=discovery_labels_fts.doc_id
+                WHERE discovery_labels_fts MATCH ?"""
+        label_params = [query]
+        if project:
+            labels_sql += " AND d.project=?"
+            label_params.append(project)
+        if kind:
+            labels_sql += " AND d.kind=?"
+            label_params.append(kind)
+        labels_sql += " ORDER BY score, d.doc_id LIMIT ?"
+        label_params.append(limit)
+        hits.extend(dict(row) for row in db.execute(labels_sql, label_params))
+        dedup = {}
+        for hit in hits:
+            key = (hit["citation"], hit["kind"])
+            if key not in dedup or hit["score"] < dedup[key]["score"]:
+                dedup[key] = hit
+        return sorted(dedup.values(), key=lambda row: (row["score"], row["citation"]))[:limit]
     finally:
         db.close()
