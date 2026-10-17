@@ -1,6 +1,6 @@
-# Phase 2A benchmark format and review protocol
+# Historical benchmark format and review protocol
 
-**Status:** Proposed; no private APS source content has been committed or human-labelled in this slice.
+**Status:** Existing evaluation format retained for compatibility. The [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md) design supersedes deterministic candidate selection as the main source-discovery approach. No private APS source content should be committed or labelled as reviewed without actual review.
 
 ## Files
 
@@ -39,7 +39,7 @@ The command returns an error for malformed inputs, missing cases, unknown IDs, u
 
 See [Discovery Evaluation](DISCOVERY-EVALUATION.md), [PM Ontology](PM-ONTOLOGY.md) and [Roadmap](../ROADMAP.md).
 
-## Private APS candidate selection (new)
+## Private APS candidate selection (legacy experimental baseline)
 
 Use the already populated local index to select up to 26 diverse source excerpts for annotation without another crawl:
 
