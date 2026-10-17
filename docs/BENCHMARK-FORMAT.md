@@ -52,3 +52,16 @@ This creates a **private, unreviewed selection manifest**, not an accepted bench
 The selection is deterministic but heuristic, and its excerpts inherit limitations of the currently flattened index. Verify each source against the original document when annotating. A short source or an index with fewer matching documents yields fewer than 26 cases without artificial padding. The tool refuses to overwrite an existing review pack. Keep this JSON private and off the public repository; the existing `core.discovery_benchmark` evaluator deliberately rejects its illustrative, unreviewed cases.
 
 Human reviewers subsequently choose source spans, add exact annotations, assign development/holdout splits, and record reviewed identity and date before any accepted accuracy claims.
+
+
+## Balanced sampling revision
+
+The selector now reserves roughly one-third of the target for Jira issues and two-thirds for Confluence content, ranking the two sources independently and filling unused quota only within the same source. It prioritizes substantive responsibilities, purpose, dependency and boundary language over repeated keywords and applies a penalty to archived, questionnaire and assessment material. It reports both requested quotas and achieved source counts; it never invents Jira examples to fill a shortfall.
+
+**Label limitation:** Jira labels can be recovered as structured metadata from the local raw issue inventory. The current Confluence index merges page labels into flattened text, so exact Confluence label attribution cannot be reconstructed safely from the existing index. The selector reports `not_indexed`. Preserving Confluence labels separately requires a later source-normalization update and reindex from already authorized content; this revision does not recrawl Confluence or guess labels.
+
+The previous private candidate pack remains a valid historical sample, but should not be used as the balanced benchmark. Generate a **new output filename** because the selector refuses to overwrite an existing pack:
+
+```powershell
+& "$env:LOCALAPPDATA\pipx\pipx\venvs\pm-tools\Scripts\python.exe" -m core.discovery_benchmark_select --db "$env:USERPROFILE\.pm-tools\discovery_jira.sqlite" --project APS --output "$env:USERPROFILE\.pm-tools\benchmark\aps-candidates-v2.json" --target 26
+```
