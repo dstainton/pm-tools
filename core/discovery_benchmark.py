@@ -4,8 +4,9 @@ import json
 import sys
 
 ROLES = {"product", "service", "capability", "workstream", "team",
-         "stakeholder", "initiative", "decision", "source_document",
-         "source_section", "jira_issue", "jira_component"}
+         "interest_holder", "initiative", "decision", "source_document",
+         "source_section", "jira_issue", "jira_component",
+         "jira_label", "confluence_label"}
 PREDICATES = {"provides", "depends_on", "part_of", "used_by", "owned_by",
               "implements", "tracked_by", "historical_name", "replaces",
               "contradicts", "has_purpose", "has_boundary"}
@@ -45,6 +46,14 @@ def _validate_entities(rows, case_id):
         _require(item["id"] not in ids, case_id + ": duplicate entity ID")
         ids.add(item["id"])
     return ids
+
+
+def _validate_source_labels(src, case_id):
+    for field in ("jira_labels", "confluence_labels"):
+        labels = src.get(field, [])
+        _require(isinstance(labels, list) and all(
+            isinstance(label, str) and bool(label.strip()) for label in labels),
+            case_id + ": " + field + " must contain nonempty strings")
 
 
 def _validate_claims(rows, ids, case_id, source=None, require_citation=False):
@@ -114,6 +123,7 @@ def evaluate(reference, predictions):
         _require(all(isinstance(src.get(k), int) and src[k] >= 0
                      for k in ("start", "end")) and src["end"] > src["start"],
                  cid + ": invalid source span")
+        _validate_source_labels(src, cid)
         expected = item.get("expected")
         _require(isinstance(expected, dict), cid + ": missing expected")
         ids = _validate_entities(expected.get("entities"), cid)
