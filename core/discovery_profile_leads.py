@@ -8,7 +8,7 @@ import re
 import sqlite3
 from collections import defaultdict
 
-from core import discovery_fts
+from core import discovery_evidence_priority, discovery_fts
 
 SIGNAL = re.compile(
     r"\b(?:purpose|goal|outcome|capabilit\w*|responsib\w*|"
@@ -34,18 +34,28 @@ def build(db_path, cfg, project=None, per_entity=5):
     db = sqlite3.connect(str(db_path))
     try:
         discovery_fts._init(db)
-        sql = "SELECT project, source, citation, title, body FROM discovery_fts_documents"
+        sql = ("SELECT project, source, source_key, kind, citation, title, body "
+               "FROM discovery_fts_documents")
         args = ()
         if project:
             sql += " WHERE project=?"
             args = (project,)
         scores = defaultdict(dict)
+        # Unique parent documents, not independently indexed comment/change rows.
         counts = defaultdict(set)
+        raw_counts = defaultdict(set)
         docs_scanned = 0
         source_counts = defaultdict(int)
-        for scope, source, cite, title, body in db.execute(sql, args):
+        kind_counts = defaultdict(int)
+        distinct_issues = set()
+        for scope, source, source_key, kind, cite, title, body in db.execute(sql, args):
             docs_scanned += 1
             source_counts[source] += 1
+            kind_counts[(source, kind)] += 1
+            group = discovery_evidence_priority.parent_group(
+                scope, source, kind, source_key, cite)
+            if source == "jira" and kind in ("issue", "comment", "change"):
+                distinct_issues.add(group)
             # Only full names are used. Abbreviations such as APS can
             # accidentally refer to the organization rather than a product.
             for index, item in enumerate(entities):
@@ -55,7 +65,8 @@ def build(db_path, cfg, project=None, per_entity=5):
                 matcher = re.compile(r"(?<!\w)" + re.escape(name) + r"(?!\w)", re.I)
                 if not (matcher.search(title or "") or matcher.search(body or "")):
                     continue
-                counts[index].add(cite)
+                counts[index].add(group)
+                raw_counts[index].add(cite)
                 sections = [title or ""] + re.split(r"(?<=[.!?])\s+|[\r\n]+", body or "")
                 for passage in sections:
                     if not 25 <= len(passage) <= 700 or not matcher.search(passage):
@@ -65,19 +76,23 @@ def build(db_path, cfg, project=None, per_entity=5):
                         continue
                     # These rankings help locate reading material. They are
                     # not probabilities or model confidence values.
-                    rank = min(signals, 5) + (2 if source == "confluence" else 0)
-                    if matcher.search(title or ""):
-                        rank += 1
-                    current = scores[index].get(cite)
-                    candidate = {"citation": cite, "source": source,
+                    # Current descriptive pages outrank issue descriptions;
+                    # comments only supplement them; historical changes are
+                    # retained but cannot crowd out stronger parent evidence.
+                    tier = discovery_evidence_priority.priority(source, kind)
+                    title_hit = bool(matcher.search(title or ""))
+                    score = (tier, -int(title_hit), -min(signals, 5), cite)
+                    current = scores[index].get(group)
+                    candidate = {"citation": cite, "source": source, "kind": kind,
                                  "excerpt": passage.strip()[:400],
-                                 "signal_count": signals, "_rank": rank}
-                    if current is None or current["_rank"] < rank:
-                        scores[index][cite] = candidate
+                                 "signal_count": signals, "_rank": score}
+                    if current is None or candidate["_rank"] < current["_rank"]:
+                        scores[index][group] = candidate
         for index, item in enumerate(entities):
             item["documents_matched"] = len(counts[index])
+            item["evidence_records_matched"] = len(raw_counts[index])
             selected = sorted(scores[index].values(),
-                              key=lambda row: (-row["_rank"], row["citation"]))[:per_entity]
+                              key=lambda row: row["_rank"])[:per_entity]
             for row in selected:
                 row.pop("_rank")
             item["leads"] = selected
@@ -85,6 +100,13 @@ def build(db_path, cfg, project=None, per_entity=5):
         return {
             "indexed_documents_scanned": docs_scanned,
             "indexed_source_counts": dict(sorted(source_counts.items())),
+            "indexed_kind_counts": {
+                "{}:{}".format(source, kind): count
+                for (source, kind), count in sorted(kind_counts.items())},
+            "jira_unique_issues": len(distinct_issues),
+            "jira_supporting_records": sum(
+                v for (source, kind), v in kind_counts.items()
+                if source == "jira" and kind in ("comment", "change")),
             "entities": entities,
             "warning": "Mentions are navigation leads, not ownership, purpose, or boundary claims.",
         }
