@@ -54,6 +54,24 @@ class ClassificationTests(unittest.TestCase):
             self.assertFalse(results[1]["title_only"])
             self.assertEqual(len(results[0]["top_categories"]), 2)
 
+    def test_embedding_requests_are_single_input(self):
+        seen = []
+        class Response:
+            def raise_for_status(self):
+                return None
+            def json(self):
+                return {"data": [{"index": 0, "embedding": [0.1, 0.2]}]}
+        def send(endpoint, json, timeout):
+            seen.append(json["input"])
+            self.assertIsInstance(json["input"], str)
+            return Response()
+        with patch.object(classifier.requests, "post", side_effect=send):
+            vectors = classifier._embeddings("http://127.0.0.1:13305/v1/embeddings",
+                                             "embed-gemma-300m-FLM",
+                                             ["first", "second"], 240)
+        self.assertEqual(seen, ["first", "second"])
+        self.assertEqual(len(vectors), 2)
+
     def test_remote_endpoint_rejected(self):
         with self.assertRaisesRegex(ValueError, "loopback"):
             classifier.classify("unused.sqlite", "APS",
