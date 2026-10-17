@@ -124,6 +124,46 @@ def _comments(cfg, db, parent_id, space, parent_title, cap, project=None):
     return count, updated, "Comments beyond per-parent cap"
 
 
+
+def _published_v2_fallback(cfg, page_id):
+    """Classify a v1 404 without ever indexing unpublished draft content.
+
+    Returns (published_v1_shaped_page_or_None, status). A draft lookup is
+    metadata-only and happens only if no current page was returned.
+    """
+    page = sources.fetch_confluence_page_v2(cfg, page_id, body_format="storage")
+    if page is not None:
+        status = str(page.get("status") or "").lower()
+        if status == "draft":
+            return None, "draft"
+        if status != "current":
+            raise ValueError("Confluence v2 page status is {!r}, not current".format(
+                status or "missing"))
+        storage = ((page.get("body") or {}).get("storage") or {})
+        if not isinstance(storage, dict) or not isinstance(storage.get("value"), str):
+            raise ValueError("Confluence v2 current page has no readable storage body")
+        v2_version = page.get("version") or {}
+        labels = page.get("labels") or {}
+        # Normalize only fields used by the indexer; the Confluence tree
+        # inventory has already established page membership in its space.
+        normalized = {
+            "id": str(page_id), "status": "current",
+            "title": page.get("title") or "",
+            "body": {"storage": storage},
+            "history": {"createdDate": page.get("createdAt")},
+            "version": {"when": v2_version.get("createdAt")},
+            "metadata": {"labels": {
+                "results": labels.get("results") or []}},
+        }
+        return normalized, "current"
+
+    draft = sources.fetch_confluence_page_v2(cfg, page_id, get_draft=True)
+    if draft is not None and str(draft.get("status") or "").lower() == "draft":
+        return None, "draft"
+    raise ValueError(
+        "Page unavailable in Confluence v1 and v2; draft status not confirmed")
+
+
 def index(cfg, db_path, cap=100, use_checkpoint="auto"):
     """Index pages in authorized scopes, preferring persisted crawl checkpoints.
 
@@ -151,6 +191,8 @@ def index(cfg, db_path, cap=100, use_checkpoint="auto"):
     db = sqlite3.connect(str(db_path))
     indexed = changed = comments_indexed = comments_changed = 0
     errors = []
+    drafts_skipped = []
+    v2_fallbacks = []
     try:
         discovery_fts._init(db)
         pages = inventory["pages"] + blogs
@@ -159,7 +201,18 @@ def index(cfg, db_path, cap=100, use_checkpoint="auto"):
             try:
                 fetched = sources.fetch_confluence_page(cfg, pid)
                 if not fetched:
-                    raise ValueError("Page not accessible")
+                    fetched, status = _published_v2_fallback(cfg, pid)
+                    if inventory_mode == "checkpoint":
+                        with db:
+                            db.execute("""UPDATE confluence_inventory_items SET status=?
+                                WHERE content_id=?""", (status, str(pid)))
+                    if status == "draft":
+                        drafts_skipped.append({"id": pid, "title": page.get("title") or pid})
+                        continue
+                    v2_fallbacks.append({"id": pid, "title": page.get("title") or pid})
+                if str(fetched.get("status") or "").lower() == "draft":
+                    drafts_skipped.append({"id": pid, "title": page.get("title") or pid})
+                    continue
                 actual = (fetched.get("space") or {}).get("key")
                 if actual and page["space"] and actual != page["space"]:
                     raise ValueError("Page space changed after inventory")
@@ -197,6 +250,7 @@ def index(cfg, db_path, cap=100, use_checkpoint="auto"):
                 "comments_indexed": comments_indexed, "comments_changed": comments_changed,
                 "inventory_coverage": inventory["coverage"],
                 "scopes": inventory["scopes"] + blog_scopes, "errors": errors,
+                "drafts_skipped": drafts_skipped, "v2_fallbacks": v2_fallbacks,
                 "complete": inventory["coverage"] == "complete" and not errors
                 and all(s["status"] == "complete" for s in blog_scopes)}
     finally:
