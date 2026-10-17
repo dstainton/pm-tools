@@ -37,6 +37,16 @@ config_version: 7
 #  `pm review`, and `pm ready --deep`.
 #  The Windows llama.cpp scripts still publish the alias qwen-local on
 #  port 8080. Point endpoint and name at that server if you use them.
+# Local semantic category classifier, separate from the generative chat model.
+# EmbeddingGemma runs via Lemonade FLM on the AMD NPU. Scores are uncalibrated.
+classification:
+  endpoint: "http://127.0.0.1:13305/v1/embeddings"
+  model: "embed-gemma-300m-FLM"
+  task: "clustering"
+  taxonomy_version: "pm-broad-v1"
+  batch_size: 8
+  timeout: 120
+
 model:
   endpoint: "http://127.0.0.1:11434/v1/chat/completions"
   name: "qwen3:4b"
