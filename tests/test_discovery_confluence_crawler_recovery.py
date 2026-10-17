@@ -37,7 +37,7 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
                 db.commit()
             root = {"id": "100", "title": "Team", "space": {"key": "POSM"}}
             starts = []
-            def fetch(_cfg, page_id, cursor=None, limit=100):
+            def fetch(_cfg, page_id, cursor=None, limit=100, content_type="page"):
                 starts.append(cursor)
                 return ([
                     {"id": "200", "type": "page", "title": "Deep A",
@@ -68,7 +68,7 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
             {"type": "page_tree", "space_key": "POSM", "page_id": "100"}]}}
         root = {"id": "100", "title": "Team", "space": {"key": "POSM"}}
         calls = []
-        def repeat(_cfg, page_id, cursor=None, limit=100):
+        def repeat(_cfg, page_id, cursor=None, limit=100, content_type="page"):
             calls.append(cursor)
             return ([{"id": str(i), "type": "page", "title": "Page " + str(i),
                       "ancestors": []} for i in range(200, 225)],
@@ -112,7 +112,7 @@ class ConfluenceCrawlerRecoveryTests(unittest.TestCase):
             return [{"id": identifier} for identifier, name in names.items()
                     if name == title]
         calls = []
-        def search_pages(_cfg, page_id, cursor=None, limit=100):
+        def search_pages(_cfg, page_id, cursor=None, limit=100, content_type="page"):
             calls.append((cursor, page_id))
             self.assertEqual(page_id, "100")
             return ([
