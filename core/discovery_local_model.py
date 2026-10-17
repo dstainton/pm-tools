@@ -68,7 +68,7 @@ def classify(edge, model_cfg, use_cache=True, context_pack=None):
         "10. Do not cite evidence of mere co-occurrence. A named relationship must be established by the passage.\n"
         "11. If evidence explicitly says X validates mappings against Y, choose validated_against in the correct direction.\n"
         "12. Do not confuse a document publication or planning coordination with a product dependency.\n"
-        "13. If a relation is directional, its direction must match FROM -> TO; otherwise use unresolved.\\n"
+        "13. If a relation is directional, its direction must match FROM -> TO; otherwise use unresolved.\n"
         "14. In FROM -> TO part_of, FROM must be explicitly contained in TO. "
         "Building on another platform is NOT part_of. Do not invert parent/child.\n"
         "15. Prefer explicit architectural definitions and present-tense capabilities "
