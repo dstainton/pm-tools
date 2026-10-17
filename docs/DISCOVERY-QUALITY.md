@@ -112,6 +112,41 @@ Run `pm discover --index-confluence --project APS` after updating
 without repeating the completed Confluence crawl. No write requests are
 sent to Atlassian.
 
+## Quality controls after the first APS profile evaluation
+
+The initial 40,000-character APS run showed that a single large prompt can
+produce no claims from authoritative product documentation, while unrelated
+Jira components and Confluence field values can be misidentified as products.
+A model's syntactically valid `{"claims":[]}` is **not** evidence that the
+source material lacks a product description.
+
+Profile discovery now reserves **candidate profile** status for explicit
+published Confluence Product/Workstream/Capability headings and configured
+names used as search hints. Jira components remain available as separate
+`component_leads` with issue counts, but **component-only names are not sent
+to the model**. Generic entries such as `user`, `client`, `research` and
+`operational` remain useful for issue filtering, not inferred services.
+Field values such as `Service: https://...` no longer become a candidate.
+
+Model-assisted profile extraction selects named definitions before general
+planning notes. Where a Confluence page contains multiple capability cards,
+the matching card's own content is isolated so the model does not attribute
+another product's scope or purpose to the target.
+
+A large selected evidence budget is processed in **multiple focused passes**
+(about 10,500 evidence characters per call), rather than a single prompt
+that risks exceeding the local model server's actual context window.
+Each pass uses the same strict citation/JSON validation and one repair attempt
+if necessary. Distinct supported claims are merged, preserving exact cited
+sources. The exported report includes the number of inference passes,
+empty passes, repairs and validation failures. A review with zero claims
+is reported as `no_supported_claims`, not a successful description.
+
+This improves retrieval and attribution, but does not prove the semantic
+correctness of a model-generated claim; a human still verifies the cited
+passages before authorizing configuration changes. Neither the Jira nor
+Confluence evidence stores need to be crawled again.
+
 ## Substantial offline source context for one-time inference
 
 Both model-assisted discovery modes now use substantially more of the original
