@@ -17,9 +17,9 @@ class _Rows:
 
     def execute(self, _query, _params):
         return [
-            ("APS", "jira:APS-1", "comment", None, "",
+            ("APS", "jira", "APS-1", "jira:APS-1", "comment", None, "",
              "The team DID NOT test the user testing workflow."),
-            ("APS", "jira:APS-2", "issue", None, "",
+            ("APS", "jira", "APS-2", "jira:APS-2", "issue", None, "",
              "Validate SDX data dictionary mappings against the ADR glossary."),
         ]
 
