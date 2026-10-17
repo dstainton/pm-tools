@@ -101,6 +101,36 @@ class PrivateSelectionTests(unittest.TestCase):
             self.assertLess(report["selected"], report["requested"])
             self.assertEqual(report["selected"], len(report["cases"]))
 
+    def test_balanced_sources_despite_many_confluence_candidates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "index.sqlite"
+            self._data(path)
+            db = sqlite3.connect(str(path))
+            for n in range(20):
+                discovery_fts._put(
+                    db, "extra:{}".format(n), str(2000 + n), "APS",
+                    "confluence_page", None, None,
+                    "Secure Data Exchange reference {}".format(n),
+                    ("Secure Data Exchange provides secure capability "
+                     "and depends on token exchange. ") * 12,
+                    "confluence:{}".format(2000 + n),
+                    source="confluence")
+            for n in range(12):
+                issue_key = "APS-{}".format(3000 + n)
+                discovery_fts._put(
+                    db, "jira:issue:" + issue_key, issue_key, "APS",
+                    "issue", None, None, "Integration Toolkit dependency",
+                    ("Integration Toolkit provides a service and depends on "
+                     "API Directory and APS Platform. ") * 10,
+                    "jira:" + issue_key, source="jira")
+            db.commit()
+            db.close()
+            report = sample.select(path, "APS", 26)
+            self.assertGreaterEqual(report["source_counts"]["jira"], 8)
+            self.assertGreaterEqual(report["source_counts"]["confluence"], 12)
+            self.assertEqual(report["selected"],
+                             sum(report["source_counts"].values()))
+
     def test_invalid_limit(self):
         with self.assertRaisesRegex(ValueError, "target"):
             sample.select("unused.sqlite", "APS", 2)
