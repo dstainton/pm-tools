@@ -63,6 +63,8 @@ SYSTEM = (
     "Do not infer identity or ownership from Jira component labels or page titles.\n"
     "Do not treat tasks, planned work, milestones or historic implementation activity "
     "as delivered capability. When unsure, omit the claim.\n"
+    "Weigh explicit published definitions against contradictory or superseded notes. "
+    "Do not turn proposed plans into confirmed ongoing services.\n"
     "Copy only citation IDs from the supplied evidence. Each claim must have at least one.\n"
     "Return EXACTLY one valid JSON object, no markdown or explanation.\n"
     "Exactly one key: claims. Each claim has exactly field, value, citations.\n"
@@ -75,19 +77,25 @@ SYSTEM = (
 )
 
 
-def extract(candidate, model_cfg):
+def extract(candidate, model_cfg, context_pack=None):
     from core import model
     evidence = candidate.get("evidence") or []
-    if not evidence:
+    supplied = (context_pack.get("evidence") or []) if context_pack else evidence[:5]
+    if not supplied:
         return {"status": "no_evidence", "claims": [], "repair_attempted": False}
-    supplied = evidence[:5]
     refs = {item["citation"] for item in supplied}
     payload = {
         "target_name": candidate["name"],
         "project": candidate["project"],
+        "context_notes": ("The evidence contains substantial portions of "
+                          "published documents. Some long documents have "
+                          "non-adjacent portions selected and omissions marked."),
         "evidence": [{
-            "citation": x["citation"], "source": x["source"],
-            "title": x["title"], "excerpt": x["excerpt"][:750]}
+            "citation": x["citation"], "source": x.get("source"),
+            "kind": x.get("kind"), "date": x.get("date"),
+            "title": x.get("title"),
+            "excerpt": x.get("excerpt", "") if context_pack
+                       else x.get("excerpt", "")[:750]}
             for x in supplied],
     }
     raw = model.call_model(
@@ -126,8 +134,9 @@ def extract(candidate, model_cfg):
                         failure[:120], str(second)[:120])}
 
 
-def review(report, cfg, max_candidates=6):
-    """Review the first bounded, source-ranked candidates; none are approved."""
+def review(report, cfg, max_candidates=6, db_path=None,
+           context_chars=80000, context_documents=24):
+    """Review broad, source-ranked contexts; no claim is auto-approved."""
     if max_candidates < 1:
         raise ValueError("max_candidates must be positive")
     model_cfg = cfg.get("model") or {}
@@ -136,9 +145,20 @@ def review(report, cfg, max_candidates=6):
     considered = report["candidates"][:max_candidates]
     results = []
     for item in considered:
+        context = None
+        if db_path is not None:
+            from core import discovery_context_pack
+            context = discovery_context_pack.build(
+                db_path, item["project"], [item["name"]],
+                citations=[ev["citation"] for ev in item.get("evidence") or []],
+                max_chars=context_chars, max_documents=context_documents)
         results.append({
             "name": item["name"], "project": item["project"],
-            "result": extract(item, model_cfg)})
+            "result": extract(item, model_cfg, context_pack=context),
+            "context_characters": context["characters"] if context else None,
+            "context_documents": context["documents"] if context else None,
+            "context_citations": context["citations"] if context else [],
+            "context_truncated": context["truncated"] if context else None})
     report["model_review"] = {
         "model_name": model_cfg["name"],
         "reviewed": len(results),

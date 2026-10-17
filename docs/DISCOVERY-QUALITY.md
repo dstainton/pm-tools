@@ -112,6 +112,54 @@ Run `pm discover --index-confluence --project APS` after updating
 without repeating the completed Confluence crawl. No write requests are
 sent to Atlassian.
 
+## Substantial offline source context for one-time inference
+
+Both model-assisted discovery modes now use substantially more of the original
+indexed source content. The **default is up to 80,000 source characters and
+24 indexed source records per inference call**, rather than just five to eight
+excerpts of 500–750 characters. This is a character budget, **not a token
+count or a guarantee of what your model server will accept**.
+
+The evidence assembler reads the full previously indexed bodies of published
+Confluence pages and Jira issues, selects substantial source windows around
+concept mentions (including mentions in different parts of a page), expands
+the candidate's original citation set using scoped full-text retrieval, and
+retains each document title, timestamp, type and exact source citation.
+Comment evidence is only included when already cited; Jira changelog records
+are excluded from current-state inference. Source content from another Jira
+project is never included.
+
+A long page can exceed the selected per-document allocation; the prompt
+marks omitted portions rather than presenting separated windows as one
+continuous quotation. Outputs state exactly how many source records and
+characters were passed and list every supplied citation. The response still
+requires permitted citations and remains an *unconfirmed proposal*.
+
+For a deeper, less time-sensitive first analysis:
+
+```powershell
+pm discover --discover-profiles-model --project APS --profile-model-limit 12 --discovery-context-chars 120000 --discovery-context-documents 32 --export
+```
+
+For relationship review:
+
+```powershell
+pm discover --concept-graph-model --project APS --concept-graph-max-edges 60 --discovery-context-chars 120000 --discovery-context-documents 32 --export
+```
+
+Before requesting contexts this large, verify that the *actual local inference
+server* is configured with a context window sufficient for the entire prompt,
+including the instructions, metadata and response budget. Rough character-to-
+token estimates vary by model and language; the CLI does not claim to know the
+backend's live context window. Insufficient capacity may produce rejected,
+truncated or unreliable responses. The maximum supported context budget is
+400,000 characters per relationship/profile review call. Source selection
+is capped by the requested document count; additional source documents may
+remain unreviewed.
+
+This is **retrieval of more context**, not additional confirmed knowledge,
+and it does not change the original indexed database or configuration.
+
 ## Independent offline product and workstream profile discovery
 
 Start with the existing local Jira and Confluence evidence index, **without

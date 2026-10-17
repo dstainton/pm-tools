@@ -22,20 +22,29 @@ def _decode(text):
     return data
 
 
-def classify(edge, model_cfg, use_cache=True):
+def classify(edge, model_cfg, use_cache=True, context_pack=None):
     """Use pm-tools' shared model client, caching, timeout and sampling."""
     from core import model
 
     excerpts = edge.get("evidence") or []
-    if not excerpts:
+    # Rich packs come from the full offline source bodies, not the short
+    # co-mention excerpt that originally generated the candidate pair.
+    supplied = (context_pack.get("evidence") or []) if context_pack else excerpts[:8]
+    if not supplied:
         return {"status": "no_evidence", "type": "unresolved", "citations": []}
-    supplied = excerpts[:8]
     refs = {e["citation"] for e in supplied}
     prompt = {
         "from": edge["from"], "to": edge["to"],
         "deterministic_type": edge.get("type"),
-        "evidence": [{"citation": x["citation"], "excerpt": x.get("excerpt", "")[:500],
-                      "date": x.get("event_time"), "kind": x.get("kind")}
+        "context_notes": ("These are separately sourced document excerpts. "
+                          "Long pages may contain selected non-adjacent sections. "
+                          "Do not infer anything from omitted text."),
+        "evidence": [{"citation": x["citation"],
+                      "title": x.get("title"), "source": x.get("source"),
+                      "excerpt": x.get("excerpt", "") if context_pack
+                                 else x.get("excerpt", "")[:500],
+                      "date": x.get("date") or x.get("event_time"),
+                      "kind": x.get("kind")}
                      for x in supplied],
     }
     instruction = (
@@ -60,6 +69,12 @@ def classify(edge, model_cfg, use_cache=True):
         "11. If evidence explicitly says X validates mappings against Y, choose validated_against in the correct direction.\n"
         "12. Do not confuse a document publication or planning coordination with a product dependency.\n"
         "13. If a relation is directional, its direction must match FROM -> TO; otherwise use unresolved.\n"
+        "14. In FROM -> TO part_of, FROM must be explicitly contained in TO. "
+        "Building on another platform is NOT part_of. Do not invert parent/child.\n"
+        "15. Prefer explicit architectural definitions and present-tense capabilities "
+        "to plans, meeting notes, or historic implementation records.\n"
+        "16. Read all passages, including qualifications and contradictory descriptions. "
+        "If sources conflict or the type is not proven, use unresolved.\n"
         "Valid unresolved example:\n"
         '{\\"type\\":\\"unresolved\\",\\"citations\\":[],\\"rationale\\":\\"The evidence does not establish a relationship.\\",\\"confidence\\":\\"low\\"}\n'
         "Now classify the supplied evidence. Return only the JSON object."
@@ -140,8 +155,13 @@ def _validate(raw, refs):
             "confidence": confidence}
 
 
-def review(graph, cfg, max_edges=20):
-    """Use cfg.model already attached by pm.py, without independent settings."""
+def review(graph, cfg, max_edges=20, db_path=None,
+           context_chars=80000, context_documents=24):
+    """Review relationships with project-scoped, full-document source context.
+
+    Passing no db_path retains backward compatibility for direct unit tests
+    and programmatic callers with self-contained cited excerpts.
+    """
     if max_edges < 1:
         raise ValueError("max_edges must be positive")
     model_cfg = cfg.get("model") or {}
@@ -149,14 +169,25 @@ def review(graph, cfg, max_edges=20):
         raise ValueError("The existing model configuration needs endpoint and name")
     results = []
     for edge in graph["relationships"][:max_edges]:
+        context = None
         try:
-            judgement = classify(edge, model_cfg)
+            if db_path is not None:
+                from core import discovery_context_pack
+                context = discovery_context_pack.build(
+                    db_path, edge["project"], [edge["from"], edge["to"]],
+                    citations=[ev["citation"] for ev in edge.get("evidence") or []],
+                    max_chars=context_chars, max_documents=context_documents)
+            judgement = classify(edge, model_cfg, context_pack=context)
         except (ValueError, KeyError, IndexError, TypeError, OSError) as exc:
             judgement = {"status": "model_error", "type": "unresolved",
                          "citations": [], "error": str(exc)[:200]}
         results.append({"from": edge["from"], "to": edge["to"],
                         "deterministic_type": edge["type"],
-                        "model": judgement, "project": edge["project"]})
+                        "model": judgement, "project": edge["project"],
+                        "context_characters": context["characters"] if context else None,
+                        "context_documents": context["documents"] if context else None,
+                        "context_citations": context["citations"] if context else [],
+                        "context_truncated": context["truncated"] if context else None})
     return {"model_name": model_cfg["name"], "reviewed": len(results),
             "total_edges": len(graph["relationships"]),
             "unreviewed": max(0, len(graph["relationships"]) - len(results)),

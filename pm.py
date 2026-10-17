@@ -737,6 +737,10 @@ def build_parser():
                             help="Also propose cited profile claims using the configured local model")
     p_discover.add_argument("--profile-max-candidates", type=int, default=40,
                             help="Maximum offline candidate profiles retained (default 40)")
+    p_discover.add_argument("--discovery-context-chars", type=int, default=80000,
+                            help="Maximum retrieved source-context characters per inference call (default 80000; maximum 400000)")
+    p_discover.add_argument("--discovery-context-documents", type=int, default=24,
+                            help="Maximum independent indexed source documents per inference call (default 24)")
     p_discover.add_argument("--profile-model-limit", type=int, default=6,
                             help="Maximum locally model-reviewed profiles (default 6)")
     p_discover.add_argument("--concept-graph-thinking-compare", action="store_true",
