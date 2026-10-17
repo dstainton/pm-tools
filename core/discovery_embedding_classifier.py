@@ -13,7 +13,7 @@ from pathlib import Path
 
 import requests
 
-from core.config import SECTION_DEFAULTS
+from core.config import SECTION_DEFAULTS, load_config
 
 TAXONOMY = {
     "organization": "Evidence describing organizational structure, products, services, workstreams, teams, ownership and accountabilities.",
@@ -75,7 +75,8 @@ def _init(db):
 
 
 def classify(db_path, project, endpoint=None, model=None, task=None,
-             batch_size=None, timeout=None, limit=None, on_progress=None):
+             batch_size=None, timeout=None, limit=None, on_progress=None,
+             taxonomy_version=None):
     defaults = SECTION_DEFAULTS["classification"]
     endpoint = endpoint or defaults["endpoint"]
     model = model or defaults["model"]
@@ -86,9 +87,10 @@ def classify(db_path, project, endpoint=None, model=None, task=None,
         raise ValueError("Classification endpoint must be a local loopback URL")
     if not 1 <= batch_size <= 64:
         raise ValueError("batch_size must be 1..64")
+    taxonomy_version = taxonomy_version or defaults["taxonomy_version"]
     labels = list(TAXONOMY)
     classifier_key = hashlib.sha256(json.dumps(
-        [model, endpoint, task, defaults["taxonomy_version"], TAXONOMY],
+        [model, endpoint, task, taxonomy_version, TAXONOMY],
         sort_keys=True).encode("utf-8")).hexdigest()
     db = sqlite3.connect(str(db_path))
     try:
@@ -107,7 +109,7 @@ def classify(db_path, project, endpoint=None, model=None, task=None,
         pending = [r for r in rows if known.get(r[0]) != r[3]]
         if not pending:
             return {"total": len(rows), "classified": 0, "cached": len(rows),
-                    "failed": 0, "model": model, "taxonomy_version": defaults["taxonomy_version"]}
+                    "failed": 0, "model": model, "taxonomy_version": taxonomy_version}
         prototype_texts = [_prefix("Category {}: {}".format(x, TAXONOMY[x]), task)
                            for x in labels]
         prototypes = _embeddings(endpoint, model, prototype_texts, timeout)
@@ -161,6 +163,7 @@ def classify(db_path, project, endpoint=None, model=None, task=None,
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Classify local source evidence with EmbeddingGemma")
     parser.add_argument("--db", required=True)
+    parser.add_argument("--config", help="pm-tools YAML config with classification section")
     parser.add_argument("--project", required=True)
     parser.add_argument("--endpoint")
     parser.add_argument("--model")
@@ -168,9 +171,15 @@ def main(argv=None):
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--limit", type=int, help="Optional bounded smoke test")
     args = parser.parse_args(argv)
-    report = classify(args.db, args.project, endpoint=args.endpoint,
-                      model=args.model, task=args.task,
-                      batch_size=args.batch_size, limit=args.limit)
+    cfg = (load_config(args.config).get("classification")
+           if args.config else SECTION_DEFAULTS["classification"])
+    report = classify(args.db, args.project,
+                      endpoint=args.endpoint or cfg["endpoint"],
+                      model=args.model or cfg["model"],
+                      task=args.task or cfg["task"],
+                      batch_size=args.batch_size or cfg["batch_size"],
+                      timeout=cfg["timeout"],
+                      taxonomy_version=cfg["taxonomy_version"], limit=args.limit)
     print(json.dumps(report, indent=2))
 
 
