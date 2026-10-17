@@ -19,7 +19,7 @@ BUCKETS = (
     ("toolkit", ("Integration Toolkit", "ITK", "DevHub", "Backstage"), 4),
     ("decisions-and-dependencies", ("decision", "superseded", "depends on",
                                      "out of scope", "SSO", "ADR"), 4),
-    ("negative-or-ambiguous", ("stakeholder", "research", "operational",
+    ("negative-or-ambiguous", ("interest-holder", "research", "operational",
                                "component", "https"), 4),
 )
 
@@ -86,25 +86,77 @@ def select(db_path, project, target=26):
                             "citation": citation, "title": title, "body": body,
                             "digest": digest, "updated": updated, "kind": kind,
                             "meaningful": meaningful})
+        # Allocate separate quotas so narrative Confluence pages cannot crowd
+        # out Jira issue evidence. Scarcity is reported, never backfilled with
+        # unrelated sources to make a numeric target appear complete.
+        jira_target = max(2, target // 3)
+        confluence_target = target - jira_target
+        quotas = {"jira": jira_target, "confluence": confluence_target}
+        per_source = {"jira": 0, "confluence": 0}
         picked, used = [], set()
         for bucket, terms, count in BUCKETS:
-            scored = []
+            for source_type in ("confluence", "jira"):
+                # Bucket quotas are proportional but do not force all buckets
+                # to contain both sources when a category has no relevant issues.
+                bucket_limit = max(1, round(count * quotas[source_type] / target))
+                scored = []
+                for row in sources:
+                    if row["source"] != source_type or row["citation"] in used:
+                        continue
+                    title = row["title"].casefold()
+                    body = row["body"].casefold()
+                    matches = sum(term.casefold() in body or term.casefold() in title
+                                  for term in terms)
+                    if not matches:
+                        continue
+                    positive = sum(x in body for x in (
+                        "what it is", "purpose", "provides", "depends on",
+                        "responsib", "out of scope", "does not", "decision"))
+                    warning = sum(x in title for x in (
+                        "archived", "draft", "questionnaire", "assessment",
+                        "sprint goals", "meeting notes"))
+                    rank = (matches * 2 + min(positive, 4) * 3
+                            + (3 if row["meaningful"] else -6)
+                            - warning * 6)
+                    scored.append((-rank, row["citation"], row))
+                scored.sort()
+                allowed = min(bucket_limit, max(0, quotas[source_type] -
+                                              per_source[source_type]))
+                for _, _, row in scored[:allowed]:
+                    picked.append((bucket, terms, row))
+                    used.add(row["citation"])
+                    per_source[source_type] += 1
+        # Fill remaining quotas with highest-quality eligible documents,
+        # without reusing citations or allowing one source to displace another.
+        for source_type in ("confluence", "jira"):
+            if per_source[source_type] >= quotas[source_type]:
+                continue
+            remaining = []
             for row in sources:
-                if row["citation"] in used:
+                if row["source"] != source_type or row["citation"] in used:
                     continue
-                text = (row["title"] + " " + row["body"]).casefold()
-                matches = sum(term.casefold() in text for term in terms)
-                if matches == 0:
+                if not row["meaningful"]:
                     continue
-                # Source reliability, clear descriptions and diverse categories,
-                # not Jira component frequency, determine review priority.
-                rank = (matches * 3 + (3 if row["source"] == "confluence" else 0)
-                        + (2 if row["meaningful"] else -4))
-                scored.append((-rank, row["citation"], row))
-            scored.sort()
-            for _, _, row in scored[:min(count, max(0, target - len(picked)))]:
-                picked.append((bucket, terms, row))
+                body = row["body"].casefold()
+                title = row["title"].casefold()
+                mentions = sum(x in body for x in (
+                    "secure data exchange", "aps platform", "integration toolkit",
+                    "api directory", "api gateway", "token exchange"))
+                substantive = sum(x in body for x in (
+                    "provides", "purpose", "depends on", "does not",
+                    "out of scope", "responsib", "decision"))
+                if mentions == 0 or substantive == 0:
+                    continue
+                deprecated = sum(x in title for x in (
+                    "archived", "questionnaire", "accessibility assessment"))
+                rank = mentions * 2 + min(substantive, 4) * 3 - deprecated * 10
+                remaining.append((-rank, row["citation"], row))
+            remaining.sort()
+            for _, _, row in remaining[:quotas[source_type] - per_source[source_type]]:
+                picked.append(("additional-evidence", ("provides", "depends on",
+                               "purpose", "Secure Data Exchange"), row))
                 used.add(row["citation"])
+                per_source[source_type] += 1
         # No padding with unsupported classifications. Report coverage shortfall.
         cases = []
         for n, (bucket, terms, row) in enumerate(picked, 1):
@@ -134,7 +186,8 @@ def select(db_path, project, target=26):
                 ],
             })
         return {"schema_version": 1, "project": project, "requested": target,
-                "selected": len(cases), "cases": cases,
+                "selected": len(cases), "source_counts": per_source,
+                "source_targets": quotas, "cases": cases,
                 "review_status": "NOT_GROUND_TRUTH",
                 "warning": "Unreviewed PRIVATE source extracts; not accepted benchmark annotations."}
     finally:
