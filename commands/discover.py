@@ -248,7 +248,10 @@ def run(cfg, args):
             try:
                 discovery_profile_model.review(
                     report["profile_discovery"], cfg,
-                    max_candidates=getattr(args, "profile_model_limit", 6))
+                    max_candidates=getattr(args, "profile_model_limit", 6),
+                    db_path=db_file,
+                    context_chars=getattr(args, "discovery_context_chars", 80000),
+                    context_documents=getattr(args, "discovery_context_documents", 24))
             finally:
                 progress.finish()
     if (getattr(args, "concept_graph", False) or getattr(args, "concept_graph_model", False)
@@ -289,7 +292,11 @@ def run(cfg, args):
                     review_graph, cfg, max_edges=8)
             else:
                 report["model_graph_review"] = discovery_local_model.review(
-                    review_graph, cfg, max_edges=getattr(args, "concept_graph_max_edges", 24))
+                    review_graph, cfg,
+                    max_edges=getattr(args, "concept_graph_max_edges", 24),
+                    db_path=db_file,
+                    context_chars=getattr(args, "discovery_context_chars", 80000),
+                    context_documents=getattr(args, "discovery_context_documents", 24))
         finally:
             progress.finish()
     if getattr(args, "evaluate_terms", False):
@@ -411,8 +418,11 @@ def run(cfg, args):
                 review["reviewed"], review["total_candidates"]))
             for row in review["results"]:
                 result = row["result"]
-                print("  {}: {} cited claims [{}]".format(
-                    row["name"], len(result["claims"]), result["status"]))
+                print("  {}: {} cited claims [{}; {} source(s), {} context characters{}]".format(
+                    row["name"], len(result["claims"]), result["status"],
+                    row.get("context_documents") or 0,
+                    row.get("context_characters") or 0,
+                    "; selected portions" if row.get("context_truncated") else ""))
     if report.get("concept_graph") is not None:
         graph = report["concept_graph"]
         print("Candidate concept identities: {} (showing {})".format(
@@ -439,9 +449,12 @@ def run(cfg, args):
         print("Local model reviewed {} of {} evidence candidates (unconfirmed)".format(
             item["reviewed"], item["total_edges"]))
         for edge in item["results"]:
-            print("  {} -> {}: {} [{}]".format(
+            print("  {} -> {}: {} [{}; {} source(s), {} context characters{}]".format(
                 edge["from"], edge["to"], edge["model"]["type"],
-                edge["model"]["status"]))
+                edge["model"]["status"],
+                edge.get("context_documents") or 0,
+                edge.get("context_characters") or 0,
+                "; selected portions" if edge.get("context_truncated") else ""))
     if report.get("term_evaluations") is not None:
         item = report["term_evaluations"]
         print("Terminology candidate evaluations: {}".format(item["pairs_generated"]))
@@ -581,6 +594,12 @@ def run(cfg, args):
                         result = entry["result"]
                         stream.write("\n### {} [{}]\n".format(
                             entry["name"], result["status"]))
+                        stream.write("- Context: {} source(s), {} characters; "
+                                     "source citations: {}{}\n".format(
+                            entry.get("context_documents") or 0,
+                            entry.get("context_characters") or 0,
+                            ", ".join(entry.get("context_citations") or []),
+                            "; selected portions omitted" if entry.get("context_truncated") else ""))
                         if result.get("error"):
                             stream.write("- Validation error: {}\n".format(result["error"]))
                         for claim in result["claims"]:
