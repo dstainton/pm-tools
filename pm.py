@@ -731,6 +731,14 @@ def build_parser():
                             help="Index authorized Confluence page bodies with explicit coverage")
     p_discover.add_argument("--index-jira", action="store_true",
                             help="Index stored Jira issues, comments and history offline")
+    p_discover.add_argument("--discover-profiles", action="store_true",
+                            help="Discover unconfirmed product/workstream candidates from offline Jira and Confluence")
+    p_discover.add_argument("--discover-profiles-model", action="store_true",
+                            help="Also propose cited profile claims using the configured local model")
+    p_discover.add_argument("--profile-max-candidates", type=int, default=40,
+                            help="Maximum offline candidate profiles retained (default 40)")
+    p_discover.add_argument("--profile-model-limit", type=int, default=6,
+                            help="Maximum locally model-reviewed profiles (default 6)")
     p_discover.add_argument("--concept-graph-thinking-compare", action="store_true",
                             help="Compare thinking on/off using the same cited candidate evidence")
     p_discover.add_argument("--concept-graph-max-edges", type=int, default=24,
