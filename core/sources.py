@@ -1263,6 +1263,39 @@ def fetch_confluence_page(cfg, page_id):
     return page_core.cache_fetch(cfg, "confluence-page", (str(page_id),), fetch)
 
 
+def fetch_confluence_page_v2(cfg, page_id, get_draft=False, body_format=None):
+    """Read a Confluence Cloud v2 page without publishing or modifying it.
+
+    Called only when the older v1 content endpoint returns 404. An explicit
+    get-draft request is metadata-only and must never be indexed as evidence.
+    Do not cache 404 responses or status checks: page status may change.
+    """
+    block = _confluence_block(cfg)
+    if not page_id or not block.get("base_url"):
+        raise ValueError("Confluence connection missing")
+    if not str(page_id).isdigit():
+        raise ValueError("Confluence page ID must be numeric")
+    params = {}
+    if get_draft:
+        params["get-draft"] = "true"
+    if body_format is not None:
+        if body_format != "storage":
+            raise ValueError("Unsupported v2 page body format")
+        params["body-format"] = "storage"
+    url = "{}/api/v2/pages/{}".format(block["base_url"].rstrip("/"), page_id)
+    response = send(
+        "GET", url, params=params,
+        auth=(block["email"], block["api_token"]),
+        headers={"Accept": "application/json"}, timeout=60)
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or str(payload.get("id") or "") != str(page_id):
+        raise ValueError("Confluence v2 page response has missing or mismatched ID")
+    return payload
+
+
 def list_confluence_comments(cfg, content_id, start=0, limit=25):
     """Read direct comments attached to one already-authorized content ID.
 
