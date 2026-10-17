@@ -1,8 +1,8 @@
 # Phase 2 design: Product and workstream discovery
 
-**Status:** Historical Phase 2 discovery proposal, superseded as the main architecture by the reusable [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md) direction (2026-10-16). Keep for requirements and compatibility constraints, not as authorization to implement its earlier classification-first design.
+**Status:** Historical Phase 2 proposal. The active discovery design is [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md), selected 2026-10-17. Retain this document for compatibility and historical context, not as an implementation sequence.
 
-**Before further implementation:** use the updated [Roadmap](../ROADMAP.md), [Evaluation](DISCOVERY-EVALUATION.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md). Products, workstreams, capabilities and Jira components must not be conflated. A product may have an associated workstream, not an exclusive single kind.
+**Before further implementation:** use the updated [Roadmap](../ROADMAP.md), [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md), [Evaluation](DISCOVERY-EVALUATION.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md). Products, workstreams, capabilities and Jira components must not be conflated. A product may have an associated workstream, not an exclusive single kind.
 
 **Authority:** [North Star](../NORTH_STAR.md), [Roadmap](../ROADMAP.md), [Architecture](ARCHITECTURE.md), and [Agent guidance](../AGENTS.md).
 
