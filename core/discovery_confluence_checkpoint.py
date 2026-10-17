@@ -32,6 +32,9 @@ def _init(db):
         scope_id TEXT NOT NULL, content_id TEXT NOT NULL, space TEXT,
         title TEXT, content_type TEXT, updated TEXT, ancestors TEXT,
         PRIMARY KEY(scope_id, content_id))""")
+    if "status" not in {row[1] for row in db.execute(
+            "PRAGMA table_info(confluence_inventory_items)")}:
+        db.execute("ALTER TABLE confluence_inventory_items ADD COLUMN status TEXT")
     # Track all hierarchy nodes to recognize covered nested folder roots, but
     # index only actual page bodies. Never fetch folders as pages or comments.
     db.execute("""CREATE TABLE IF NOT EXISTS confluence_inventory_nodes (
@@ -149,12 +152,12 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                                 sid, str(root["id"]), root.get("title") or "", root_type))
                         if root_type == "page":
                             db.execute("""INSERT OR IGNORE INTO confluence_inventory_items
-                                (scope_id,content_id,space,title,content_type,updated,ancestors)
-                                VALUES(?,?,?,?,?,?,?)""", (
+                                (scope_id,content_id,space,title,content_type,updated,ancestors,status)
+                                VALUES(?,?,?,?,?,?,?,?)""", (
                                     sid, str(root["id"]), scope.get("space"),
                                     root.get("title") or "", root_type,
                                     (root.get("version") or {}).get("when"),
-                                    json.dumps([])))
+                                    json.dumps([]), root.get("status")))
                 else:
                     root_type = "page"
 
@@ -221,7 +224,7 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                             sid, pid, scope.get("space"), row.get("title") or "",
                             row.get("type") or "page",
                             (row.get("version") or {}).get("when"),
-                            json.dumps(ancestors)))
+                            json.dumps(ancestors), row.get("status")))
 
                     if rows and not to_write and scope["type"] != "page_tree":
                         raise ValueError("Confluence returned only results without page IDs")
@@ -234,8 +237,8 @@ def crawl(cfg, db_path, max_rows=100, on_progress=None):
                                 (scope_id,content_id,title,content_type)
                                 VALUES(?,?,?,?)""", node_rows)
                         db.executemany("""INSERT OR REPLACE INTO confluence_inventory_items
-                            (scope_id,content_id,space,title,content_type,updated,ancestors)
-                            VALUES(?,?,?,?,?,?,?)""", to_write)
+                            (scope_id,content_id,space,title,content_type,updated,ancestors,status)
+                            VALUES(?,?,?,?,?,?,?,?)""", to_write)
                         db.execute("""INSERT INTO confluence_inventory_cursor
                             (scope_id,scope_json,offset,status,error,scan_version,cursor)
                             VALUES(?,?,?,?,NULL,?,?)
@@ -360,12 +363,12 @@ def indexed_inventory(cfg, db_path):
                                  "detail": "Covered by complete ancestor page tree"})
                 continue
             statuses.append({"scope": configured, "status": status, "offset": offset})
-            for pid, space, title, kind in db.execute(
-                    """SELECT content_id,space,title,content_type
+            for pid, space, title, kind, page_status in db.execute(
+                    """SELECT content_id,space,title,content_type,status
                        FROM confluence_inventory_items
                        WHERE scope_id=? AND content_type='page'""", (sid,)):
                 pages[pid] = {"id": pid, "space": space, "title": title,
-                              "type": kind}
+                              "type": kind, "status": page_status}
         return {"pages": list(pages.values()), "scopes": statuses,
                 "coverage": "complete" if statuses and all(
                     x["status"] == "complete" for x in statuses) else "partial"}
