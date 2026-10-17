@@ -8,7 +8,7 @@ Prove usefulness and factual support, not simply that a command completed or JSO
 
 ## Reference set
 
-Create a versioned, human-reviewed APS benchmark of approximately 20–30 diverse source documents, including explicit product/capability cards, documents with multiple adjacent entities, Jira Epic descriptions, generic Jira components, ambiguous aliases, conflicting plans, negative statements and superseded decisions. Annotate entity names and multiple roles, expected attributes, exact cited spans, directional relationships, temporal status and expected abstentions. Protect private data. Reserve a holdout set and test on a second, differently organized corpus before general release.
+Create a versioned, human-reviewed APS benchmark of approximately 20–30 diverse source documents, including label-rich Jira issues and labelled Confluence pages, misleading and missing labels, explicit product/capability cards, documents with multiple adjacent entities, Jira Epic descriptions, generic Jira components, ambiguous aliases, conflicting plans, negative statements and superseded decisions. Annotate entity names and multiple roles, expected attributes, exact cited spans, directional relationships, temporal status and expected abstentions. Protect private data. Reserve a holdout set and test on a second, differently organized corpus before general release.
 
 ## Proposed quality gates
 
@@ -28,7 +28,7 @@ These are **project proposals**, not universal industry standards.
 
 ## Evaluation order
 
-1. Confirm structured normalization and exact passage reconstruction.
+1. Confirm structured normalization, Jira/Confluence label preservation, and exact passage reconstruction.
 2. Measure retrieval independent of generation.
 3. Qualify local models using short, known source sections (including false claims, negative language, uncertainty and schema compliance). Record model version, context budget, token usage if available and errors.
 4. Evaluate citation-to-claim factual support, not citation existence alone.
