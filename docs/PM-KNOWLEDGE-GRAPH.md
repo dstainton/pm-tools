@@ -2,7 +2,7 @@
 
 **Status:** Target direction agreed, implementation and technology selection not yet authorized (2026-10-16).
 
-**Goal:** Build a reusable, local-first, provenance-rich knowledge foundation for product discovery, roadmap and dependency analysis, decision histories, risks, stakeholder mapping, impact assessments and reporting.
+**Goal:** Build a reusable, local-first, provenance-rich knowledge foundation for product discovery, roadmap and dependency analysis, decision histories, risks, interest-holder mapping, impact assessments and reporting.
 
 ## Why
 
@@ -20,7 +20,7 @@ APS ingestion collected 4,381 Jira issues, 8,963 comments, 23,683 changelog reco
 4. **Source-level claims:** Subject, predicate, object, negation, temporal validity, source span and uncertainty. Distinguish planned, operational, deprecated, contradicted and unknown.
 5. **Reconciliation and temporal property graph:** Resolve aliases carefully, track identity through time, conflicts, superseded decisions and graph edge provenance.
 6. **Evidence retrieval and GraphRAG:** Scope-aware lexical/hybrid retrieval, graph traversals and evidence-backed synthesis, with citations and explicit abstention.
-7. **PM features:** Discovery, assessment, classification, dependency/roadmap impacts, decision support, risk, stakeholder analysis, reporting and stewardship.
+7. **PM features:** Discovery, assessment, classification, dependency/roadmap impacts, decision support, risk, interest-holder analysis, reporting and stewardship.
 
 Important predicates include `provides`, `part_of`, `depends_on`, `used_by`, `owned_by`, `implements`, `replaces`, `historical_name` and `contradicts`. The direction and semantics must be defined, not inferred from co-occurrence.
 
