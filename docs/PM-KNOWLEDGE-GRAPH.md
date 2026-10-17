@@ -15,8 +15,8 @@ APS ingestion collected 4,381 Jira issues, 8,963 comments, 23,683 changelog reco
 ## Layered architecture
 
 1. **Collection:** Existing, scoped source adapters and incremental checkpoints.
-2. **Structured evidence:** Original document/issue fields; Confluence section and table boundaries; author/source identity, timestamps, content hash, permissions, citations and stable source spans.
-3. **Entities:** Product, service, capability, workstream, team, Jira component, initiative, issue, decision, stakeholder and source. A product can also have an associated workstream; these are not mutually exclusive kinds.
+2. **Structured evidence:** Original document/issue fields; Confluence section and table boundaries; Jira labels and Confluence content labels as distinct indexed metadata; author/source identity, timestamps, content hash, permissions, citations and stable source spans.
+3. **Entities:** Product, service, capability, workstream, team, Jira component, Jira label, Confluence label, initiative, issue, decision, interest-holder and source. A product can also have an associated workstream; these are not mutually exclusive kinds.
 4. **Source-level claims:** Subject, predicate, object, negation, temporal validity, source span and uncertainty. Distinguish planned, operational, deprecated, contradicted and unknown.
 5. **Reconciliation and temporal property graph:** Resolve aliases carefully, track identity through time, conflicts, superseded decisions and graph edge provenance.
 6. **Evidence retrieval and GraphRAG:** Scope-aware lexical/hybrid retrieval, graph traversals and evidence-backed synthesis, with citations and explicit abstention.
