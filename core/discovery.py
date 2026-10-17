@@ -81,7 +81,7 @@ def summary(report):
                                      if any(report.get(key) is not None for key in
                                             ("concept_clusters", "term_relationships", "term_evaluations", "concept_graph",
                                              "alias_candidates", "evidence_matches",
-                                             "concept_matches")) else
+                                             "concept_matches", "profile_discovery")) else
                                      "configuration only (no Jira or document retrieval)"))]
     if report["scope_project"]:
         lines.append("Project: " + report["scope_project"])
@@ -161,7 +161,7 @@ def _evidence_lines(evidence):
 def markdown(report):
     offline = any(report.get(key) is not None for key in
                   ("concept_clusters", "term_relationships", "term_evaluations", "concept_graph", "alias_candidates",
-                   "evidence_matches", "concept_matches"))
+                   "evidence_matches", "concept_matches", "profile_discovery"))
     lines = ["# Product and workstream discovery", "",
              ("Phase 2B: bounded source examples, not confirmed ownership."
               if report.get("enriched") else

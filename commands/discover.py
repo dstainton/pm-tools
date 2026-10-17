@@ -225,6 +225,32 @@ def run(cfg, args):
             report["confluence_index"] = discovery_confluence_index.index(cfg, db_file)
         finally:
             progress.finish()
+    if (getattr(args, "discover_profiles", False)
+            or getattr(args, "discover_profiles_model", False)):
+        from core import discovery_profile_discovery, paths
+        import os
+        db_file = os.path.join(paths.local_dir(cfg), "discovery_jira.sqlite")
+        if not os.path.isfile(db_file):
+            raise SystemExit("Local evidence index missing; index Jira or Confluence first.")
+        scope = getattr(args, "project", None) or (cfg.get("jira") or {}).get("project")
+        if not scope:
+            raise SystemExit("--project is required when no default Jira project is configured.")
+        progress.start("Discovering candidate profiles from indexed evidence")
+        try:
+            report["profile_discovery"] = discovery_profile_discovery.discover(
+                db_file, cfg, project=scope,
+                max_candidates=getattr(args, "profile_max_candidates", 40))
+        finally:
+            progress.finish()
+        if getattr(args, "discover_profiles_model", False):
+            from core import discovery_profile_model
+            progress.start("Extracting source-cited profile claims with local model")
+            try:
+                discovery_profile_model.review(
+                    report["profile_discovery"], cfg,
+                    max_candidates=getattr(args, "profile_model_limit", 6))
+            finally:
+                progress.finish()
     if (getattr(args, "concept_graph", False) or getattr(args, "concept_graph_model", False)
             or getattr(args, "concept_graph_thinking_compare", False)):
         from core import discovery_concept_graph, paths
@@ -367,6 +393,26 @@ def run(cfg, args):
                       entity["name"], entity["kind"], entity["documents_matched"],
                       entity.get("evidence_records_matched", entity["documents_matched"]),
                       len(entity["leads"])))
+    if report.get("profile_discovery") is not None:
+        item = report["profile_discovery"]
+        print("Candidate profiles: {} found ({} displayed; {} beyond limit), "
+              "all unconfirmed".format(
+                  item["total_candidates"], len(item["candidates"]),
+                  item["unreviewed_candidates"]))
+        for row in item["candidates"][:15]:
+            print("  {}: {} [Confluence {}, Jira {}; {}; {}]".format(
+                row["name"], row["candidate_kind"] or "kind unknown",
+                row["published_documents"], row["jira_issues"],
+                row["reconciliation"]["status"],
+                ", ".join(row["found_via"])))
+        if item.get("model_review") is not None:
+            review = item["model_review"]
+            print("Profile model reviewed {} of {} candidates (unconfirmed)".format(
+                review["reviewed"], review["total_candidates"]))
+            for row in review["results"]:
+                result = row["result"]
+                print("  {}: {} cited claims [{}]".format(
+                    row["name"], len(result["claims"]), result["status"]))
     if report.get("concept_graph") is not None:
         graph = report["concept_graph"]
         print("Candidate concept identities: {} (showing {})".format(
@@ -502,6 +548,45 @@ def run(cfg, args):
             if report.get("inventory") is not None:
                 from core import discovery_inventory
                 stream.write("\n" + discovery_inventory.markdown(report))
+            if report.get("profile_discovery") is not None:
+                inventory = report["profile_discovery"]
+                stream.write("\n## Unconfirmed offline product and workstream candidates\n\n")
+                stream.write("- Project: {}\n- Total candidates: {} ({} reported; {} "
+                             "not included due to limit)\n".format(
+                    inventory["project"], inventory["total_candidates"],
+                    len(inventory["candidates"]), inventory["unreviewed_candidates"]))
+                stream.write("- No configuration or confirmed ownership was changed.\n")
+                for item in inventory["candidates"]:
+                    stream.write("\n### {} (candidate)\n\n".format(item["name"]))
+                    stream.write("- Observed labels: {}\n".format(
+                        ", ".join(item["observed_labels"]) or "unknown"))
+                    stream.write("- Found via: {}\n".format(", ".join(item["found_via"])))
+                    stream.write("- Independent sources: {} ({} published Confluence, "
+                                 "{} Jira issues)\n".format(
+                        item["source_count"], item["published_documents"],
+                        item["jira_issues"]))
+                    stream.write("- Reconciliation: {} (configured kind: {})\n".format(
+                        item["reconciliation"]["status"],
+                        item["reconciliation"]["configured_kind"] or "none"))
+                    for evidence in item["evidence"]:
+                        stream.write("- Evidence {} [{}]: {}\n".format(
+                            evidence["citation"], evidence["kind"],
+                            evidence["excerpt"].replace("\n", " ")))
+                model_review = inventory.get("model_review")
+                if model_review is not None:
+                    stream.write("\n## Unconfirmed local-model profile claims\n\n")
+                    stream.write("- Reviewed: {} of {} candidates\n".format(
+                        model_review["reviewed"], model_review["total_candidates"]))
+                    for entry in model_review["results"]:
+                        result = entry["result"]
+                        stream.write("\n### {} [{}]\n".format(
+                            entry["name"], result["status"]))
+                        if result.get("error"):
+                            stream.write("- Validation error: {}\n".format(result["error"]))
+                        for claim in result["claims"]:
+                            stream.write("- {}: {} [{}]\n".format(
+                                claim["field"], claim["value"],
+                                ", ".join(claim["citations"])))
             if report.get("profile_leads") is not None:
                 leads = report["profile_leads"]
                 stream.write("\n## Indexed evidence for product and workstream definitions\n\n")

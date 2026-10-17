@@ -112,6 +112,54 @@ Run `pm discover --index-confluence --project APS` after updating
 without repeating the completed Confluence crawl. No write requests are
 sent to Atlassian.
 
+## Independent offline product and workstream profile discovery
+
+Start with the existing local Jira and Confluence evidence index, **without
+accepting configured product groups as authoritative**.
+
+```powershell
+pm update
+pm discover --discover-profiles --project APS --export
+```
+
+The deterministic stage derives provisional names from labelled Confluence
+content such as `Product:`, `Workstream:` and `Capability 4:`, from Jira
+issue components (counted once per issue), and from existing configuration
+used only as a *search hint*. It retrieves and ranks independent published
+Confluence pages and Jira issue descriptions referencing each name, with
+source citations. It does **not** read unpublished drafts, or turn Jira
+comments and changelog records into new apparent products. It excludes
+component-only singletons. It compares candidates to configured names, flags
+kind conflicts, and marks unconfigured names. Every candidate remains
+unconfirmed: no product, alias, hierarchy, or component assignment is written.
+
+Inspect all the displayed candidates and review evidence excerpts in
+`discovery.md`. By default 40 candidates are retained, including evidence
+for each, and totals beyond the limit are explicitly reported. The name
+extraction is intentionally conservative: unlabeled products mentioned only
+in prose may be absent, and labels may describe features rather than products.
+
+Optionally use the already configured, local inference endpoint:
+
+```powershell
+pm discover --discover-profiles-model --project APS --profile-model-limit 6 --export
+```
+
+The bounded model stage sees at most five source excerpts per candidate,
+returns up to 12 field-level claims using a strict JSON schema, and must
+cite an exact provided source for every claim. Valid fields are kind, purpose,
+responsibility, boundary, parent and alias. Unknown is acceptable. Malformed
+or invalid output gets one repair request and must still pass the validator.
+All statements remain unconfirmed. The command does not claim that a Jira
+component alone proves ownership, that implementation tasks are permanent
+responsibilities, or that a shared dependency proves product membership.
+
+No Jira or Confluence API calls are made, and no source records are changed.
+The existing concept graph remains a separate, optional stage until proposed
+profiles have been reviewed. Local inference uses existing `model`
+configuration and caching; keep the `--profile-model-limit` small on machines
+with a smaller local model.
+
 ## Evidence-aware discovery and Jira issue grouping
 
 Local discovery retains every indexed record, but no longer treats a Jira
