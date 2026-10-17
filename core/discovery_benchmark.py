@@ -47,7 +47,7 @@ def _validate_entities(rows, case_id):
     return ids
 
 
-def _validate_claims(rows, ids, case_id, source=None):
+def _validate_claims(rows, ids, case_id, source=None, require_citation=False):
     _require(isinstance(rows, list), case_id + ": claims must be array")
     for item in rows:
         _require(isinstance(item, dict), case_id + ": invalid claim")
@@ -62,8 +62,9 @@ def _validate_claims(rows, ids, case_id, source=None):
         _require(isinstance(quote, str) and bool(quote.strip()),
                  case_id + ": evidence_quote required")
         if source is not None:
-            _require(item.get("citation") == source["citation"],
-                     case_id + ": citation does not match reference source")
+            if require_citation:
+                _require(item.get("citation") == source["citation"],
+                         case_id + ": citation does not match reference source")
             _require(_norm(quote) in _norm(source["quote"]),
                      case_id + ": evidence_quote is not in the source span")
 
@@ -125,7 +126,7 @@ def evaluate(reference, predictions):
         seen.add(cid)
         ids = _validate_entities(result.get("entities"), cid)
         _validate_claims(result.get("claims"), ids, cid,
-                         source=known[cid]["source"])
+                         source=known[cid]["source"], require_citation=True)
         expected = known[cid]["expected"]
         entity_stats.append(_score(map(_entity_key, result["entities"]),
                                    map(_entity_key, expected["entities"])))
