@@ -16,6 +16,7 @@ machine.
   [ROADMAP.md](ROADMAP.md), and [AGENTS.md](AGENTS.md). The existing
   [architecture baseline](docs/ARCHITECTURE.md) and
   [decision convention](docs/decisions/README.md) provide additional context.
+- Future discovery/PM intelligence architecture: [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md) and [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md). This is a roadmap direction, **not a currently validated feature**.
 
 ---
 
