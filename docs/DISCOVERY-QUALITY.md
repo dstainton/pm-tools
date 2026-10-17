@@ -112,6 +112,40 @@ Run `pm discover --index-confluence --project APS` after updating
 without repeating the completed Confluence crawl. No write requests are
 sent to Atlassian.
 
+## Evidence-aware discovery and Jira issue grouping
+
+Local discovery retains every indexed record, but no longer treats a Jira
+comment or changelog item as an independent issue or product definition.
+
+- **Confluence page and blog content** receives first priority when selecting
+  descriptive product/workstream documentation. Confluence comments can
+  support, but not outrank, a matching published page.
+- **Jira issue descriptions** are next. A Jira issue, its comments and its
+  changelog rows count as **one parent issue** when calculating independent
+  sources and choosing descriptive leads.
+- **Jira comments** can offer supporting relationship evidence. A clearly
+  stated relationship in a comment can replace a weaker mention from the
+  same issue, but it is not counted as another independent source.
+- **Jira changelogs** remain searchable and available to historical taxonomy
+  and membership analysis. They no longer create general current-state
+  relationship candidates from mere text proximity or unrelated field edits.
+
+The command-line and Markdown discovery report distinguish actual Jira issues
+from comments and changelog records. Profile-lead counts describe independent
+parent sources, alongside the raw number of matching evidence records. Source
+citations remain exact, and neither ranked leads nor relationship candidates
+change the confirmed concept registry or configured product ownership.
+
+To inspect the locally stored evidence without re-crawling Jira or Confluence:
+
+```powershell
+pm update
+pm discover --concept-graph-model --project APS --export
+```
+
+The model's bounded review limit is unchanged; the input ordering and grouping
+now favour descriptive evidence over supporting history.
+
 ## Trust boundaries
 
 1. The configured products and workstreams are **configuration facts**, not
