@@ -36,6 +36,12 @@ CLI operations should remain read-only by default. Existing approved-write workf
 
 The tool supports local-model workflows and user-specific Jira fields, filters, Confluence configuration, and saved state. Do not assume Jira custom-field IDs or workstream definitions are portable between installations. A valid field identifier alone does not prove that it holds useful data for that team.
 
+## Proposed knowledge graph target, not the current architecture
+
+See [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](DISCOVERY-EVALUATION.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md). The intended shared knowledge infrastructure will preserve structured evidence, extract source-level claims, reconcile identities/time/contradictions and support GraphRAG for future PM commands. Neo4j GraphRAG is a candidate, not an installed or accepted service.
+
+The current offline index flattens Confluence section boundaries and combines Jira metadata with issue description text. Current entity discovery also mistakes generic Jira components for product identities. Those are known experimental limitations, not desired invariants. Retain existing stable collectors and CLI contracts while the redesign is planned. The current product/relationship graph is not an accepted source of truth.
+
 ## Guidelines for evolution
 
 1. Reuse existing retrieval and normalization before building new adapters.

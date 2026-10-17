@@ -10,7 +10,7 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 - **Deferred / Rejected:** explicitly excluded until reconsidered by the owner.
 - **Current authorized work:** only the owner-assigned issue or explicit request; completion does not authorize automatically moving to another task.
 
-**Current authorized slice:** Phase 1 closure and verification only, as explicitly requested. No Phase 2 implementation is authorized. Following owner review and merge of the closure PR, stop until new authorization.
+**Current authorized slice (2026-10-16):** documentation alignment for the reusable PM knowledge graph and evaluation roadmap only. No graph infrastructure, indexing redesign, installation or feature implementation is authorized by this documentation update. The historical Phase 1 closure statement below describes an earlier plan and requires separate status verification.
 
 ## Phase 0: Product governance (Completed)
 
@@ -42,20 +42,48 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 **Exclusions:** No bulk updates, model-made closure decisions, or strategic priority scores inferred from Jira hygiene.
 
-## Phase 2: Classification and ownership (Later)
+## Phase 2: Shared PM knowledge foundation (Current planning; implementation not authorized)
 
-**Discovery design proposal (not approved for implementation):** [docs/PHASE2-DISCOVERY.md](docs/PHASE2-DISCOVERY.md). The proposed first slice establishes product and workstream knowledge before issue classification. Owner review and scoped authorization are required before any code changes.
+**Outcome:** A reusable, local-first evidence and knowledge graph serves product discovery and future PM intelligence, not just Jira classification.
 
-**Outcome:** Unclaimed and ambiguously owned work can be reviewed efficiently.
+**Supporting plans:** [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md), updated [Phase 2 discovery](docs/PHASE2-DISCOVERY.md), and [proposed decision ADR 0001](docs/decisions/0001-pm-knowledge-graph-foundation.md).
 
-- Explain candidate workstream assignments using Epic relationships, existing configuration, fields, and optionally model-assisted content analysis.
-- Distinguish workstream membership from Jira components and informal labels.
-- Preserve uncertainty and a `needs review` outcome.
-- Export recommendations for human review before writes.
+**Existing foundation to retain:** checkpointed Jira/Confluence collection; APS index of 4,381 issues, 8,963 comments, 23,683 changes and 414 Confluence records; SQLite raw evidence and FTS; local model adapter. Recent semantic discovery tests produced false products and unsupported assertions. PR #98 is an unmerged, failing-CI experimental patch and is not the approved direction.
 
-**Dependency:** Trustworthy Phase 1 inventory and source provenance.
+### 2A. Domain model, benchmark and evaluation (Next)
+- Define products, services, capabilities, workstreams, teams, initiatives, decisions, Jira components, source records and typed/temporal claims as separate concepts. Multiple roles may apply to a single entity.
+- Build a frozen, human-reviewed APS reference corpus and negative cases, with withheld evaluation samples and accuracy gates.
+- Qualify the local model on known, small source sections before attempting large-scale extraction.
+- **Gate:** accepted ontology, provenance contract and evaluation plan.
 
-## Phase 3: Guided remediation (Later)
+### 2B. Structured evidence normalization (Next; depends on 2A)
+- Preserve Confluence headings, tables, section boundaries and context; never flatten adjacent capability definitions into one ambiguous string.
+- Keep Jira description, components, labels, comments and historical changes separately typed.
+- Maintain source references, access scope, observed/effective dates and retrievable exact spans.
+- **Gate:** benchmark-critical spans reproduce correctly without cross-project leakage.
+
+### 2C. Graph technology qualification (Next; depends on 2A)
+- Evaluate Neo4j GraphRAG as leading candidate, comparing Graphiti, LlamaIndex and/or a constrained SQLite baseline.
+- Assess local/offline operations, licensing, Python/Windows packaging, temporal facts, incremental updates, retrieval and local model interoperability.
+- **Gate:** an explicitly owner-approved technology ADR; naming a candidate is not installation authorization.
+
+### 2D. Source-level fact extraction and knowledge graph (Later)
+- Extract cited, typed, directional and temporal claims from well-scoped source sections; verify specific evidence spans, record conflicts and abstentions.
+- Reconcile canonical identities with roles and aliases, without treating Jira components or co-mentions as proof of product identity.
+- **Gate:** benchmark measures show evidence recall, claim support, directed relationships and temporal correctness meet agreed targets.
+
+### 2E. Discovery and guided configuration (Later)
+- Provide explainable product/workstream profiles and questions based on accepted graph claims.
+- Preserve existing `products:` and `workstreams:` semantics until a separately approved migration.
+- **Gate:** reliable performance on APS and a different organization/project; no unapproved writes.
+
+## Phase 3: Classification and ownership (Later)
+
+**Outcome:** Explain proposed Jira work ownership using verified product knowledge and existing issue evidence. Preserve unassigned, ambiguous and conflicting work for human review.
+
+**Dependency:** Phase 1 whole-project inventory and trustworthy Phase 2 graph identity/provenance.
+
+## Phase 4: Guided remediation (Later)
 
 **Outcome:** A PM can repair a large backlog safely in batches.
 
@@ -65,7 +93,7 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 **Dependency:** Evidence-backed classification and tested write boundaries.
 
-## Phase 4: Continuous stewardship (Later)
+## Phase 5: Continuous stewardship (Later)
 
 **Outcome:** Backlog health improves over time rather than only during initial cleanup.
 
@@ -73,9 +101,9 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 - Integrate actionable exceptions into `pm today` and relevant `pm report` profiles.
 - Keep health measures distinct from delivery throughput and product outcomes.
 
-**Dependency:** Consistent inventory and snapshot semantics.
+**Dependency:** Consistent inventory, accepted graph facts and snapshot semantics.
 
-## Future opportunities (not authorized)
+## Future graph-enabled PM capabilities (not authorized)
 
 - **Prioritization:** Facilitate defensible trade-offs and show assumptions, not invented numerical certainty.
 - **User and stakeholder evidence:** Trace needs, feedback, and decisions to planned work.
