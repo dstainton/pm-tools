@@ -351,13 +351,22 @@ def run(cfg, args):
                     scope.get("detail") or scope["status"]))
     if report.get("profile_leads") is not None:
         leads = report["profile_leads"]
-        print("Offline evidence: {} indexed documents ({})".format(
-            leads["indexed_documents_scanned"],
-            ", ".join("{} {}".format(v, k) for k, v in leads["indexed_source_counts"].items()) or "none"))
+        kinds = leads.get("indexed_kind_counts") or {}
+        jira_issues = kinds.get("jira:issue", 0)
+        jira_comments = kinds.get("jira:comment", 0)
+        jira_changes = kinds.get("jira:change", 0)
+        print("Offline evidence: {} indexed records, including {} Jira issues, "
+              "{} Jira comments, {} Jira changes and {} Confluence records".format(
+                  leads["indexed_documents_scanned"], jira_issues, jira_comments,
+                  jira_changes, leads["indexed_source_counts"].get("confluence", 0)))
+        print("  Jira supporting records: {} (not additional issues)".format(
+            leads.get("jira_supporting_records", jira_comments + jira_changes)))
         for entity in leads["entities"]:
-            print("  {} ({}): {} potentially relevant document(s), {} descriptive lead(s)".format(
-                entity["name"], entity["kind"], entity["documents_matched"],
-                len(entity["leads"])))
+            print("  {} ({}): {} relevant parent sources from {} matching "
+                  "evidence records, {} descriptive lead(s)".format(
+                      entity["name"], entity["kind"], entity["documents_matched"],
+                      entity.get("evidence_records_matched", entity["documents_matched"]),
+                      len(entity["leads"])))
     if report.get("concept_graph") is not None:
         graph = report["concept_graph"]
         print("Candidate concept identities: {} (showing {})".format(
@@ -496,17 +505,25 @@ def run(cfg, args):
             if report.get("profile_leads") is not None:
                 leads = report["profile_leads"]
                 stream.write("\n## Indexed evidence for product and workstream definitions\n\n")
-                stream.write("- Indexed documents scanned: {}\n".format(
+                stream.write("- Indexed evidence records scanned: {}\n".format(
                     leads["indexed_documents_scanned"]))
-                stream.write("- Sources: {}\n".format(", ".join(
+                stream.write("- Source records: {}\n".format(", ".join(
                     "{}: {}".format(k, v) for k, v in
                     leads["indexed_source_counts"].items()) or "none"))
-                stream.write("- These are document navigation leads, not verified ownership or purpose claims.\n")
+                kinds = leads.get("indexed_kind_counts") or {}
+                stream.write("- Jira breakdown: {} issues, {} comments, {} changelog records.\n".format(
+                    kinds.get("jira:issue", 0), kinds.get("jira:comment", 0),
+                    kinds.get("jira:change", 0)))
+                stream.write("- Jira comments and changelog records are supporting evidence, "
+                             "not additional Jira issues.\n")
+                stream.write("- These are navigation leads, not verified ownership or purpose claims.\n")
                 for entry in leads["entities"]:
                     stream.write("\n### {} ({}, {})\n\n".format(
                         entry["name"], entry["kind"], entry["abbrev"]))
-                    stream.write("- Documents mentioning full name: {}\n".format(
-                        entry["documents_matched"]))
+                    stream.write("- Independent parent sources mentioning full name: {} "
+                                 "({} matching evidence records)\n".format(
+                        entry["documents_matched"],
+                        entry.get("evidence_records_matched", entry["documents_matched"])))
                     for lead in entry["leads"]:
                         stream.write("- {} [{}]: {}\n".format(
                             lead["citation"], lead["source"],
