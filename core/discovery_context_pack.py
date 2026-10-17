@@ -35,7 +35,41 @@ def _hit_regex(term):
     return re.compile(r"(?<!\w)" + re.escape(term) + r"(?!\w)", re.I)
 
 
-def _window_text(body, terms, max_chars):
+def _definition_section(body, term):
+    """Isolate a named capability card from a flattened Confluence page.
+
+    Retain its complete What it IS / What it is NOT content while stopping
+    before the next sibling capability card. Never misassign another card's
+    purpose or scope to the target.
+    """
+    regex = re.compile(
+        r"\b(?:Capability\s+\d{1,2}|Product|Workstream)\s*:\s*" +
+        re.escape(term) + r"(?:\s+\([A-Z][A-Z0-9-]{1,10}\))?\b", re.I)
+    match = regex.search(body)
+    if not match:
+        return None
+    # A page can have a numbered series of capability cards. The next card
+    # marks a hard semantic boundary; not all headings survived HTML stripping.
+    remaining = body[match.start():]
+    next_item = re.search(
+        r"\b(?:Capability\s+\d{1,2}|Product|Workstream)\s*:\s*"
+        r"[A-Z][A-Za-z0-9 /&+().-]{2,65}", remaining[match.end()-match.start():],
+        re.I)
+    if next_item:
+        remaining = remaining[:match.end()-match.start()+next_item.start()]
+    return remaining.strip()
+
+
+def _definition_strength(text, title, terms):
+    for term in terms:
+        if _definition_section(str(text or ""), term):
+            return 3
+        if str(title or "").strip().casefold() == term.casefold():
+            return 2
+    return 0
+
+
+def _window_text(body, terms, max_chars, profile=False):
     """Extract several broad nearby sections, not only a one-sentence mention.
 
     Indexed Confluence HTML was flattened to a single line. Use overlap-aware
@@ -43,6 +77,10 @@ def _window_text(body, terms, max_chars):
     synthetic window is an original Confluence paragraph or section heading.
     """
     body = str(body or "")
+    if profile and len(terms) == 1:
+        section = _definition_section(body, terms[0])
+        if section:
+            body = section
     if len(body) <= max_chars:
         return body
     expressions = [_hit_regex(t) for t in terms]
@@ -152,7 +190,7 @@ def _lookup(db, project, citations, terms, max_found):
 
 
 def build(db_path, project, terms, citations=(), max_chars=DEFAULT_CONTEXT_CHARS,
-          max_documents=DEFAULT_CONTEXT_DOCUMENTS):
+          max_documents=DEFAULT_CONTEXT_DOCUMENTS, profile=False):
     """Return source-labelled substantial excerpts respecting a hard body cap."""
     _check_budget(max_chars, max_documents)
     if not project:
@@ -185,11 +223,17 @@ def build(db_path, project, terms, citations=(), max_chars=DEFAULT_CONTEXT_CHARS
         if citation not in seeds and not found:
             continue
         priority = discovery_evidence_priority.priority(source, kind)
+        if profile and source == "jira" and len(body.strip()) < 100 and not (
+                RELATION.search(body)):
+            # Older issue bodies may be only components, type and parent key.
+            # Those are useful for membership, not stand-alone product claims.
+            continue
         signals = min(12, len(RELATION.findall(body[:35000])))
-        # Preserve evidence that originally motivated this proposal before
-        # broader FTS hits. Then favour published source authority and clarity.
-        score = (0 if citation in seeds else 1, priority, -found, -signals,
-                 citation)
+        definition = _definition_strength(body, title, names) if profile else 0
+        # An exact subject definition is preferable to a generic meeting note
+        # that happened to be among the first five seed citations.
+        score = (-definition, 0 if citation in seeds else 1, priority,
+                 -found, -signals, citation)
         eligible.append((score, (source, kind, key, citation, title, body, when)))
     eligible.sort(key=lambda item: item[0])
     eligible = eligible[:max_documents]
@@ -198,12 +242,12 @@ def build(db_path, project, terms, citations=(), max_chars=DEFAULT_CONTEXT_CHARS
     # Reserve capacity for several independent documents and large sections.
     # Add each source once, and never count the same issue's comments as
     # independent validation of its own issue.
-    per_source = min(12000, max(2400, max_chars // min(max(1, len(eligible)), 10)))
+    per_source = min(14000, max(4000, max_chars // min(max(1, len(eligible)), 7)))
     for _, (source, kind, key, citation, title, body, when) in eligible:
         if remaining < 150:
             break
         allowance = min(per_source, remaining)
-        excerpt = _window_text(body, names, allowance)
+        excerpt = _window_text(body, names, allowance, profile=profile)
         if not excerpt:
             continue
         selected.append({
