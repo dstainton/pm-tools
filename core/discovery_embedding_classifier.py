@@ -154,7 +154,7 @@ def classify(db_path, project, endpoint=None, model=None, task=None,
                 on_progress(count, failures)
         return {"total": len(rows), "classified": count,
                 "cached": len(rows) - len(pending), "failed": failures,
-                "model": model, "taxonomy_version": defaults["taxonomy_version"],
+                "model": model, "taxonomy_version": taxonomy_version,
                 "classification_key": classifier_key}
     finally:
         db.close()
