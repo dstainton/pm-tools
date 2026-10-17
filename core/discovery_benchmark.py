@@ -47,7 +47,7 @@ def _validate_entities(rows, case_id):
     return ids
 
 
-def _validate_claims(rows, ids, case_id, citation=None):
+def _validate_claims(rows, ids, case_id, source=None):
     _require(isinstance(rows, list), case_id + ": claims must be array")
     for item in rows:
         _require(isinstance(item, dict), case_id + ": invalid claim")
@@ -58,9 +58,14 @@ def _validate_claims(rows, ids, case_id, citation=None):
                  case_id + ": missing claim object")
         _require(item.get("polarity") in POLARITIES, case_id + ": invalid polarity")
         _require(item.get("modality") in MODALITIES, case_id + ": invalid modality")
-        if citation is not None:
-            _require(item.get("citation") == citation,
+        quote = item.get("evidence_quote")
+        _require(isinstance(quote, str) and bool(quote.strip()),
+                 case_id + ": evidence_quote required")
+        if source is not None:
+            _require(item.get("citation") == source["citation"],
                      case_id + ": citation does not match reference source")
+            _require(_norm(quote) in _norm(source["quote"]),
+                     case_id + ": evidence_quote is not in the source span")
 
 
 def _score(predicted, expected):
@@ -111,7 +116,7 @@ def evaluate(reference, predictions):
         expected = item.get("expected")
         _require(isinstance(expected, dict), cid + ": missing expected")
         ids = _validate_entities(expected.get("entities"), cid)
-        _validate_claims(expected.get("claims"), ids, cid)
+        _validate_claims(expected.get("claims"), ids, cid, source=src)
         known[cid] = item
     seen, entity_stats, claim_stats = set(), [], []
     for result in outputs:
@@ -120,7 +125,7 @@ def evaluate(reference, predictions):
         seen.add(cid)
         ids = _validate_entities(result.get("entities"), cid)
         _validate_claims(result.get("claims"), ids, cid,
-                         citation=known[cid]["source"]["citation"])
+                         source=known[cid]["source"])
         expected = known[cid]["expected"]
         entity_stats.append(_score(map(_entity_key, result["entities"]),
                                    map(_entity_key, expected["entities"])))
