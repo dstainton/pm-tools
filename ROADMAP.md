@@ -10,7 +10,7 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 - **Deferred / Rejected:** explicitly excluded until reconsidered by the owner.
 - **Current authorized work:** only the owner-assigned issue or explicit request; completion does not authorize automatically moving to another task.
 
-**Current authorized slice (2026-10-16):** documentation alignment for the reusable PM knowledge graph and evaluation roadmap only. No graph infrastructure, indexing redesign, installation or feature implementation is authorized by this documentation update. The historical Phase 1 closure statement below describes an earlier plan and requires separate status verification.
+**Current authorized slice (2026-10-17):** document the owner-approved classifier-first discovery direction only. No graph infrastructure, indexing redesign, installation or feature implementation is authorized by this documentation update. The historical Phase 1 closure statement below describes an earlier plan and requires separate status verification.
 
 ## Phase 0: Product governance (Completed)
 
@@ -50,27 +50,29 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 **Existing foundation to retain:** checkpointed Jira/Confluence collection; APS index of 4,381 issues, 8,963 comments, 23,683 changes and 414 Confluence records; SQLite raw evidence and FTS; local model adapter. Recent semantic discovery tests produced false products and unsupported assertions. PR #98 is an unmerged, failing-CI experimental patch and is not the approved direction.
 
-### 2A. Domain model, benchmark and evaluation (Next)
-- Define products, services, capabilities, workstreams, teams, initiatives, decisions, Jira components, source records and typed/temporal claims as separate concepts. Multiple roles may apply to a single entity.
-- Build a frozen, human-reviewed APS reference corpus and negative cases, with withheld evaluation samples and accuracy gates.
-- Qualify the local model on known, small source sections before attempting large-scale extraction.
-- **Gate:** accepted ontology, provenance contract and evaluation plan.
+### 2A. Structured source capture and normalization (Next)
+- Collect all accessible records within explicitly authorized Jira project and Confluence scopes, with paging, checkpoints, counts, and completeness limits.
+- Retain original payloads and separately typed descriptions, labels, components, hierarchy, comments, revisions and section structures in local SQLite; no mixed metadata/body strings.
+- Segment every accessible source into independently cited evidence units; retain exact source provenance and section context.
+- **Gate:** source fidelity, scope completeness and reconstructable spans; no model-based selection during ingestion.
 
-### 2B. Structured evidence normalization (Next; depends on 2A)
-- Preserve Confluence headings, tables, section boundaries and context; never flatten adjacent capability definitions into one ambiguous string.
-- Keep Jira description, components, labels, comments and historical changes separately typed.
-- Maintain source references, access scope, observed/effective dates and retrievable exact spans.
-- **Gate:** benchmark-critical spans reproduce correctly without cross-project leakage.
+### 2B. Hierarchical classifier-based evidence discovery (Next; depends on 2A)
+- Run a prompted local broad **multi-label classifier on every evidence unit**, with no deterministic relevance prefilter or keyword quota.
+- Route relevant and uncertain units to specialized taxonomy classifiers; allow multi-category routing and abstention rather than forced labels.
+- Version taxonomy, prompts and models; cache results against evidence revision and classifier configuration; preserve uncertainty and reasons, not invented calibrated probabilities.
+- Start with the existing local Qwen inference adapter. Compare a dedicated classifier only after a reviewed validation set exists.
+- **Gate:** reviewed broad-classifier precision/recall, category confusion and missed-relevance audit; classifier failures cannot silently remove evidence.
 
-### 2C. Graph technology qualification (Next; depends on 2A)
-- Evaluate Neo4j GraphRAG as leading candidate, comparing Graphiti, LlamaIndex and/or a constrained SQLite baseline.
-- Assess local/offline operations, licensing, Python/Windows packaging, temporal facts, incremental updates, retrieval and local model interoperability.
-- **Gate:** an explicitly owner-approved technology ADR; naming a candidate is not installation authorization.
+### 2C. Classifier-guided extraction and benchmark (Next; depends on 2B)
+- Extract cited entities, responsibilities, boundaries, decisions and typed/temporal relationships from classifier-selected evidence, retaining alternatives and conflicting claims.
+- Build and review an APS reference corpus with negative, ambiguous, obsolete and multi-entity cases; measure recall and factual support independently of JSON validity.
+- Retain the previous deterministic selector only as a historical experimental baseline, not the main discovery path.
+- **Gate:** reproducible source-cited extraction and human-reviewed holdout evaluation.
 
-### 2D. Source-level fact extraction and knowledge graph (Later)
-- Extract cited, typed, directional and temporal claims from well-scoped source sections; verify specific evidence spans, record conflicts and abstentions.
-- Reconcile canonical identities with roles and aliases, without treating Jira components or co-mentions as proof of product identity.
-- **Gate:** benchmark measures show evidence recall, claim support, directed relationships and temporal correctness meet agreed targets.
+### 2D. Graph technology qualification and knowledge graph (Later)
+- Evaluate SQLite graph-shaped tables against Neo4j GraphRAG, Graphiti and/or LlamaIndex only after classifier-guided retrieval and extraction meet quality gates.
+- Reconcile canonical identities with roles and aliases without treating labels, components or co-mentions as proof of identity.
+- **Gate:** benchmark-backed choice and separately owner-approved storage ADR; no graph infrastructure installation implicitly authorized.
 
 ### 2E. Discovery and guided configuration (Later)
 - Provide explainable product/workstream profiles and questions based on accepted graph claims.
