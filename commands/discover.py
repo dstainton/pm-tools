@@ -680,6 +680,12 @@ def run(cfg, args):
                     stream.write("- {} -> {}: {} [{}]. References: {}\n".format(
                         edge["from"], edge["to"], finding["type"], finding["status"],
                         ", ".join(finding.get("citations", []))))
+                    stream.write("  - Evidence supplied: {} source(s), {} characters; "
+                                 "citations: {}{}\n".format(
+                        edge.get("context_documents") or 0,
+                        edge.get("context_characters") or 0,
+                        ", ".join(edge.get("context_citations") or []),
+                        "; selected portions omitted" if edge.get("context_truncated") else ""))
                     if finding.get("rationale"):
                         stream.write("  - Rationale (model interpretation): {}\n".format(
                             finding["rationale"]))
