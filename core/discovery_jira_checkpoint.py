@@ -35,7 +35,7 @@ def _database(path):
     return db
 
 
-def crawl(cfg, projects, db_path, page_limit=20, page_size=100):
+def crawl(cfg, projects, db_path, page_limit=20, page_size=100, on_progress=None):
     """Persist at most page_limit Jira pages per project and report coverage.
 
     A failed request leaves the last committed continuation untouched. A
@@ -112,6 +112,11 @@ def crawl(cfg, projects, db_path, page_limit=20, page_size=100):
                              canonical_source))
                     total_pages += 1
                     state["fetched_pages"] += 1
+                    if on_progress is not None:
+                        stored = db.execute(
+                            "SELECT COUNT(*) FROM jira_raw_issues WHERE project=?",
+                            (project,)).fetchone()[0]
+                        on_progress(project, stored, total_pages, done)
                     token = next_token
                     if token:
                         tokens_seen.add(token)

@@ -88,7 +88,7 @@ def _resolve(cfg, scope):
     return scope, root
 
 
-def build(cfg, report, cap=MAX_PAGES):
+def build(cfg, report, cap=MAX_PAGES, on_progress=None):
     """List metadata within each authorized scope, retaining failure status."""
     inventory = {"scopes": [], "pages": [], "coverage": "not started",
                  "limit_per_scope": cap}
@@ -166,6 +166,8 @@ def build(cfg, report, cap=MAX_PAGES):
                         entry["detail"] = "Empty search page despite continuation"
                     break
                 entry["scanned"] += len(rows)
+                if on_progress is not None:
+                    on_progress(scope, entry["scanned"], cap, has_more)
                 new_ids = 0
                 for item in rows:
                     new_ids += int(append(item))
