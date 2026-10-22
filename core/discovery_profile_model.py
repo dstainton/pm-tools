@@ -134,6 +134,65 @@ def extract(candidate, model_cfg, context_pack=None):
                         failure[:120], str(second)[:120])}
 
 
+def _passes(context, per_call_chars=10500):
+    """Partition full evidence into manageable local-model inference calls.
+
+    A 40k evidence budget is now four or more *separate* focused calls, not
+    one oversized request that may silently exceed a 4B model's context.
+    Each passage keeps its original citation; split windows overlap slightly.
+    """
+    batches, current, size = [], [], 0
+    for source in context.get("evidence") or []:
+        remaining = str(source.get("excerpt") or "")
+        while remaining:
+            # If a source is larger than an entire call, split it while
+            # preserving enough overlap for sentence-level continuity.
+            limit = min(len(remaining), per_call_chars)
+            fragment = remaining[:limit]
+            row = dict(source, excerpt=fragment)
+            if current and (size + len(fragment) > per_call_chars or len(current) >= 3):
+                batches.append(current)
+                current, size = [], 0
+            current.append(row)
+            size += len(fragment)
+            if len(remaining) <= limit:
+                break
+            remaining = remaining[max(1, limit - 300):]
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _merge_passes(candidate, model_cfg, context):
+    batches = _passes(context)
+    gathered, seen, failures = [], {}, []
+    repaired, empty = 0, 0
+    for number, evidence in enumerate(batches, 1):
+        response = extract(candidate, model_cfg, context_pack={"evidence": evidence})
+        repaired += int(bool(response.get("repair_attempted")))
+        if response["status"] == "model_error":
+            failures.append({"pass": number, "error": response.get("error", "")})
+        if not response.get("claims"):
+            empty += 1
+        for claim in response.get("claims") or []:
+            key = (claim["field"], claim["value"].strip().casefold())
+            previous = seen.get(key)
+            if previous is None:
+                previous = dict(claim, citations=list(claim["citations"]))
+                seen[key] = previous
+                gathered.append(previous)
+            else:
+                previous["citations"] = list(dict.fromkeys(
+                    previous["citations"] + claim["citations"]))
+    status = ("partial_model_error" if failures and gathered else
+              "model_error" if failures else
+              "unconfirmed_model_proposal" if gathered else "no_supported_claims")
+    return {"status": status, "claims": gathered,
+            "repair_attempted": bool(repaired), "repaired_passes": repaired,
+            "passes": len(batches), "empty_passes": empty,
+            "errors": failures, "inference_method": "multi_pass_evidence_extraction"}
+
+
 def review(report, cfg, max_candidates=6, db_path=None,
            context_chars=80000, context_documents=24):
     """Review broad, source-ranked contexts; no claim is auto-approved."""
@@ -151,10 +210,11 @@ def review(report, cfg, max_candidates=6, db_path=None,
             context = discovery_context_pack.build(
                 db_path, item["project"], [item["name"]],
                 citations=[ev["citation"] for ev in item.get("evidence") or []],
-                max_chars=context_chars, max_documents=context_documents)
+                max_chars=context_chars, max_documents=context_documents, profile=True)
         results.append({
             "name": item["name"], "project": item["project"],
-            "result": extract(item, model_cfg, context_pack=context),
+            "result": (_merge_passes(item, model_cfg, context) if context is not None
+                       else extract(item, model_cfg)),
             "context_characters": context["characters"] if context else None,
             "context_documents": context["documents"] if context else None,
             "context_citations": context["citations"] if context else [],

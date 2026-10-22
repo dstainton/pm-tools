@@ -406,6 +406,8 @@ def run(cfg, args):
               "all unconfirmed".format(
                   item["total_candidates"], len(item["candidates"]),
                   item["unreviewed_candidates"]))
+        print("  Jira-only component leads held back from model review: {}".format(
+            item.get("component_leads_count", 0)))
         for row in item["candidates"][:15]:
             print("  {}: {} [Confluence {}, Jira {}; {}; {}]".format(
                 row["name"], row["candidate_kind"] or "kind unknown",
@@ -418,8 +420,10 @@ def run(cfg, args):
                 review["reviewed"], review["total_candidates"]))
             for row in review["results"]:
                 result = row["result"]
-                print("  {}: {} cited claims [{}; {} source(s), {} context characters{}]".format(
+                print("  {}: {} cited claims [{}; {} inference pass(es), "
+                      "{} source(s), {} context characters{}]".format(
                     row["name"], len(result["claims"]), result["status"],
+                    result.get("passes", 1),
                     row.get("context_documents") or 0,
                     row.get("context_characters") or 0,
                     "; selected portions" if row.get("context_truncated") else ""))
@@ -568,7 +572,9 @@ def run(cfg, args):
                              "not included due to limit)\n".format(
                     inventory["project"], inventory["total_candidates"],
                     len(inventory["candidates"]), inventory["unreviewed_candidates"]))
-                stream.write("- No configuration or confirmed ownership was changed.\n")
+                stream.write("- No configuration or confirmed ownership was changed.\n")                stream.write("- Jira-only components withheld as unverified product "
+                             "identities: {}\n".format(
+                    inventory.get("component_leads_count", 0)))
                 for item in inventory["candidates"]:
                     stream.write("\n### {} (candidate)\n\n".format(item["name"]))
                     stream.write("- Observed labels: {}\n".format(
@@ -594,6 +600,11 @@ def run(cfg, args):
                         result = entry["result"]
                         stream.write("\n### {} [{}]\n".format(
                             entry["name"], result["status"]))
+                        stream.write("- Model passes: {}; empty passes: {}; "
+                                     "repairs: {}; validation errors: {}\n".format(
+                            result.get("passes", 1), result.get("empty_passes", 0),
+                            result.get("repaired_passes", 0),
+                            len(result.get("errors") or [])))
                         stream.write("- Context: {} source(s), {} characters; "
                                      "source citations: {}{}\n".format(
                             entry.get("context_documents") or 0,
@@ -602,6 +613,9 @@ def run(cfg, args):
                             "; selected portions omitted" if entry.get("context_truncated") else ""))
                         if result.get("error"):
                             stream.write("- Validation error: {}\n".format(result["error"]))
+                        for issue in result.get("errors") or []:
+                            stream.write("- Pass {} validation error: {}\n".format(
+                                issue["pass"], issue["error"]))
                         for claim in result["claims"]:
                             stream.write("- {}: {} [{}]\n".format(
                                 claim["field"], claim["value"],
