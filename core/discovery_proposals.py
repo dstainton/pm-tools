@@ -92,7 +92,15 @@ def propose(cfg, report):
     for entity, is_product, rows in available:
         entity["proposals"] = []
         if not any(row.get("source_type") == "document" for row in rows):
-            entity["proposal_note"] = "Insufficient descriptive document evidence; Epic titles alone cannot establish responsibilities"
+            pages = [item for item in entity.get("evidence") or []
+                     if item.get("kind") == "Confluence"
+                     and item.get("state") == "retrieved"]
+            entity["proposal_note"] = (
+                "Confluence page retrieved but no usable text extracted; "
+                "inspect its sections or linked documentation"
+                if pages else
+                "Insufficient descriptive document evidence; "
+                "Epic titles alone cannot establish responsibilities")
             continue
         model.tick(cfg["model"], "drafting " + entity["abbrev"])
         prompt = json.dumps({"entity": entity["name"],

@@ -65,10 +65,10 @@ def _sections(raw):
     for kind, value in parser.blocks:
         if kind in parser.HEADINGS:
             heading = value[:120]
-        elif kind in parser.BLOCKS and len(value) >= 35:
+        elif kind in parser.BLOCKS and value.strip():
             sections.append({"heading": heading or "Page content",
                              "text": value[:900]})
-    # Reserve slots for later sections, not only the introductory paragraph.
+    # Short linked titles or paragraphs can be meaningful; selection is bounded.\n    # Reserve slots for later sections, not only the introductory paragraph.
     if len(sections) > 3:
         sections = [sections[0], sections[len(sections)//2], sections[-1]]
     return sections
@@ -103,12 +103,27 @@ def _page(cfg, entity):
             return {"kind": "Confluence", "state": "unavailable",
                     "detail": "Configured page not found or not accessible",
                     "reference": reference}
-        body = ((raw.get("body") or {}).get("storage") or {}).get("value") or ""
-        return {"kind": "Confluence", "state": "retrieved",
-                "title": raw.get("title") or "Untitled",
-                "reference": str(raw.get("id") or reference),
-                "updated": ((raw.get("version") or {}).get("when") or "unknown"),
-                "excerpt": _excerpt(body), "sections": _sections(body)}
+        body_fields = raw.get("body") or {}
+        storage = (body_fields.get("storage") or {}).get("value") or ""
+        view = (body_fields.get("view") or {}).get("value") or ""
+        sections = _sections(storage)
+        used = "storage"
+        if not sections and view:
+            sections = _sections(view)
+            used = "view"
+        excerpt = _excerpt(storage or view)
+        result = {"kind": "Confluence", "state": "retrieved",
+                  "title": raw.get("title") or "Untitled",
+                  "reference": str(raw.get("id") or reference),
+                  "updated": ((raw.get("version") or {}).get("when") or "unknown"),
+                  "excerpt": excerpt, "sections": sections,
+                  "body_format": used}
+        if not sections and not excerpt:
+            result["detail"] = ("Page retrieved but has no readable inline text; "
+                                "it may be a folder, navigation page, or macro-only page")
+        elif not sections:
+            result["detail"] = "Only a short excerpt was extractable from this page"
+        return result
     except Exception as exc:
         return {"kind": "Confluence", "state": "unavailable",
                 "detail": "{}: {}".format(type(exc).__name__, exc),
