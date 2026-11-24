@@ -6,6 +6,35 @@
   year-end defaults to 31 March (`metrics.year_end: "03-31"`). The fiscal
   year is the year of the next year-end, written F27 for fiscal 2027.
   Quarter 1 starts the next day, and each quarter is three calendar months.
+  A quarter is written `F27-Q3`, and a span `F27-Q2–Q3`.
+- Metrics and report tables use clearer labels, such as "Completed
+  issues/week", "Completed points/week", "Median cycle time (days)",
+  "Open issues", "Open points", and "Planned points at start".
+- Workstream and product sections of the weekly report add a line such as
+  "Story points (current report scope): 21 Done, 34 open; 3 of 18 issues
+  unestimated." These are current-status totals, not points completed
+  that week.
+- New `pm assess` reads every open issue in a Jira project, including
+  issues no workstream claims, and writes a short terminal view and a
+  Markdown assessment with retrieval completeness, findings, and an
+  investigation queue. Completed and excluded work are separate
+  approximate counts. Statuses are grouped by Jira category by default;
+  `assessment.dispositions` overrides that per status or per project. It
+  makes no Jira writes and no model calls.
+- New `pm discover` (experimental) explores configured products and
+  workstreams, collects Jira and Confluence evidence into a local SQLite
+  index, and offers opt-in local-model reviews. Its candidates are
+  unconfirmed and are not a basis for configuration or ownership
+  decisions. See `docs/DISCOVER.md` and `docs/DISCOVERY-QUALITY.md`.
+- A separate `classification:` settings block configures a loopback-only
+  embedding endpoint for the experimental classifier prototype, run with
+  `python -m core.discovery_embedding_classifier`. No `pm` command reads
+  it yet.
+- Governance documents: `NORTH_STAR.md`, `ROADMAP.md`, `AGENTS.md`,
+  `docs/ARCHITECTURE.md`, decision records, and the CLI progress rules.
+- `docs/CUSTOMISING.md` explains how to override a prompt or query, and
+  lists each query's placeholders. The guides, settings comments, and
+  help text were corrected against the current commands.
 - Landing is the mean date, plus or minus one standard deviation of the
   weekly rate, and the same window in sprints at the open sprint's length.
   When the slow rate is not positive, the report says that date or later.
