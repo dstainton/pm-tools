@@ -77,7 +77,7 @@ A week, with the commands that exist today:
 6. End of the week, or end of the Sprint. `pm report` is the full weekly file. `pm report --sprint --audience leadership` is the open Sprint for leadership. `pm publish` sends a file to Confluence or Teams after you confirm.
 7. When someone asks how delivery is going. `pm metrics` is the full table. `pm metrics --audience leadership` is the headline. `pm release-notes --since 2026-08-01` is what finished.
 
-On `pm report`, a named window (`--since`, `--sprint`) does not move the memory of the last run. The next plain `pm report` still starts from the last time you ran it for that audience. `pm brief` remembers every run.
+A named window (`--since`, `--sprint`) does not move the memory of the last run. The next plain `pm report` or `pm brief` still starts from the last time you ran it for that audience.
 
 ## Leadership
 

@@ -584,7 +584,7 @@ def build_parser():
                          help="How deep the prep goes (default: the level saved "
                               "for this meeting, else role)")
     p_brief.add_argument("--since", metavar="YYYY-MM-DD",
-                         help="Start of the window. This run still updates last-met memory.")
+                         help="Start of the window. Does not move last-met memory.")
     p_brief.add_argument("--sprint", nargs="?", const="open", default=None,
                          help="This Sprint (open), a number (138), or last")
     p_brief.set_defaults(func=brief.run, needs_config=True)

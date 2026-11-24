@@ -473,7 +473,11 @@ def run_prep(cfg, args):
         getattr(args, "out", None))
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    state.save_state(_state_path(cfg, audience), snapshot)
+    if window and window.get("explicit"):
+        print(f"Window: {window['label']} (this run does not move the "
+              f"memory of when you last met {audience}).")
+    else:
+        state.save_state(_state_path(cfg, audience), snapshot)
     terminal.show(text, args)
     print(f"\nDone. Brief written to: {path}")
     if getattr(args, "publish", False):

@@ -998,6 +998,18 @@ class BriefTests(CliTestCase):
         second = self.run_pm("brief", "--for", "standup", "-w", "SDX")
         self.assertIn("since ", second)
 
+    def test_named_window_does_not_move_brief_memory(self):
+        memory = os.path.join(self.dir, "briefs", "review.json")
+        out = self.run_pm("brief", "--for", "review", "--since", "2026-01-05", "-w", "SDX")
+        self.assertIn("does not move the memory of when you last met review", out)
+        self.assertFalse(os.path.exists(memory))
+        self.run_pm("brief", "--for", "review", "-w", "SDX")
+        with open(memory, encoding="utf-8") as fh:
+            saved = fh.read()
+        self.run_pm("brief", "--for", "review", "--since", "2026-01-05", "-w", "SDX")
+        with open(memory, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), saved)
+
     def test_debrief_extracts_and_apply_dry_run_creates_nothing(self):
         notes = os.path.join(self.dir, "notes.md")
         with open(notes, "w", encoding="utf-8") as fh:
