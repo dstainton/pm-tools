@@ -893,12 +893,15 @@ class TriageTests(CliTestCase):
 
 
 class RefineTests(CliTestCase):
-    def test_refine_writes_a_worksheet_with_drafts(self):
+    def setUp(self):
+        super().setUp()
         # `pm refine --apply` rewrites the summary on the shared fake. A clear
         # title is no longer a lint finding, so put the short title back.
         for issue in self.jira.server.RequestHandlerClass.backlog:
             if issue["key"] == "APS-11":
                 issue["summary"] = "Fix stuff"
+
+    def test_refine_writes_a_worksheet_with_drafts(self):
         out = self.run_pm("refine", "-w", "SDX")
         self.assertIn("Drafts in refine_SDX_", out)
         text = self.read_output(r"refine_SDX_.*\.md")
@@ -915,6 +918,30 @@ class RefineTests(CliTestCase):
         self.assertEqual(
             (puts[-1][2].get("fields") or {}).get("summary"),
             "Fix retry handling in the exchange client")
+
+    def test_bare_apply_skips_workstreams_without_a_worksheet(self):
+        self.run_pm("refine", "-w", "SDX")
+        out = self.run_pm("refine", "--apply", "--yes")
+        self.assertIn("Sent.", out)
+        self.assertIn("no worksheet; skipped.", out)
+        self.assertNotIn("No worksheet at", out)
+
+    def test_apply_uses_an_earlier_days_worksheet(self):
+        self.run_pm("refine", "-w", "SDX")
+        today = self.read_output(r"refine_SDX_.*\.md")
+        for name in os.listdir(self.dir):
+            if re.match(r"refine_SDX_.*\.md", name):
+                os.remove(os.path.join(self.dir, name))
+        with open(os.path.join(self.dir, "refine_SDX_2026-01-05.md"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(today)
+        out = self.run_pm("refine", "--apply", "-w", "SDX", "--yes")
+        self.assertIn("refine_SDX_2026-01-05.md", out)
+        self.assertIn("Sent.", out)
+
+    def test_apply_with_no_worksheet_explains_itself(self):
+        out = self.run_pm("refine", "--apply", "-w", "SDX", expect=1)
+        self.assertIn("No refine worksheet for SDX", out)
 
     def test_review_alias_prints_a_deprecation_note(self):
         out = self.run_pm("review", "titles", "-w", "SDX")
