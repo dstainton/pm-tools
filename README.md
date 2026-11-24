@@ -423,7 +423,7 @@ pm schedule add warm --at 07:00
 | `pm doctor` | Checks everything and says how to fix problems. |
 | `pm products` | Lists, adds, removes, or checks products. |
 | `pm workstreams` | Lists, adds, removes, or checks workstreams. |
-| `pm schedule` | Records read-only commands to run at set times: `--at 08:30` on weekdays, or `--weekly fri@16:00`. It writes a `schedule.cron` snippet to install with `crontab`. On Windows, a source checkout also registers a Task Scheduler entry. |
+| `pm schedule` | Records read-only commands to run at set times: `--at 08:30` on weekdays, or `--weekly fri@16:00`. Elsewhere it writes a `schedule.cron` snippet to install with `crontab`. On Windows it registers a Task Scheduler entry under `pm\`, and says why if that fails. `pm schedule remove` deletes that entry too. |
 | `pm warm` | Prepares AI answers ahead of time. |
 | `pm update` | Installs the latest version, adds any new settings to your file, and lists what changed. |
 | `pm setup --review` | Steps through new settings, changed defaults, and old names, one at a time. |

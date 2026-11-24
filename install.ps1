@@ -129,8 +129,8 @@ if (-not (Test-Path -LiteralPath $pmExe)) {
     throw "pipx installed pm-tools but $pmExe is missing."
 }
 
-$helpText = & $pmExe -h 2>&1 | Out-String
-if ($helpText -notmatch "doctor" -or $helpText -notmatch "pm-tools") {
+$helpText = & $pmExe help all 2>&1 | Out-String
+if ($helpText -notmatch "pm doctor" -or $helpText -notmatch "pm setup") {
     throw "The command at $pmExe is not the current pm-tools.`n$helpText"
 }
 

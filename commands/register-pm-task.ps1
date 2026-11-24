@@ -13,10 +13,10 @@ param(
     [string]$Days = "mon,tue,wed,thu,fri"
 )
 
-$taskName = "pm\$Name"
+$taskPath = "\pm\"
 $pm = Get-Command pm -ErrorAction SilentlyContinue
 if (-not $pm) {
-    Write-Error "pm is not on PATH. Install with: pip install -e ."
+    Write-Error "pm is not on PATH. Open a new terminal, or reinstall with install.ps1 (see INSTALL.md)."
     exit 1
 }
 
@@ -43,5 +43,5 @@ if ($Kind -eq "weekdays") {
     $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $chosen -At $at
 }
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force | Out-Null
-Write-Output "Registered $taskName"
+Register-ScheduledTask -TaskPath $taskPath -TaskName $Name -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
+Write-Output "Registered $taskPath$Name"

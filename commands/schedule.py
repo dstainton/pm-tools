@@ -101,24 +101,45 @@ def _write_cron(cfg, store):
     return path
 
 
+REGISTER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "register-pm-task.ps1")
+
+
 def _register_windows(job):
-    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "scripts", "register-pm-task.ps1")
-    if not os.path.exists(script):
-        return False
+    """Return None when registered, else the reason it was not."""
+    if not os.path.exists(REGISTER_SCRIPT):
+        return f"{REGISTER_SCRIPT} is missing. Reinstall with: pm update"
     args = [job["command"]] + (job.get("args") or [])
     try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-File", script,
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", REGISTER_SCRIPT,
              "-Name", job["name"],
-             "-Command", " ".join(args),
+             "-Command", subprocess.list2cmdline(args),
              "-Kind", job["kind"],
              "-Time", job["time"],
              "-Days", ",".join(job["days"])],
             check=False, capture_output=True, text=True, timeout=30)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"PowerShell could not run: {exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        return detail[-1] if detail else f"PowerShell exited with {result.returncode}"
+    return None
+
+
+def _unregister_windows(name):
+    """Return None when the task was deleted, else the reason it was not."""
+    try:
+        result = subprocess.run(
+            ["schtasks", "/Delete", "/TN", f"\\pm\\{name}", "/F"],
+            check=False, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"schtasks could not run: {exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        return detail[-1] if detail else f"schtasks exited with {result.returncode}"
+    return None
 
 
 def _add(cfg, args):
@@ -166,15 +187,17 @@ def _add(cfg, args):
     store["jobs"].append(job)
     _save(cfg, store)
     cron = _write_cron(cfg, store)
-    registered = False
-    if os.name == "nt":
-        registered = _register_windows(job)
     print(f"Scheduled {name} ({when['kind']} at {when['time']}).")
-    if registered:
-        print("Registered with Task Scheduler.")
+    if os.name == "nt":
+        problem = _register_windows(job)
+        if problem:
+            print(f"Not registered with Task Scheduler: {problem}")
+            print("The job is saved. Run `pm schedule add` again to retry.")
+        else:
+            print("Registered with Task Scheduler.")
     else:
         print(f"Crontab snippet written to {cron}.")
-        print("Nothing that writes to Jira will run on this timer.")
+    print("Nothing that writes to Jira will run on this timer.")
 
 
 def _list(cfg, args):
@@ -206,8 +229,17 @@ def _remove(cfg, args):
     if len(store["jobs"]) == before:
         sys.exit(f"No scheduled job named {name}.")
     _save(cfg, store)
-    _write_cron(cfg, store)
+    cron = _write_cron(cfg, store)
     print(f"Removed {name}.")
+    if os.name == "nt":
+        problem = _unregister_windows(name.lower())
+        if problem:
+            print(f"Task Scheduler entry pm\\{name.lower()} was not removed: {problem}")
+            print("Delete it in Task Scheduler.")
+        else:
+            print(f"Removed Task Scheduler entry pm\\{name.lower()}.")
+    else:
+        print(f"Crontab snippet updated at {cron}. Reinstall it with crontab.")
 
 
 def run(cfg, args):
