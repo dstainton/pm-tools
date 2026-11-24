@@ -50,6 +50,8 @@ RETIRED = {
                               "words flag only when they are the whole title",
     "lint.acceptance_criteria_markers": "acceptance criteria are found by a "
                                         "heading or a Given/When/Then scenario",
+    "audiences.leadership.max_docs_per_product": "no report lists documents "
+                                                 "by product, so it never had an effect",
 }
 
 _KEY = re.compile(

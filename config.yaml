@@ -667,7 +667,6 @@ audiences:
   leadership:
     name: "Leadership"
     at_risk_due_days: 14
-    max_docs_per_product: 5    # not used yet: the leadership report lists no documents
   partner:
     name: "Partners"
     epic_labels: [partner-visible]

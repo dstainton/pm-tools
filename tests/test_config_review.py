@@ -201,6 +201,17 @@ class ReportTests(unittest.TestCase):
             self.assertIn("lint.vague_title_terms", shown)
             self.assertIn("vague_title_alone", shown)
 
+    def test_unused_leadership_document_cap_is_listed_as_retired(self):
+        text = _filled_template().replace(
+            "    at_risk_due_days: 14\n",
+            "    at_risk_due_days: 14\n    max_docs_per_product: 5\n", 1)
+        self.assertIn("max_docs_per_product", text)
+        with Folder() as f:
+            f.write(text)
+            shown = _update(f.path)
+            self.assertIn("audiences.leadership.max_docs_per_product", shown)
+            self.assertIn("never had an effect", shown)
+
     def test_init_records_every_default_so_update_is_quiet(self):
         with Folder() as f:
             with patch("sys.stdout", StringIO()):

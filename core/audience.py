@@ -28,7 +28,7 @@ DEFAULTS = {
     "warm": ["pm"],
     "pm": {"name": "Product management"},
     "work": {"name": "Team"},
-    "leadership": {"name": "Leadership", "at_risk_due_days": 14, "max_docs_per_product": 5},
+    "leadership": {"name": "Leadership", "at_risk_due_days": 14},
     "partner": {
         "name": "Partners",
         "epic_labels": ["partner-visible"],

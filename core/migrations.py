@@ -249,7 +249,6 @@ _AUDIENCE_BODY = [
     "  leadership:",
     '    name: "Leadership"',
     "    at_risk_due_days: 14",
-    "    max_docs_per_product: 5",
     "  partner:",
     '    name: "Partners"',
     "    epic_labels: [partner-visible]",
