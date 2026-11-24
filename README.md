@@ -68,10 +68,11 @@ pipx install git+https://github.com/dstainton/pm-tools.git
 Check it worked:
 
 ```text
-pm -h
+pm help all
 ```
 
-You should see a list of commands, including `today` and `doctor`.
+You should see every command, including `today` and `doctor`. `pm -h` on
+its own shows a shorter list for your role.
 
 ---
 
@@ -83,11 +84,17 @@ Run:
 pm setup
 ```
 
-It asks one question at a time: your Jira site, your email, your API
-token, and your Jira project. It then looks for an AI model on your
-computer and suggests one that suits your machine. Press Enter to skip a
-question and come back to it later. It will not change an answer you have
-already given.
+It opens the Atlassian API token page, then asks one question at a time:
+the name of an environment variable that holds your token (or the token
+itself), your Jira site, and your email. It then looks for an AI model on
+your computer and suggests one that suits your machine, and asks about a
+shared Confluence space and your team page. Press Enter to skip a question
+and come back to it later. It will not change an answer you have already
+given.
+
+Setup does not ask for your Jira project. Pass it with
+`pm setup --project APS`. When the project is blank, setup lists the
+projects you can see.
 
 Your settings are saved in one file, `~/.pm-tools/config.yaml` (a folder
 called `.pm-tools` in your home folder). You can open it in any text
@@ -100,9 +107,12 @@ pm doctor
 ```
 
 `pm doctor` tests your login, your project, your settings, and the AI
-model. A warning names the command for that line. That command writes the
-one setting after showing you the line. `pm doctor` does not change
-your file unless you pass `--discover-fields --yes` to fill blank field ids.
+model. Most warn and FAIL lines are followed by `Run:` and the command that
+fixes or rechecks that line, and the commands are listed again at the end.
+A `pm setup` fix shows the lines it will write and asks first. Some lines
+only give a note, such as setting `cache.enabled: true`. `pm doctor` does
+not change your file unless you pass `--discover-fields --yes` to fill
+blank field ids.
 
 To redo one part of setup later:
 
@@ -281,6 +291,8 @@ registers:
 - `product` or `workstream` says where the register appears in the report.
   Leave both off to show it at the top, for the whole portfolio.
 - `page_id` can be used instead of `title` and `under`.
+- `title` needs a space: the register's own `space:` key, or
+  `confluence.space`.
 
 If you keep one shared list for every product, label each entry in
 Confluence with the product or workstream short name (for example `SDX`),
@@ -308,7 +320,10 @@ once. A page that appears in both is only listed once.
 These commands use an AI model to write or judge text: `pm report`,
 `pm brief --debrief`, `pm refine`, `pm review`, `pm ready --deep`, the
 filing suggestions in `pm inbox`, the written part of
-`pm release-notes`, and `pm warm`. Everything else works without one.
+`pm release-notes`, and `pm warm`. `pm report` and `pm brief` also ask it to
+summarise changed Confluence pages while `pages.summaries` is `true` (the
+default). The experimental `pm discover` uses it only with its model
+options. Everything else works without one.
 
 A long command tells you what it is doing, such as reading Jira or writing
 a section. In a terminal that line counts the seconds, so you can see it is
@@ -377,11 +392,11 @@ pm schedule add warm --at 07:00
 
 | Command | What it does |
 |---|---|
-| `pm assess` | Scans all open issues in a configured Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. Use `--project KEY` to select a project; incomplete inventory is reported explicitly. |
+| `pm assess` | Scans all open issues in the Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. By default it reads the projects your workstreams use, then `jira.project`; `--project APS,OPS` chooses them. Completed and excluded issues are counted separately, and an incomplete inventory is reported explicitly. |
 | `pm lint` | Checks every ticket against simple rules: estimate, parent, dates, acceptance criteria, stalled work. |
 | `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also asks the AI model. |
 | `pm refine` | Drafts missing titles, acceptance criteria, and estimates into a file you edit. `--apply` sends what you kept to Jira. |
-| `pm review` | Asks the AI model which titles are unclear and which acceptance criteria are incomplete. |
+| `pm review` | Deprecated alias of `pm refine`, to be removed. Use `pm refine`. |
 | `pm coverage` | Open tickets no workstream owns, tickets two workstreams both claim, and Components nobody uses. |
 
 **Reporting**
@@ -390,9 +405,15 @@ pm schedule add warm --at 07:00
 |---|---|
 | `pm report` | The update for your role. Product management opens on what needs attention. Analyst, developer, and service designer each get a different report. Leadership stays short. Partner stays safe to send outside the team. `--audience` overrides the role for one run. `--sources full` adds the source tables. |
 | `pm brief --for "NAME"` | Meeting preparation for one group, including the documents that role cares about. `--debrief notes.md` turns your meeting notes into decisions and actions. |
-| `pm metrics` | How much the team finishes each week, in items and story points, how long work takes, and a projected finish: the mean date plus or minus one standard deviation, also in sprints, for the fiscal quarter (F27). `pm metrics --sprint` is the Sprint review. |
+| `pm metrics` | How much the team finishes each week, in issues and story points, how long work takes, and a projected finish. The projection is the mean date plus or minus days, and the same window in sprints, labelled with its fiscal quarter, for example `20 Jan 2027 ± 21 d (F27-Q4) · 4.1 ± 1.5 sprints`. It appears once three issues finish in the window. `metrics.year_end` sets the fiscal year-end (default `03-31`). `pm metrics --sprint` is the Sprint review. |
 | `pm release-notes` | Finished work since a date (`--since`) or in a release (`--version`). |
 | `pm publish FILE` | Sends a report to Confluence or Microsoft Teams, after you confirm. |
+
+**Discovery (experimental)**
+
+| Command | What it does |
+|---|---|
+| `pm discover` | Read-only, offline evidence collection and candidate product and workstream discovery. Experimental: results are not validated. See [docs/DISCOVER.md](docs/DISCOVER.md). |
 
 **Setup and upkeep**
 
@@ -402,17 +423,22 @@ pm schedule add warm --at 07:00
 | `pm doctor` | Checks everything and says how to fix problems. |
 | `pm products` | Lists, adds, removes, or checks products. |
 | `pm workstreams` | Lists, adds, removes, or checks workstreams. |
-| `pm schedule` | Runs commands at set times, for example `pm today` at 08:30. Only commands that read are allowed. |
+| `pm schedule` | Records read-only commands to run at set times: `--at 08:30` on weekdays, or `--weekly fri@16:00`. It writes a `schedule.cron` snippet to install with `crontab`. On Windows, a source checkout also registers a Task Scheduler entry. |
 | `pm warm` | Prepares AI answers ahead of time. |
 | `pm update` | Installs the latest version, adds any new settings to your file, and lists what changed. |
 | `pm setup --review` | Steps through new settings, changed defaults, and old names, one at a time. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
+| `pm mcp` | Exposes read-only command names to an MCP client. Off unless you pass `--yes-i-understand`. See [docs/AUTOMATION.md](docs/AUTOMATION.md). |
+| `pm help` | `pm help all` lists every command, `pm help roles` explains the role sets, and `pm help COMMAND` shows one command. |
 
 Files are Markdown. The screen gets text instead: headings, lined-up tables, and a link on every Jira issue, Confluence page, and SharePoint file. The name is the link. PowerShell, CMD, Windows Terminal, VS Code, and most Mac and Linux terminals open it from that name, with no address printed beside it. A pipe and `--plain` show the address after the name, like `APS-10 <https://…/browse/APS-10>`. A table wider than the window becomes one labelled line per cell. `FORCE_HYPERLINK=1` or `0` overrides the guess about clickable links.
 
 `pm` and `pm help` list the commands for your role, when the settings file has one. `pm help all` lists every command. `pm <command> -h` shows how to run that command, including the required words and the flags. `pm help roles` explains the sets. `--advanced` is the same complete page.
 
-### Options that work everywhere
+### Options on most commands
+
+These work on every command except `pm init`, `pm setup`, `pm update`, and
+`pm help`.
 
 | Option | What it does |
 |---|---|
@@ -420,8 +446,12 @@ Files are Markdown. The screen gets text instead: headings, lined-up tables, and
 | `--cached` | Reuse earlier results, even old ones. Handy when you are offline. |
 | `--refresh` | Ignore earlier results and fetch everything again. |
 | `--out FOLDER` | Save this run's files in a different folder. |
-| `--plain` | No colours, symbols, or clickable links. Tables become one labelled line per cell. |
+| `--plain` | No colours, symbols, or clickable links. Tables become one labelled line per cell. Setting the `NO_COLOR` environment variable does the same. |
 | `--config FILE` | Use a different settings file. The flag can go before or after the command name. Pass it once. |
+
+`pm init` and `pm setup` take `--path FILE` instead of `--config`. On
+`pm setup`, `--product` and `--workstream` choose the Confluence folder to
+set with `--section confluence`. `pm update` takes `--config FILE`.
 
 ---
 
@@ -448,13 +478,20 @@ Files are Markdown. The screen gets text instead: headings, lined-up tables, and
 | Reports and other output | `~/.pm-tools/out` (change it with `output.directory`) |
 | Remembered results | `~/.pm-tools/cache` |
 | Record of Jira changes | `~/.pm-tools/write-log.jsonl` |
+| This morning's numbered list | `~/.pm-tools/today.json` |
+| Scheduled jobs | `~/.pm-tools/schedule.json` and `schedule.cron` |
+| Snooze decisions, notes, and meeting memory | `~/.pm-tools/decisions.json`, `inbox.json`, and `briefs/` |
 
-To share decisions such as "snooze this finding" with a colleague, set
-`state.shared_path` to a synced OneDrive or SharePoint folder.
+`state.local_path` moves the files kept in `~/.pm-tools`. To share
+decisions such as "snooze this finding", the inbox, and `pm brief`'s memory
+with a colleague, set `state.shared_path` to a synced OneDrive or
+SharePoint folder.
 
 pm-tools looks for settings in this order and uses the first it finds:
 `--config FILE`, the `PM_CONFIG` environment variable, `config.yaml` in the
-folder you are in, then `~/.pm-tools/config.yaml`.
+folder you are in, `~/.pm-tools/config.yaml`, then the `config.yaml`
+shipped with pm-tools. `pm update` edits only `--config FILE`, `PM_CONFIG`,
+or `~/.pm-tools/config.yaml`.
 
 ---
 
