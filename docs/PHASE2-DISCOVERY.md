@@ -14,7 +14,7 @@ Preserve its read-only workflow, evidence provenance, incomplete configuration s
 
 A product manager inheriting an unfamiliar Jira project can establish a trustworthy, reviewable understanding of its products and workstreams without already knowing their scope, ownership, or terminology. **How can pm-tools develop that understanding using existing configuration and source evidence, while minimizing the questions the manager must answer?**
 
-This is the *discovery foundation* of Phase 2 (Classification and ownership), not automated assignment of issues. Phase 1 produces a project-wide active-work inventory and ownership investigation groups. Discovery establishes the product knowledge against which future classification proposals can be evaluated.
+This is the *discovery foundation* for Phase 3 (Classification and ownership), not automated assignment of issues. Phase 1 produces a project-wide active-work inventory and ownership investigation groups. Discovery establishes the product knowledge against which future classification proposals can be evaluated.
 
 ## Product decisions proposed for approval
 
