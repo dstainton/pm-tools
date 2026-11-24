@@ -25,12 +25,12 @@ def _since(value):
     return str(value)
 
 
-def _window(since, version):
+def _window(cfg, since, version):
     parts = []
     if since:
-        parts.append(queries.render(None, "release_notes.since", since=since))
+        parts.append(queries.render(cfg, "release_notes.since", since=since))
     if version:
-        parts.append(queries.render(None, "release_notes.version", version=version))
+        parts.append(queries.render(cfg, "release_notes.version", version=version))
     return " AND ".join(parts)
 
 
@@ -59,7 +59,7 @@ def collect(cfg, since, version, author=True):
     Issues no selected workstream claims land under Unassigned.
     """
     from core import progress
-    window = _window(since, version)
+    window = _window(cfg, since, version)
     overrides = {"status": "done", "sprint": "any", "extra_jql": window}
     rows = []
     claimed = set()

@@ -559,7 +559,7 @@ def _check_registers(cfg):
             continue
         field = reg.get("status_field") or "Status"
         with_status = 0
-        cql = registers._entry_cql(reg, root["page_id"])
+        cql = registers._entry_cql(cfg, reg, root["page_id"])
         for raw in sources.fetch_confluence_results(cfg, cql, since="1970-01-01", limit=200):
             storage = ((raw.get("body") or {}).get("storage") or {}).get("value") or ""
             if registers.properties(storage, [field]).get(field):

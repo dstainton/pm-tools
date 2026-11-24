@@ -82,7 +82,7 @@ def _risks(cfg, ws, since=None):
     if not cql:
         return []
     items, _idx = sources.fetch_confluence(
-        cfg["confluence"], cql, ws["abbrev"], 1, since=since)
+        cfg["confluence"], cql, ws["abbrev"], 1, since=since, full_cfg=cfg)
     return items[:3]
 
 

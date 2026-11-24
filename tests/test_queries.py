@@ -100,3 +100,61 @@ class RenderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OverridesReachEveryCallerTests(unittest.TestCase):
+    """Each of these used to render the built-in text whatever the config said."""
+
+    def _cfg(self, block):
+        cfg = {"queries": block}
+        queries.validate_config(cfg)
+        return cfg
+
+    def test_release_notes_window(self):
+        from commands import release_notes
+        cfg = self._cfg({
+            "release_notes.since": {"text": 'resolutiondate >= "{since}"'},
+            "release_notes.version": {"text": 'fixVersion = {version} AND type != Sub-task'},
+        })
+        self.assertEqual(
+            release_notes._window(cfg, "2026-08-01", "2.4"),
+            'resolutiondate >= "2026-08-01" AND fixVersion = "2.4" AND type != Sub-task')
+
+    def test_register_entries(self):
+        from core import registers
+        cfg = self._cfg({
+            "registers.descendants": {"text": "ancestor = {page_id} AND type = page AND label = decision"},
+            "registers.children": {"text": "parent = {page_id} AND type in (page, folder)"},
+        })
+        self.assertEqual(registers._entry_cql(cfg, {}, 42),
+                         "ancestor = 42 AND type = page AND label = decision")
+        self.assertEqual(registers._entry_cql(cfg, {"depth": "children"}, 42),
+                         "parent = 42 AND type in (page, folder)")
+
+    def test_confluence_window_in_both_fetchers(self):
+        from unittest import mock
+        from core import sources
+        cfg = self._cfg({"confluence.window": {"text": "({cql}) AND created >= '{since}'"}})
+        cfg["confluence"] = {"base_url": "https://wiki.example", "email": "a@b",
+                             "api_token": "t", "lookback_days": 7, "max_results": 5}
+        cfg["workstreams"] = []
+        seen = []
+
+        class Resp:
+            status_code = 200
+            def raise_for_status(self):
+                pass
+            def json(self):
+                return {"results": [], "size": 0}
+
+        def fake_send(method, url, **kwargs):
+            seen.append((kwargs.get("params") or {}).get("cql"))
+            return Resp()
+
+        with mock.patch.object(sources, "send", side_effect=fake_send):
+            sources.fetch_confluence(cfg["confluence"], "space = X", "SDX", 1,
+                                     since="2026-08-01", full_cfg=cfg)
+            sources.fetch_confluence_results(cfg, "space = X", since="2026-08-01")
+        self.assertTrue(seen)
+        for cql in seen:
+            self.assertIn("created >= '2026-08-01'", cql)

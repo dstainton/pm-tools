@@ -608,7 +608,7 @@ project = {project} AND {status_done} AND ({window})
 
 ### `release_notes.since`
 
-Issues resolved on or after a date. `pm me` uses an override; `pm release-notes` always sends the built-in text.
+Issues resolved on or after a date.
 
 Used by: pm release-notes --since, pm me.
 Placeholders: since.
@@ -620,7 +620,7 @@ resolved >= "{since}"
 
 ### `release_notes.version`
 
-Issues in one fixVersion. Not overridable yet: the code always sends the built-in text.
+Issues in one fixVersion.
 
 Used by: pm release-notes --version.
 Placeholders: version.
@@ -716,7 +716,7 @@ label IN ({labels})
 
 ### `confluence.window`
 
-Only pages modified on or after a date. Not overridable yet: the code always sends the built-in text.
+Only pages modified on or after a date.
 
 Used by: every Confluence read.
 Placeholders: cql, since.
@@ -752,7 +752,7 @@ Must keep: {base}, {since}.
 
 ### `registers.descendants`
 
-Every page under a register summary page. Not overridable yet: the code always sends the built-in text.
+Every page under a register summary page.
 
 Used by: decision, risk and ADR registers.
 Placeholders: page_id.
@@ -764,7 +764,7 @@ ancestor = {page_id} AND type = page
 
 ### `registers.children`
 
-Direct child pages of a register summary page. Not overridable yet: the code always sends the built-in text.
+Direct child pages of a register summary page.
 
 Used by: decision, risk and ADR registers.
 Placeholders: page_id.

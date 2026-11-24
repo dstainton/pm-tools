@@ -138,13 +138,11 @@ QUERIES = {
         ("project", "window")),
     "release_notes.since": _entry(
         "jql", "pm release-notes --since, pm me",
-        "Issues resolved on or after a date. `pm me` uses an override; "
-        "`pm release-notes` always sends the built-in text.",
+        "Issues resolved on or after a date.",
         'resolved >= "{since}"', ("since",)),
     "release_notes.version": _entry(
         "jql", "pm release-notes --version",
-        "Issues in one fixVersion. Not overridable yet: the code always "
-        "sends the built-in text.",
+        "Issues in one fixVersion.",
         "fixVersion = {version}", ("version",)),
     "today.in_sprint_open": _entry(
         "jql", "pm today",
@@ -177,8 +175,7 @@ QUERIES = {
         "label IN ({labels})", ("labels",)),
     "confluence.window": _entry(
         "cql", "every Confluence read",
-        "Only pages modified on or after a date. Not overridable yet: the "
-        "code always sends the built-in text.",
+        "Only pages modified on or after a date.",
         "({cql}) AND lastmodified >= '{since}'", ("cql", "since")),
     "epics.children": _entry(
         "jql", "pm report epic progress, pm release-notes",
@@ -190,13 +187,11 @@ QUERIES = {
         '({base}) AND {status_done} AND resolved >= "{since}"', ("base", "since")),
     "registers.descendants": _entry(
         "cql", "decision, risk and ADR registers",
-        "Every page under a register summary page. Not overridable yet: the "
-        "code always sends the built-in text.",
+        "Every page under a register summary page.",
         "ancestor = {page_id} AND type = page", ("page_id",)),
     "registers.children": _entry(
         "cql", "decision, risk and ADR registers",
-        "Direct child pages of a register summary page. Not overridable yet: "
-        "the code always sends the built-in text.",
+        "Direct child pages of a register summary page.",
         "parent = {page_id} AND type = page", ("page_id",)),
     "brief.risk_pages": _entry(
         "cql", "pm brief",
