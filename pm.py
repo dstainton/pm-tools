@@ -657,9 +657,9 @@ def build_parser():
     p_daily = sub.add_parser("daily", parents=[help_opts, common],
                              help="Daily Scrum movement, comments from that "
                                   "window, and work in progress")
-    p_daily.add_argument("--days", type=int, default=1,
+    p_daily.add_argument("--days", type=int, default=None,
                          help="How many days back to count as 'moved' "
-                              "(default: 1)")
+                              "(default: daily.lookback_days, else 1)")
     p_daily.add_argument("--by", choices=["assignee", "workstream"],
                          default="assignee",
                          help="Group in-progress work by assignee (default) "
