@@ -428,7 +428,7 @@ pm schedule add warm --at 07:00
 | `pm update` | Installs the latest version, adds any new settings to your file, and lists what changed. |
 | `pm setup --review` | Steps through new settings, changed defaults, and old names, one at a time. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
-| `pm mcp` | Exposes read-only command names to an MCP client. Off unless you pass `--yes-i-understand`. See [docs/AUTOMATION.md](docs/AUTOMATION.md). |
+| `pm mcp` | Lets an MCP client run the read-only commands and read what they print. Off unless you pass `--yes-i-understand`. See [docs/AUTOMATION.md](docs/AUTOMATION.md). |
 | `pm help` | `pm help all` lists every command, `pm help roles` explains the role sets, and `pm help COMMAND` shows one command. |
 
 Files are Markdown. The screen gets text instead: headings, lined-up tables, and a link on every Jira issue, Confluence page, and SharePoint file. The name is the link. PowerShell, CMD, Windows Terminal, VS Code, and most Mac and Linux terminals open it from that name, with no address printed beside it. A pipe and `--plain` show the address after the name, like `APS-10 <https://…/browse/APS-10>`. A table wider than the window becomes one labelled line per cell. `FORCE_HYPERLINK=1` or `0` overrides the guess about clickable links.

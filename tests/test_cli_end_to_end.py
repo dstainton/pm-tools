@@ -793,7 +793,7 @@ class TodayTests(CliTestCase):
 
     def test_today_json_prints_only_json_on_stdout(self):
         proc = subprocess.run(
-            [sys.executable, PM, "today", "--json", "--config",
+            [sys.executable, PM, "today", "--json", "-w", "SDX", "--config",
              os.path.join(self.dir, "config.yaml")],
             cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=120)
@@ -802,6 +802,7 @@ class TodayTests(CliTestCase):
         self.assertTrue(payload["actions"])
         self.assertEqual(payload["actions"][0]["n"], 1)
         self.assertIn("Gathering today's picture", proc.stderr)
+        self.assertIn("(scope: SDX)", proc.stderr)
         self.assertNotIn("NEEDS YOU", proc.stdout + proc.stderr)
         self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))
 
@@ -1103,3 +1104,48 @@ class FakeJiraTimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class McpServerTests(CliTestCase):
+    def _session(self, *messages):
+        proc = subprocess.run(
+            [sys.executable, PM, "mcp", "--yes-i-understand", "--config",
+             os.path.join(self.dir, "config.yaml")],
+            input="\n".join(json.dumps(m) for m in messages) + "\n",
+            cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=300)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+
+    def test_tools_call_runs_the_command(self):
+        replies = self._session(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "today", "arguments": {"workstream": "SDX"}}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+             "params": {"name": "lint", "arguments": {"workstream": "SDX"}}},
+        )
+        self.assertEqual([r["id"] for r in replies], [1, 2, 3])
+        today = replies[1]["result"]
+        self.assertFalse(today.get("isError"), today)
+        self.assertIn("actions", json.loads(today["content"][0]["text"]))
+        lint = replies[2]["result"]
+        self.assertFalse(lint.get("isError"), lint)
+        self.assertIn("APS-", lint["content"][0]["text"])
+
+    def test_tools_call_refuses_unknown_arguments_and_writes(self):
+        replies = self._session(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "today", "arguments": {"since": "2026-01-01"}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "refine", "arguments": {}}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+             "params": {"name": "lint", "arguments": {"workstream": "--fix"}}},
+        )
+        self.assertTrue(replies[0]["result"]["isError"])
+        self.assertIn("does not take since", replies[0]["result"]["content"][0]["text"])
+        self.assertTrue(replies[1]["result"]["isError"])
+        self.assertTrue(replies[2]["result"]["isError"])
+        puts = [c for c in self.jira.calls if c[0] in ("PUT", "POST") and "/search" not in c[1]]
+        self.assertEqual(puts, [])

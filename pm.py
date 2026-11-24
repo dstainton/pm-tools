@@ -932,7 +932,9 @@ def main():
     if getattr(args, "workstream", None):
         scope_bits.append(", ".join(w["abbrev"] for w in selected))
     if scope_bits:
-        print(f"(scope: {' / '.join(scope_bits)})\n")
+        # Keep stdout to the JSON alone when a command prints JSON.
+        print(f"(scope: {' / '.join(scope_bits)})\n",
+              file=sys.stderr if getattr(args, "json", False) else sys.stdout)
 
     with progress.running():
         args.func(cfg, args)
