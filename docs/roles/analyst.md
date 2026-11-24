@@ -17,20 +17,22 @@ pm refine --workstream SDX
 pass or fail against the team's working agreement. `pm ready --plan` groups
 what is ready and what still needs refinement by Epic, with the reason, and
 sets the ready points beside recent throughput. That throughput is context,
-not a Sprint commitment. `pm ready --deep` also asks the model, and that
-part is a suggestion you read before you act on it.
+not a Sprint commitment. `pm ready --deep` also asks the model. With the
+default blocking criteria, a model flag on the title or the criteria fails
+the item, so read the reason before you act on it.
 
 `pm refine` writes a worksheet. Delete a field to leave it unchanged.
 Apply what you kept:
 
 ```text
-pm refine --apply
+pm refine --apply --workstream SDX
 ```
 
 The command shows the write and asks first. It uses the Jira token of
 whoever runs it.
 
-Titles and criteria, as a suggestion:
+Titles and criteria, as a suggestion. `pm review` is deprecated and will be
+removed:
 
 ```text
 pm review --workstream SDX
@@ -54,7 +56,7 @@ pm inbox
 ## The same decisions as the product manager
 
 Set `state.shared_path` in both settings files to a synced folder. Snooze
-decisions and the inbox are shared. The morning list, the cache, and the
+decisions, the inbox, and `pm brief`'s memory of each meeting are shared. The morning list, the cache, and the
 write log stay on each machine.
 
 ```yaml

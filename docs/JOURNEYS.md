@@ -51,7 +51,7 @@ role: pm
 
 `pm brief` remembers the depth last used for that meeting name (`--for`). A meeting you have not prepared before uses `role`, then `audiences.default`, then `pm`.
 
-`pm me` ignores `role`. It is the signed-in user's own work.
+`pm me` ignores `role`. It is the signed-in user's own work. The exception is `--who`, which shows a colleague's work and needs the `pm` profile.
 
 ## Product manager
 
@@ -72,12 +72,12 @@ A week, with the commands that exist today:
 1. Morning. `pm today` shows the Sprint Goal, what needs a decision, what moved, and what has stalled. `pm do 2` carries out item 2 after showing the change. `pm schedule add today --at 08:30` can print that screen on weekday mornings.
 2. During the day. `pm note "customer wants an SSO audit export"` catches a thought. `pm inbox` files it as a ticket later. `pm show APS-30` is one ticket. `pm triage` is the queue of mentions, blocked work, and new bugs.
 3. Daily Scrum. `pm daily` is what moved since yesterday, comments from that window, and work in progress.
-4. Before planning. `pm lint` lists missing estimates, parents, and dates. `pm ready` is a pass or fail against the team's rules. `pm refine` drafts titles, acceptance criteria, and estimates into a file. Edit the file, then `pm refine --apply` sends back what you kept.
+4. Before planning. `pm assess` reads every open issue in the project, including issues no workstream claims, when you need the whole picture. `pm lint` lists missing estimates, parents, and dates. `pm ready` is a pass or fail against the team's rules. `pm refine --workstream SDX` drafts titles, acceptance criteria, and estimates into a file. Edit the file, then `pm refine --apply --workstream SDX` sends back what you kept.
 5. Before a meeting. `pm brief --for "Monthly portfolio review"` is what changed since you last met that group. After the meeting, `pm brief --for "Monthly portfolio review" --debrief notes.md` turns the notes into decisions and actions.
 6. End of the week, or end of the Sprint. `pm report` is the full weekly file. `pm report --sprint --audience leadership` is the open Sprint for leadership. `pm publish` sends a file to Confluence or Teams after you confirm.
 7. When someone asks how delivery is going. `pm metrics` is the full table. `pm metrics --audience leadership` is the headline. `pm release-notes --since 2026-08-01` is what finished.
 
-A named window (`--since`, `--days`, `--sprint`) does not move the memory of the last run. The next plain `pm report` still starts from the last time you ran it for that audience.
+On `pm report`, a named window (`--since`, `--sprint`) does not move the memory of the last run. The next plain `pm report` still starts from the last time you ran it for that audience. `pm brief` remembers every run.
 
 ## Leadership
 
@@ -93,7 +93,7 @@ What they need:
 
 What the product manager runs:
 
-1. The night before, or that morning. `pm warm --audience pm,leadership` prepares the summaries. `pm schedule add warm --at 07:00` can do this on a timer. Scheduled commands never write to Jira.
+1. The night before, or that morning. `pm warm --audience pm,leadership` prepares the summaries. `pm schedule add warm --at 07:00` can do this on a timer once `audiences.warm` lists `pm` and `leadership`. Scheduled commands never write to Jira.
 2. Before the meeting. `pm brief --for "Leadership" --audience leadership` is an Epic table, the decisions that room owes, and overdue or blocked work counted by Epic. The first run has no "since last time". The next run remembers this audience.
 3. The Sprint review of record. `pm report --sprint --audience leadership` uses the open Sprint as the window and writes the leadership file. The sources list is Epics and documents.
 4. When they ask for the numbers. `pm metrics --audience leadership` is rate, median cycle time, open count, and landing. It leaves out the aging ticket list and the forecast-points column.
@@ -108,7 +108,7 @@ A partner reads a page the product manager is willing to forward. The page names
 
 What they need:
 
-- The features they share with you, with a status of Planned, In progress, or Delivered, and a percent done.
+- The features they share with you, with a status of Planned, In progress, or Delivered, and how many of each feature's issues are done.
 - Pages you have marked as safe to share.
 - Release notes in sentences, without a key on every line.
 - A product manager who has already decided what is owed in the room, without that worksheet being the thing that gets forwarded.
@@ -147,9 +147,9 @@ What they need:
 A session:
 
 1. `pm lint --workstream SDX` lists the gaps. The result is exact. It does not ask the model.
-2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model, and that part is a suggestion.
-3. `pm refine --workstream SDX` writes a worksheet of draft titles, criteria, and estimates. Delete a field to leave it unchanged. `pm refine --apply` writes what remains, after a preview.
-4. `pm review` asks which titles are vague and which criteria are thin. Read it before acting on it.
+2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model. With the default blocking criteria, a model flag on the title or the criteria fails the item, so read the reason before acting on it.
+3. `pm refine --workstream SDX` writes a worksheet of draft titles, criteria, and estimates. Delete a field to leave it unchanged. `pm refine --apply --workstream SDX` writes what remains, after a preview.
+4. `pm review` (deprecated, to be removed) asks which titles are vague and which criteria are thin. Read it before acting on it.
 5. `pm note "..."` and `pm inbox` catch a request and turn it into a ticket when it is ready.
 6. `pm show APS-30` is the ticket they are writing against.
 7. `pm coverage` lists open tickets no workstream claims, and tickets two workstreams both claim.
@@ -174,7 +174,7 @@ What they need:
 - The Sprint Goal and what is in the open Sprint.
 - What moved since yesterday, and who is on what, in time for the Daily Scrum.
 - Whether a story is ready before the team forecasts it.
-- One ticket: status, parent, acceptance criteria, link.
+- One ticket: status, assignee, due date, link.
 - A short account of what shipped, when they are checking a release.
 
 Commands:

@@ -36,17 +36,20 @@ What moved since yesterday, comments from that window, and who has what now.
 ## Before planning
 
 ```text
+pm assess
 pm lint --workstream SDX
 pm ready --workstream SDX
 pm refine --workstream SDX
 ```
 
-`pm lint` lists missing estimates, parents, and dates. `pm ready` is a pass
-or fail against the team's rules. `pm refine` writes a worksheet of draft
-titles, acceptance criteria, and estimates. Edit the file, then:
+`pm assess` reads every open issue in the project, including issues no
+workstream claims, and writes a Markdown assessment. `pm lint` lists
+missing estimates, parents, and dates. `pm ready` is a pass or fail against
+the team's rules. `pm refine` writes a worksheet of draft titles,
+acceptance criteria, and estimates. Edit the file, then:
 
 ```text
-pm refine --apply
+pm refine --apply --workstream SDX
 ```
 
 That shows the change and asks before it writes.
@@ -61,7 +64,9 @@ pm report --sprint
 `pm report` covers the time since the last product-management report, then
 remembers this run. `pm report --sprint` is the open Sprint and does not
 move that memory. This file names assignees, comment authors, and who
-edited a page. It is the one report that does.
+edited a page. It is the one report that does. It ends with a short
+delivery pulse: issues and story points completed per week, median cycle
+time, open work, and the landing projection. Full tables are `pm metrics`.
 
 One product or one team:
 

@@ -14,6 +14,7 @@ reasoning is in [the journeys](../JOURNEYS.md). The design of `role`,
 | Service designer | [service-designer.md](service-designer.md) |
 
 The examples on these pages are commands you can run. `role` in the
-settings file chooses the report. `pm`, `pm help`, and `pm help roles`
-show the commands for that role. `pm <command> -h` shows how to run it.
+settings file chooses the report. `pm` and `pm help` show the commands for
+that role. `pm help roles` lists every role. `pm <command> -h` shows how to
+run it.
 `pm me` is your own open work.
