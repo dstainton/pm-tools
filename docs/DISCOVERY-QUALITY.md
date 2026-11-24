@@ -203,7 +203,8 @@ Optionally use the already configured, local inference endpoint:
 pm discover --discover-profiles-model --project APS --profile-model-limit 6 --export
 ```
 
-The bounded model stage sees at most five source excerpts per candidate,
+The bounded model stage sees the source context budget described above
+(default 24 indexed records and 80,000 characters per candidate),
 returns up to 12 field-level claims using a strict JSON schema, and must
 cite an exact provided source for every claim. Valid fields are kind, purpose,
 responsibility, boundary, parent and alias. Unknown is acceptable. Malformed

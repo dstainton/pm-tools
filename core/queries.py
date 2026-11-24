@@ -51,10 +51,10 @@ def _entry(lang, used_by, explain, text, required=()):
 
 # Fragments with no placeholders are the vocabulary. `any` is not overridable.
 QUERIES = {
-    "status.open": _entry("jql", "scopes (status: open), pm coverage, pm doctor, pm today",
+    "status.open": _entry("jql", "scopes (status: open), pm coverage, pm doctor, pm today, pm me",
                           "What 'open' means: not in the Done status category.",
                           "statusCategory != Done"),
-    "status.done": _entry("jql", "scopes (status: done), pm release-notes",
+    "status.done": _entry("jql", "scopes (status: done), pm release-notes, pm me, pm assess",
                           "What 'done' means: the Done status category.",
                           "statusCategory = Done"),
     "status.in-progress": _entry("jql", "scopes (status: in-progress)",
@@ -63,7 +63,7 @@ QUERIES = {
     "status.todo": _entry("jql", "scopes (status: todo)",
                           "The To Do status category.",
                           'statusCategory = "To Do"'),
-    "sprint.open": _entry("jql", "scopes (sprint: open), pm today",
+    "sprint.open": _entry("jql", "scopes (sprint: open), pm today, pm me",
                           "Issues in a Sprint that is open.",
                           "sprint in openSprints()"),
     "sprint.future": _entry("jql", "scopes (sprint: future)",
@@ -75,7 +75,7 @@ QUERIES = {
     "sprint.by_id": _entry("jql", "scopes when sprint is a number",
                            "Issues in one Sprint, by its id.",
                            "sprint = {sprint_id}", ("sprint_id",)),
-    "assignee.me": _entry("jql", "scopes (assignee: me)",
+    "assignee.me": _entry("jql", "scopes (assignee: me), pm me",
                           "Issues assigned to the authenticated user.",
                           "assignee = currentUser()"),
     "assignee.unassigned": _entry("jql", "scopes (assignee: unassigned)",
@@ -137,12 +137,14 @@ QUERIES = {
         "project = {project} AND {status_done} AND ({window})",
         ("project", "window")),
     "release_notes.since": _entry(
-        "jql", "pm release-notes --since",
-        "Issues resolved on or after a date.",
+        "jql", "pm release-notes --since, pm me",
+        "Issues resolved on or after a date. `pm me` uses an override; "
+        "`pm release-notes` always sends the built-in text.",
         'resolved >= "{since}"', ("since",)),
     "release_notes.version": _entry(
         "jql", "pm release-notes --version",
-        "Issues in one fixVersion.",
+        "Issues in one fixVersion. Not overridable yet: the code always "
+        "sends the built-in text.",
         "fixVersion = {version}", ("version",)),
     "today.in_sprint_open": _entry(
         "jql", "pm today",
@@ -175,10 +177,11 @@ QUERIES = {
         "label IN ({labels})", ("labels",)),
     "confluence.window": _entry(
         "cql", "every Confluence read",
-        "Only pages modified on or after a date.",
+        "Only pages modified on or after a date. Not overridable yet: the "
+        "code always sends the built-in text.",
         "({cql}) AND lastmodified >= '{since}'", ("cql", "since")),
     "epics.children": _entry(
-        "jql", "pm report epic progress",
+        "jql", "pm report epic progress, pm release-notes",
         "Direct children of these Epics.",
         "parent IN ({keys})", ("keys",)),
     "epics.resolved": _entry(
@@ -187,11 +190,13 @@ QUERIES = {
         '({base}) AND {status_done} AND resolved >= "{since}"', ("base", "since")),
     "registers.descendants": _entry(
         "cql", "decision, risk and ADR registers",
-        "Every page under a register summary page.",
+        "Every page under a register summary page. Not overridable yet: the "
+        "code always sends the built-in text.",
         "ancestor = {page_id} AND type = page", ("page_id",)),
     "registers.children": _entry(
         "cql", "decision, risk and ADR registers",
-        "Direct child pages of a register summary page.",
+        "Direct child pages of a register summary page. Not overridable yet: "
+        "the code always sends the built-in text.",
         "parent = {page_id} AND type = page", ("page_id",)),
     "brief.risk_pages": _entry(
         "cql", "pm brief",

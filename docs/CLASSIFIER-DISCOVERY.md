@@ -57,13 +57,17 @@ Google's [EmbeddingGemma 300M model card](https://ai.google.dev/gemma/docs/embed
 
 EmbeddingGemma is an **encoder**. It returns vectors, not text, explanation or JSON decisions. The first implementation classifies by cosine similarity to embedded category descriptions, retains all category rankings and identifies the top two as **exploratory routing suggestions only**. These similarities are not probabilities, and top-two does **not** mean verified multi-label membership. Uncertain/other audit and calibrated specialist routing remain future work.
 
-Lemonade's [embedding endpoint](https://lemonade-server.ai/docs/api/openai/) supports the FLM recipe and `POST /v1/embeddings`. Runtime defaults keep it on local loopback. Example smoke run after `pm update`:
+The `pm-broad-v1` taxonomy is stored under the keys `organization`, `capabilities`, `architecture`, `governance`, `delivery`, `relationships`, `decisions` and `other`. The prototype has no separate abstention or uncertain route yet: `other` is a category like the rest.
+
+Lemonade's [embedding endpoint](https://lemonade-server.ai/docs/api/openai/) supports the FLM recipe and `POST /v1/embeddings`. The classifier refuses any endpoint that is not `http://127.0.0.1:` or `http://localhost:`. Example smoke run after `pm update`:
 
 ```powershell
 & "$env:LOCALAPPDATA\pipx\pipx\venvs\pm-tools\Scripts\python.exe" -m core.discovery_embedding_classifier --db "$env:USERPROFILE\.pm-tools\discovery_jira.sqlite" --project APS --limit 20
 ```
 
 Run without `--limit` after validating the local model and performance. Pass `--config path/to/config.yaml` to apply your YAML `classification:` overrides. The classifier consumes the current indexed observations, including title-only Jira issues, without keyword exclusion. Existing legacy Confluence flattening and missing structure are not fixed by this model feature: the separate scoped source reindex remains necessary. The prototype retains per-source citations and cache keys in the SQLite index; it does not extract authoritative claims or create a graph.
+
+Scope today is every indexed observation in `discovery_fts_documents` for one `--project`: Jira issue descriptions, comments and changelog events, and Confluence content stored under that project key. Confluence sections and table rows are not yet separate units. Results are written to the `discovery_classifications` table, keyed by document and a classifier key derived from model, endpoint, task, taxonomy version and taxonomy text, and reused while the source digest is unchanged. The run prints a JSON summary of totals, classified, cached and failed counts. A failed request leaves its units unclassified for a later retry; failures are counted, not stored. `batch_size` (1 to 64) groups units for database writes and progress, not HTTP requests.
 
 
 ### Lemonade FLM request compatibility

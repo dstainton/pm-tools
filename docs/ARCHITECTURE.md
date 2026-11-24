@@ -5,8 +5,9 @@ This describes the present repository at a high level. It is not authorization t
 ## Current shape
 
 - `pm.py`: CLI entry point, argument parsing, and command routing.
-- `commands/`: user-facing workflows such as `today`, `triage`, `lint`, `ready`, `refine`, `coverage`, `metrics`, `report`, and `brief`.
-- `core/`: shared Jira and Confluence access, workstream membership and filters, issue normalization, deterministic metrics, register gathering, rendering, and configuration functions.
+- `commands/`: user-facing workflows such as `today`, `triage`, `lint`, `ready`, `refine`, `coverage`, `assess`, `metrics`, `report`, and `brief`, plus the experimental `discover`.
+- `core/`: shared Jira and Confluence access, workstream membership and filters, issue normalization, whole-project assessment (`assessment.py`, `inventory.py`, `dispositions.py`), deterministic metrics and fiscal labels, register gathering, rendering, terminal output, and configuration functions.
+- `core/discovery_*.py`: the experimental discovery index, collectors, benchmark tools, and classification prototype. See the proposed knowledge graph target below.
 - `tests/`: automated regression and behaviour tests.
 - `docs/`: user guidance, prompt/query customization, and now the baseline governance documents.
 
@@ -22,7 +23,7 @@ Workstream-filtered views can omit the very legacy issues a new PM needs to disc
 
 ### Facts, models, and reporting
 
-`commands/lint.py`, `commands/ready.py`, and `core/metrics.py` provide deterministic checks and arithmetic. `commands/review.py`, `commands/refine.py`, and some report paths use model-assisted text analysis or generation. Preserve the distinction between source facts, numerical results, and model suggestions.
+`commands/lint.py`, `commands/ready.py`, `commands/assess.py`, and `core/metrics.py` provide deterministic checks and arithmetic. `pm ready --deep`, `commands/review.py`, `commands/refine.py`, `commands/inbox.py`, release notes, page summaries (`core/page_summaries.py`), report and brief summaries, and the experimental discovery paths use model-assisted text analysis or generation. Preserve the distinction between source facts, numerical results, and model suggestions.
 
 Report and metric renderers are shared by multiple command paths. A change to shared terminology, fiscal labels, or data fields requires a review of all affected entry points and tests.
 
@@ -34,13 +35,13 @@ CLI operations should remain read-only by default. Existing approved-write workf
 
 ### Local model and configuration
 
-The tool supports local-model workflows and user-specific Jira fields, filters, Confluence configuration, and saved state. Do not assume Jira custom-field IDs or workstream definitions are portable between installations. A valid field identifier alone does not prove that it holds useful data for that team.
+The tool supports local-model workflows and user-specific Jira fields, a separate loopback-only `classification:` embedding endpoint for the discovery prototype, filters, Confluence configuration, and saved state. Do not assume Jira custom-field IDs or workstream definitions are portable between installations. A valid field identifier alone does not prove that it holds useful data for that team.
 
 ## Proposed knowledge graph target, not the current architecture
 
 See [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](DISCOVERY-EVALUATION.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md). The intended shared knowledge infrastructure will preserve structured evidence, extract source-level claims, reconcile identities/time/contradictions and support GraphRAG for future PM commands. Neo4j GraphRAG is a candidate, not an installed or accepted service.
 
-The current offline index flattens Confluence section boundaries and combines Jira metadata with issue description text. Current entity discovery also mistakes generic Jira components for product identities. Those are known experimental limitations, not desired invariants. Retain existing stable collectors and CLI contracts while the redesign is planned. The current product/relationship graph is not an accepted source of truth.
+The offline index now keeps the Jira issue body to the description, with labels, components, issue type and parent stored separately in `discovery_source_structure`. It still flattens Confluence section boundaries, and Confluence observations indexed before structured normalization keep labels mixed into the text until reindexed. Current entity discovery also mistakes generic Jira components for product identities. Those are known experimental limitations, not desired invariants. Retain existing stable collectors and CLI contracts while the redesign is planned. The current product/relationship graph is not an accepted source of truth.
 
 ## Guidelines for evolution
 

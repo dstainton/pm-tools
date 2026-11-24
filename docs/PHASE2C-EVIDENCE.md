@@ -1,6 +1,6 @@
 # Phase 2C: Source evidence contract
 
-**Status:** First implementation increment. The collectors, FTS5 index, time-series taxonomy, and optional model stage are NOT implemented by this document or the initial evidence normalization module.
+**Status:** First implementation increment. The collectors, FTS5 index, time-series taxonomy, and optional model stage are NOT implemented by this document or the initial evidence normalization module. Later increments added checkpointed Jira and Confluence collectors and the FTS5 index; see [Discover](DISCOVER.md).
 
 ## Separation of concerns
 
@@ -37,4 +37,4 @@ Checkpoint long crawls; on resume, verify canonical source scope and cursor vali
 
 The normalization contract preserves Jira's configured issue type and hierarchy level without requiring Initiatives, keeps directly assigned labels/components apart from parent context, retains closed status values, and represents Confluence hierarchy without treating space membership as ownership. Later PRs implement exhaustive collection, persistence, temporal trend analysis, and optional model-based evaluation.
 
-See [tracking issue #58](https://github.com/dstainton/pm-tools/issues/58).
+See [tracking issue #58](https://github.com/dstainton/pm-tools/issues/58) (closed).

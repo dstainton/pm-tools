@@ -3,6 +3,14 @@
 Defaults live in the code. The config file holds overrides only.
 `pm doctor --prompts` and `pm doctor --queries` show what is in effect.
 
+## How to override
+
+Under `prompts:`, an entry takes `text` (the whole prompt), `file` (a path relative to the config file), `append` (text added at the entry's insertion point, or at the end), `values` (named values, and `headings` to rename report sections), and `based_on` (the built-in version you started from; `pm doctor` warns when the built-in has moved on). Set `text` or `file`, not both.
+
+Under `queries:`, an entry is `{text: ...}` or a plain string. A new `status.*`, `sprint.*`, or `assignee.*` value adds a scope option. `*.any` means no filter and cannot be overridden.
+
+An override must keep each name listed under "Must keep", and may use only the listed placeholders.
+
 ## Prompts
 
 ### `report.section`
@@ -11,6 +19,7 @@ Writes one workstream's section of the weekly report from its Material. Change t
 
 Used by: pm report, pm warm --report (one call per workstream).
 Placeholders: audience, empty_section, first_run_line, heading_changed, heading_decisions, heading_dependencies, heading_progress, heading_risks, heading_roadmap, heading_waiting, headings.
+Must keep: {headings}, {empty_section}, {first_run_line}.
 
 ```
 Write a weekly status note for {audience}.
@@ -45,9 +54,9 @@ Write the sections now.
 
 ### `brief.debrief`
 
-Pulls decisions and actions out of meeting notes. Keep the JSON keys; the code reads decisions and actions back.
+Pulls decisions and actions out of meeting notes. Keep the JSON keys; the code reads decisions and actions back. action_types comes from conventions.action_issuetypes unless values.action_types is set here.
 
-Used by: pm brief --notes.
+Used by: pm brief --debrief.
 Placeholders: action_types.
 Must still contain: JSON object, "decisions", "actions", "title", "owner".
 
@@ -65,7 +74,7 @@ Extract decisions and actions. Do not write any text outside the JSON object.
 
 ### `inbox.file_note`
 
-Suggests where a captured note belongs. Keep the JSON keys.
+Suggests where a captured note belongs. Keep the JSON keys. note_types comes from conventions.note_issuetypes unless values.note_types is set here.
 
 Used by: pm inbox.
 Placeholders: note_types.
@@ -238,9 +247,9 @@ Used by: pm release-notes --audience partner.
 
 ### `pages.summary`
 
-One sentence and a kind for a changed Confluence page. The page version is cached, so this is not asked again until the page changes.
+One sentence and a kind for a changed Confluence page. The page version is cached, so this is not asked again until the page changes. kinds may be reworded or reduced; a kind outside decision, risk, dependency, requirement, design, meeting, status, and other is recorded as other.
 
-Used by: pm warm --pages, pm report.
+Used by: pm warm --pages, pm report, pm brief.
 Placeholders: kinds.
 Must still contain: JSON array, "summary", "kind".
 
@@ -284,7 +293,7 @@ Rules:
 
 Last line of a page summary or Epic match.
 
-Used by: pm warm --pages, pm report.
+Used by: pm warm --pages, pm report, pm brief.
 
 ```
 Return the JSON array now.
@@ -347,7 +356,7 @@ Rules:
 
 What 'open' means: not in the Done status category.
 
-Used by: scopes (status: open), pm coverage, pm doctor, pm today.
+Used by: scopes (status: open), pm coverage, pm doctor, pm today, pm me.
 
 ```
 statusCategory != Done
@@ -357,7 +366,7 @@ statusCategory != Done
 
 What 'done' means: the Done status category.
 
-Used by: scopes (status: done), pm release-notes.
+Used by: scopes (status: done), pm release-notes, pm me, pm assess.
 
 ```
 statusCategory = Done
@@ -387,7 +396,7 @@ statusCategory = "To Do"
 
 Issues in a Sprint that is open.
 
-Used by: scopes (sprint: open), pm today.
+Used by: scopes (sprint: open), pm today, pm me.
 
 ```
 sprint in openSprints()
@@ -418,6 +427,8 @@ sprint IS EMPTY
 Issues in one Sprint, by its id.
 
 Used by: scopes when sprint is a number.
+Placeholders: sprint_id.
+Must keep: {sprint_id}.
 
 ```
 sprint = {sprint_id}
@@ -427,7 +438,7 @@ sprint = {sprint_id}
 
 Issues assigned to the authenticated user.
 
-Used by: scopes (assignee: me).
+Used by: scopes (assignee: me), pm me.
 
 ```
 assignee = currentUser()
@@ -458,6 +469,8 @@ assignee IS NOT EMPTY
 The workstream's own Components.
 
 Used by: workstream membership when membership.by is component.
+Placeholders: values.
+Must keep: {values}.
 
 ```
 component IN ({values})
@@ -468,6 +481,8 @@ component IN ({values})
 The workstream's own labels.
 
 Used by: workstream membership when membership.by is label.
+Placeholders: values.
+Must keep: {values}.
 
 ```
 labels IN ({values})
@@ -478,6 +493,8 @@ labels IN ({values})
 A custom field naming the workstream.
 
 Used by: workstream membership when membership.by is field.
+Placeholders: field, values.
+Must keep: {field}, {values}.
 
 ```
 {field} IN ({values})
@@ -488,6 +505,8 @@ Used by: workstream membership when membership.by is field.
 Epics that carry the workstream's anchor.
 
 Used by: which Epics anchor a workstream.
+Placeholders: anchor, epic_types, project.
+Must keep: {project}, {epic_types}, {anchor}.
 
 ```
 project = {project} AND issuetype IN ({epic_types}) AND {anchor}
@@ -498,6 +517,8 @@ project = {project} AND issuetype IN ({epic_types}) AND {anchor}
 Issues other than Epics that carry the workstream's anchor.
 
 Used by: non-Epic issues that carry the anchor themselves.
+Placeholders: anchor, epic_types, project.
+Must keep: {project}, {epic_types}, {anchor}.
 
 ```
 project = {project} AND issuetype NOT IN ({epic_types}) AND {anchor}
@@ -508,6 +529,8 @@ project = {project} AND issuetype NOT IN ({epic_types}) AND {anchor}
 Children of the workstream's Epics. A company-managed project on the old Epic Link may use "Epic Link" IN ({epic_keys}).
 
 Used by: how a child finds its Epic.
+Placeholders: epic_keys.
+Must keep: {epic_keys}.
 
 ```
 parentEpic IN ({epic_keys})
@@ -518,6 +541,8 @@ parentEpic IN ({epic_keys})
 Sub-tasks of issues that carry the anchor themselves.
 
 Used by: how a Sub-task inherits from a tagged parent.
+Placeholders: tagged_keys.
+Must keep: {tagged_keys}.
 
 ```
 parent IN ({tagged_keys})
@@ -538,6 +563,8 @@ component IS EMPTY
 A child with no value in the membership field.
 
 Used by: child_component_wins in field mode.
+Placeholders: field.
+Must keep: {field}.
 
 ```
 {field} IS EMPTY
@@ -548,6 +575,8 @@ Used by: child_component_wins in field mode.
 Open work in a project, before workstreams are applied.
 
 Used by: pm coverage, pm doctor (unclaimed work).
+Placeholders: project, status_open.
+Must keep: {project}.
 
 ```
 project = {project} AND {status_open}
@@ -558,6 +587,8 @@ project = {project} AND {status_open}
 The workstream's membership, limited to open issues.
 
 Used by: pm doctor.
+Placeholders: base, status_open.
+Must keep: {base}.
 
 ```
 ({base}) AND ({status_open})
@@ -568,6 +599,8 @@ Used by: pm doctor.
 Done work in a project inside the release window.
 
 Used by: pm release-notes.
+Placeholders: project, status_done, window.
+Must keep: {project}, {window}.
 
 ```
 project = {project} AND {status_done} AND ({window})
@@ -575,9 +608,11 @@ project = {project} AND {status_done} AND ({window})
 
 ### `release_notes.since`
 
-Issues resolved on or after a date.
+Issues resolved on or after a date. `pm me` uses an override; `pm release-notes` always sends the built-in text.
 
-Used by: pm release-notes --since.
+Used by: pm release-notes --since, pm me.
+Placeholders: since.
+Must keep: {since}.
 
 ```
 resolved >= "{since}"
@@ -585,9 +620,11 @@ resolved >= "{since}"
 
 ### `release_notes.version`
 
-Issues in one fixVersion.
+Issues in one fixVersion. Not overridable yet: the code always sends the built-in text.
 
 Used by: pm release-notes --version.
+Placeholders: version.
+Must keep: {version}.
 
 ```
 fixVersion = {version}
@@ -598,6 +635,8 @@ fixVersion = {version}
 Open issues in the open Sprint of a project.
 
 Used by: pm today.
+Placeholders: project, sprint_open, status_open.
+Must keep: {project}.
 
 ```
 project = {project} AND {sprint_open} AND {status_open}
@@ -608,6 +647,8 @@ project = {project} AND {sprint_open} AND {status_open}
 Pages in one space.
 
 Used by: every Confluence read.
+Placeholders: space.
+Must keep: {space}.
 
 ```
 space = {space}
@@ -618,6 +659,8 @@ space = {space}
 Pages under one ancestor page or folder.
 
 Used by: page reads under a folder, and registers nested under one page.
+Placeholders: page_id.
+Must keep: {page_id}.
 
 ```
 ancestor = {page_id}
@@ -628,6 +671,8 @@ ancestor = {page_id}
 Direct child of one page or folder.
 
 Used by: a register summary page directly under another page.
+Placeholders: page_id.
+Must keep: {page_id}.
 
 ```
 parent = {page_id}
@@ -638,6 +683,8 @@ parent = {page_id}
 A page or folder with this exact title.
 
 Used by: finding a page or folder by title.
+Placeholders: title.
+Must keep: {title}.
 
 ```
 title = {title}
@@ -648,6 +695,8 @@ title = {title}
 Only these Confluence content types.
 
 Used by: Confluence reads that name content types.
+Placeholders: types.
+Must keep: {types}.
 
 ```
 type IN ({types})
@@ -658,6 +707,8 @@ type IN ({types})
 Pages carrying one of these labels.
 
 Used by: labelled Confluence reads.
+Placeholders: labels.
+Must keep: {labels}.
 
 ```
 label IN ({labels})
@@ -665,9 +716,11 @@ label IN ({labels})
 
 ### `confluence.window`
 
-Only pages modified on or after a date.
+Only pages modified on or after a date. Not overridable yet: the code always sends the built-in text.
 
 Used by: every Confluence read.
+Placeholders: cql, since.
+Must keep: {cql}, {since}.
 
 ```
 ({cql}) AND lastmodified >= '{since}'
@@ -677,7 +730,9 @@ Used by: every Confluence read.
 
 Direct children of these Epics.
 
-Used by: pm report epic progress.
+Used by: pm report epic progress, pm release-notes.
+Placeholders: keys.
+Must keep: {keys}.
 
 ```
 parent IN ({keys})
@@ -688,6 +743,8 @@ parent IN ({keys})
 Epics in the workstream that were resolved inside the window.
 
 Used by: pm report epics finished in the window.
+Placeholders: base, since, status_done.
+Must keep: {base}, {since}.
 
 ```
 ({base}) AND {status_done} AND resolved >= "{since}"
@@ -695,9 +752,11 @@ Used by: pm report epics finished in the window.
 
 ### `registers.descendants`
 
-Every page under a register summary page.
+Every page under a register summary page. Not overridable yet: the code always sends the built-in text.
 
 Used by: decision, risk and ADR registers.
+Placeholders: page_id.
+Must keep: {page_id}.
 
 ```
 ancestor = {page_id} AND type = page
@@ -705,9 +764,11 @@ ancestor = {page_id} AND type = page
 
 ### `registers.children`
 
-Direct child pages of a register summary page.
+Direct child pages of a register summary page. Not overridable yet: the code always sends the built-in text.
 
 Used by: decision, risk and ADR registers.
+Placeholders: page_id.
+Must keep: {page_id}.
 
 ```
 parent = {page_id} AND type = page
@@ -718,6 +779,8 @@ parent = {page_id} AND type = page
 Pages the workstream labelled as risks.
 
 Used by: pm brief.
+Placeholders: label, space.
+Must keep: {space}, {label}.
 
 ```
 space = {space} AND label = {label}

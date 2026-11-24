@@ -37,8 +37,8 @@ For each new command and when changing an existing slow command, add tests demon
 
 Reviewers must verify progress behaviour, not merely successful final output. Existing inconsistent commands should be audited and corrected in bounded follow-up work rather than through a speculative whole-repository refactor.
 
-## Immediate follow-up
+## Known gaps
 
-`pm assess` currently begins whole-project Jira retrieval without calling `progress.start`, so the lower-level Jira issue counter cannot surface while it runs. Add stage-level feedback for inventory retrieval, workstream ownership discovery, deterministic analysis, and report generation. Verify it on Windows PowerShell as well as captured output.
+`pm assess` stage progress (status discovery, issue retrieval, ownership, completed and excluded counts, analysis, and report writing) was added in #41.
 
-The Phase 1D backlog-report improvement remains a separate concern. See `docs/PHASE1-ASSESSMENT.md`.
+`pm today --json` still prints progress lines and the normal screen around its JSON, so its output is not machine-readable. Scripts should read `today.json` until that is fixed.

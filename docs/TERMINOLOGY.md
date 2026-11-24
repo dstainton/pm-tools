@@ -104,7 +104,7 @@ critique warns about: refinement is a Scrum Team activity between the Product
 Owner and the Developers, not a baton passed from one job title to another.
 
 The practical fix keeps the usefulness without the shape: **assign to a person,
-not a role.** `pm refine --assign APS-20 --to dana` works for a BA, a Developer,
+not a role.** `pm lint --assign APS-20 --to dana --why "needs criteria from the service team"` works for a BA, a Developer,
 a Product Owner, or an external SME, and it does not bake a two-stage process
 into the tool. The proposals should describe the BA as a member of the Scrum
 Team who does most of the refinement in practice, which is true, rather than as
@@ -151,9 +151,10 @@ definition_of_done:            # a checklist, per product or one for all
   - "Deployed to staging"
 ```
 
-Shipped as a checklist, not a `pm done` command. `pm report` prints it in
-the Increment section. A line may set `label:`, and `pm ready` warns when a
-Done item lacks that label. Lines without a label are reminders only.
+Shipped as a checklist, not a `pm done` command. `pm ready` prints it, and
+`pm metrics --sprint` lists it under the Sprint. A line may set `label:`, and
+`pm ready` warns when a Done item lacks that label. Lines without a label are
+reminders only.
 
 ### Product Goal — what a product is currently missing
 
@@ -170,7 +171,8 @@ products:
 ```
 
 Shipped as optional `product_goal:`. `pm products add --goal` sets it.
-`pm report` and `pm brief` print the sentence once. Empty means omit.
+`pm report` and `pm brief` print the sentence once; the partner report
+leaves it out. Empty means omit.
 The 0.8.0 migration does not add the key to products that are already there.
 
 A fourth, lower priority: nothing supports the **Sprint Retrospective**. Worth
@@ -196,7 +198,7 @@ Nothing had been installed, so the old names are not still read.
 keeps the pass/fail table. `too-big-for-a-sprint` blocks only when it is
 listed in `ready.blocking_criteria`, against `ready.max_points` (default 8).
 Definition of Done, Product Goal, and the Sprint Goal risk line are in the
-commands above. `--to` takes a person.
+commands above. `pm lint --assign KEY --to NAME` takes a person.
 
 ## What I would not rename
 

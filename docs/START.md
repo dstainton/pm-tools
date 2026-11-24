@@ -8,10 +8,10 @@ Five commands. That is the whole habit.
 | 2 | `pm today` | The morning screen. A Sprint Goal, a numbered list, and nothing else you have to open. |
 | 3 | `pm do N` | The action numbered N. You see the write, then you confirm it once. |
 | 4 | `pm note "..."` | Capture a thought without leaving what you were doing. |
-| 5 | `pm daily` | The Daily Scrum snapshot, printed. |
+| 5 | `pm daily` | The Daily Scrum snapshot, written to a file. `--print` also shows it on screen. |
 
-Then one step further, when you need it: `pm brief --for "Monthly portfolio review"` before a meeting, and `pm report` on a Friday. `role` in the settings file chooses that file. `--audience leadership`, `--audience work`, or `--audience partner` overrides it for one run, on `pm report`, `pm brief`, `pm release-notes`, and `pm metrics`. `pm me` is your own open tickets. `pm warm` fills the model cache overnight (review, page summaries, report, inbox).
+Then one step further, when you need it: `pm brief --for "Monthly portfolio review"` before a meeting, and `pm report` on a Friday. `role` in the settings file chooses that file. `--audience leadership`, `--audience work`, or `--audience partner` overrides it for one run, on `pm report`, `pm brief`, `pm release-notes`, and `pm metrics` (which has no partner view). `pm me` is your own open tickets. `pm warm` fills the model cache overnight (review, page summaries, report, inbox).
 
 `pm today --all` is the same list with mentions and new bugs included. `pm triage` is that list.
 
-Nothing here calls the model. The model is for `pm report` and `pm brief`, and it stays on your machine unless you start `pm mcp`. `pm setup --section model` looks for a local server, recommends a model that fits this machine, and can install Ollama or Lemonade when you type `yes`. `model.api_key` is optional. `pm setup --section confluence` records the shared Confluence space and your team page, and shows the product and workstream folders it found under it. `pm doctor` shows how each folder was found.
+Nothing here calls the model. The model drafts for `pm report`, `pm brief`, `pm release-notes`, `pm refine`, `pm inbox`, and `pm ready --deep`, and it stays on your machine unless you start `pm mcp`. `pm setup --section model` looks for a local server, recommends a model that fits this machine, and can install Ollama or Lemonade when you type `yes`. `model.api_key` is optional. `pm setup --section confluence` records the shared Confluence space and your team page, and shows the product and workstream folders it found under it. `pm doctor` shows how each folder was found.

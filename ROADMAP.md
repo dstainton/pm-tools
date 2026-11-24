@@ -46,7 +46,7 @@ This is an outcome-led implementation sequence, **not a calendar or a list of au
 
 **Outcome:** A reusable, local-first evidence and knowledge graph serves product discovery and future PM intelligence, not just Jira classification.
 
-**Supporting plans:** [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md), updated [Phase 2 discovery](docs/PHASE2-DISCOVERY.md), and [proposed decision ADR 0001](docs/decisions/0001-pm-knowledge-graph-foundation.md).
+**Supporting plans:** [Classifier-first Discovery](docs/CLASSIFIER-DISCOVERY.md), [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md), updated [Phase 2 discovery](docs/PHASE2-DISCOVERY.md), and [proposed decision ADR 0001](docs/decisions/0001-pm-knowledge-graph-foundation.md).
 
 **Existing foundation to retain:** checkpointed Jira/Confluence collection; APS index of 4,381 issues, 8,963 comments, 23,683 changes and 414 Confluence records; SQLite raw evidence and FTS; local model adapter. Recent semantic discovery tests produced false products and unsupported assertions. PR #98 is an unmerged, failing-CI experimental patch and is not the approved direction.
 

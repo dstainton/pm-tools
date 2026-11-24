@@ -58,7 +58,7 @@ The longer-term goal is to accept Confluence space or starting-page URLs and Jir
 
 Run `pm discover --jira-inventory --export` to inventory all accessible issues in configured Jira projects, including closed issues and custom issue types. Jira results are persisted in a local SQLite database at the configured local state directory (`discovery_jira.sqlite`), with transactional pagination checkpoints. A large crawl may take several executions: continue running the same command until coverage is complete. No model is required.
 
-After the initial crawl completes, use `pm discover --jira-refresh --export` to retrieve newly updated issues using a two-day overlap window. An incomplete query does not advance the refresh watermark or modify stored issues. This is a current-state refresh, **not** a changelog, comment history, or deletion/permission-loss reconciliation. The latter remain part of issue #60.
+After the initial crawl completes, use `pm discover --jira-refresh --export` to retrieve newly updated issues using a two-day overlap window. An incomplete query does not advance the refresh watermark or modify stored issues. This is a current-state refresh, **not** a changelog, comment history, or deletion/permission-loss reconciliation. Comment and changelog collection were added later under issue #60 (now closed); deletion and permission-loss reconciliation are still not performed by this refresh.
 
 The discovery output distinguishes complete, partial, unavailable, and unconfigured source coverage. A complete source snapshot does not establish product ownership or a full history of field changes. Both commands are read-only with respect to Jira and do not alter operational product/workstream configuration.
 
@@ -80,11 +80,11 @@ Use `pm discover --jira-structure --export` to inspect available project issue t
 
 ### Offline evidence search (Jira)
 
-Once Jira inventory, history and comment collection have finished, run `pm discover --index-jira`. This reads only the existing local SQLite database and builds an FTS5 index of Jira summaries, descriptions, directly assigned components and labels, comments, and recorded field changes. It makes **no Jira requests** and does not require a model. Re-running updates changed documents and leaves unchanged entries alone.
+Once Jira inventory, history and comment collection have finished, run `pm discover --index-jira`. This reads only the existing local SQLite database and builds an FTS5 index of Jira summaries, descriptions, comments, and recorded field changes. Labels are searchable through a separate labels index; labels, components, issue type, and parent are stored as structured metadata, not mixed into the description text. It makes **no Jira requests** and does not require a model. Re-running updates changed documents and leaves unchanged entries alone.
 
 Search with `pm discover --search-evidence '"APS P2P"' --export` or `pm discover --search-evidence 'gateway'`. Use `--project APS` to filter by project. Each match includes a stable Jira issue/comment/changelog identifier and distinguishes issue content, comments and historical change observations. Search results are evidence, not confirmed ownership or taxonomy. SQLite FTS5 supports quoted phrases, token prefixes and Boolean searches; malformed FTS expressions produce an error rather than being silently reinterpreted.
 
-This initial index covers collected **Jira** evidence only. Confluence page content, historical source reconciliation, richer field filters, document heading extraction and temporal taxonomy remain separate increments under #58.
+This initial index covers collected **Jira** evidence only. Confluence page content was added by the later increments described below. Historical source reconciliation, richer field filters, document heading extraction and temporal taxonomy were scoped under #58, which is now closed; they are not all implemented.
 
 ### Concept-aware search, first increment
 
@@ -100,7 +100,7 @@ Run `pm discover --alias-candidates --project APS --export` after `--index-jira`
 
 Run `pm discover --index-confluence` after configuring authorized Confluence scopes. The command lists pages within the configured space or page tree, retrieves those page bodies, removes storage-format markup, and indexes their text alongside the existing Jira evidence in local SQLite FTS5. Each indexed page retains its original Confluence page ID and is searchable using `--search-evidence`. Alias candidate extraction can also examine indexed Confluence page text; pass no Jira `--project` filter unless it matches the intended Confluence space key.
 
-**Coverage:** This first increment inherits the Confluence metadata inventory's 100-search-row per-scope limit. If additional pages exist, the command reports incomplete coverage and does not claim full ingestion. Failed pages are itemized. No Confluence changes are written. Resumable uncapped collection and richer page/heading attribution remain open tasks under #58.
+**Coverage:** This first increment inherits the Confluence metadata inventory's 100-search-row per-scope limit. If additional pages exist, the command reports incomplete coverage and does not claim full ingestion. Failed pages are itemized. No Confluence changes are written. Resumable uncapped collection and richer page/heading attribution were tracked under #58 (now closed); see the later sections for what changed.
 
 Native Confluence expansion in this PR: space-scoped blog posts are indexed alongside regular pages, and page/blog labels are searchable. Blog pagination has its own per-space cap and explicit incomplete coverage. Page-tree scopes remain page-only and are **not** broadened to a whole space for blog discovery. Attachments are excluded. Comments, live docs, whiteboards, and databases need separate supported API paths or metadata adapters and are not yet retrieved by this PR; they must not be reported as completely indexed.
 
@@ -141,7 +141,8 @@ candidate edges with the **existing** `model:` configuration in
 `~/.pm-tools/config.yaml`. There is no separate model setup. The reviewer
 calls `core.model.call_model`, sharing the existing endpoint, model ID,
 authentication, timeout, JSON sampling, non-thinking settings, run budget, and
-model cache. It reviews up to 20 candidate edges and requests structured
+model cache. It reviews up to `--concept-graph-max-edges` candidate edges
+(default 24) and requests structured
 relationship proposals grounded in the supplied citations. All classifications
 remain unconfirmed; invalid responses are marked unresolved and no confirmed
 concept registry or product configuration changes. The configured inference
@@ -151,7 +152,7 @@ new relationships from unstructured narrative.
 
 ### Narrative relationship discovery (experimental)
 
-When `--concept-graph-model` is enabled, discovery now also extracts up to 20 review pairs from sentences containing at least two known, project-scoped concept names or abbreviations. These are **unresolved candidates**, not deterministic relationship assertions. The existing configured local model classifies cited narrative as well as explicit graph edges (up to 40 total model requests). A model classification is never promoted automatically. Errors distinguish invalid types, unsupported citations, and other malformed fields. This improves recall but cannot prove that the model is correct; review the cited excerpts and compare with deterministic findings before accepting relationships.
+When `--concept-graph-model` is enabled, discovery now also extracts review pairs from sentences containing at least two known, project-scoped concept names or abbreviations. These are **unresolved candidates**, not deterministic relationship assertions. The existing configured local model classifies cited narrative as well as explicit graph edges, up to `--concept-graph-max-edges` reviews (default 24); every candidate is still exported. A model classification is never promoted automatically. Errors distinguish invalid types, unsupported citations, and other malformed fields. This improves recall but cannot prove that the model is correct; review the cited excerpts and compare with deterministic findings before accepting relationships.
 
 ### Small-model JSON validation and repair
 

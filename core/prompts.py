@@ -281,9 +281,11 @@ PROMPTS = {
         REPORT_SECTION_TAIL,
     ),
     "brief.debrief": _entry(
-        "pm brief --notes",
+        "pm brief --debrief",
         "Pulls decisions and actions out of meeting notes. Keep the JSON "
-        "keys; the code reads decisions and actions back.",
+        "keys; the code reads decisions and actions back. action_types "
+        "comes from conventions.action_issuetypes unless values.action_types "
+        "is set here.",
         BRIEF_DEBRIEF,
         values={"action_types": ["Story", "Task"]},
         contract=("JSON object", '"decisions"', '"actions"', '"title"',
@@ -291,7 +293,9 @@ PROMPTS = {
     ),
     "inbox.file_note": _entry(
         "pm inbox",
-        "Suggests where a captured note belongs. Keep the JSON keys.",
+        "Suggests where a captured note belongs. Keep the JSON keys. "
+        "note_types comes from conventions.note_issuetypes unless "
+        "values.note_types is set here.",
         INBOX_FILE_NOTE,
         values={"note_types": ["Story", "Task", "Bug"]},
         contract=("JSON object", '"product"', '"workstream"', '"issuetype"',
@@ -349,9 +353,12 @@ PROMPTS = {
         RELEASE_NOTES_PARTNER_RULES,
     ),
     "pages.summary": _entry(
-        "pm warm --pages, pm report",
+        "pm warm --pages, pm report, pm brief",
         "One sentence and a kind for a changed Confluence page. The page "
-        "version is cached, so this is not asked again until the page changes.",
+        "version is cached, so this is not asked again until the page changes. "
+        "kinds may be reworded or reduced; a kind outside decision, risk, "
+        "dependency, requirement, design, meeting, status, and other is "
+        "recorded as other.",
         PAGE_SUMMARY,
         values={"kinds": ["decision", "risk", "dependency", "requirement",
                           "design", "meeting", "status", "other"]},
@@ -365,7 +372,7 @@ PROMPTS = {
         contract=("JSON array", '"epic"'),
     ),
     "pages.tail": _entry(
-        "pm warm --pages, pm report",
+        "pm warm --pages, pm report, pm brief",
         "Last line of a page summary or Epic match.",
         PAGE_TAIL,
     ),

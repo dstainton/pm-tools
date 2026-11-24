@@ -26,7 +26,7 @@ pm show APS-30
 ```
 
 `pm ready` is the team's working agreement as a pass or fail. `pm show`
-is one ticket: status, parent, and link.
+is one ticket: status, assignee, type, due date, and link.
 
 ## What shipped
 
@@ -40,8 +40,9 @@ pm metrics --sprint
 at the start, what was delivered, what was added after the start, what was
 carried in, and what is still open.
 
-`--audience leadership` shortens that to Epics. `--audience partner` is
-the page with keys and names removed, for someone outside the team.
+On `pm release-notes`, `--audience leadership` shortens the list to Epics,
+and `--audience partner` removes keys and names, for someone outside the
+team.
 
 ## One team in a shared file
 
@@ -70,7 +71,10 @@ role: developer
 
 `pm report` then leads with blockers, dependencies, ADRs, and technical
 decisions, plus Epic state and what shipped. It does not name assignees.
-It does not forecast the portfolio. Full delivery history is `pm metrics`.
+It does not forecast the portfolio. It ends with a short table for the open
+Sprint: planned points at the start, completed points, points added,
+carried-in issues, and unfinished issues. Full delivery history is
+`pm metrics`.
 
 ```text
 pm me

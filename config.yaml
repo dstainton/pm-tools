@@ -34,19 +34,10 @@ config_version: 7
 #
 #  Official Qwen instruct profile, with a cooler temperature so a small
 #  quant stays on the schema. json_temperature is used by `pm refine`,
-#  `pm review`, and `pm ready --deep`.
+#  `pm review`, `pm ready --deep`, and the Confluence page summaries and
+#  Epic matching in `pm report`, `pm brief`, and `pm warm --pages`.
 #  The Windows llama.cpp scripts still publish the alias qwen-local on
 #  port 8080. Point endpoint and name at that server if you use them.
-# Local semantic category classifier, separate from the generative chat model.
-# EmbeddingGemma runs via Lemonade FLM on the AMD NPU. Scores are uncalibrated.
-classification:
-  endpoint: "http://127.0.0.1:13305/v1/embeddings"
-  model: "embed-gemma-300m-FLM"
-  task: "clustering"
-  taxonomy_version: "pm-broad-v1"
-  batch_size: 8
-  timeout: 240
-
 model:
   endpoint: "http://127.0.0.1:11434/v1/chat/completions"
   name: "qwen3:4b"
@@ -69,6 +60,19 @@ model:
   # hybrid template skips its think block. Set false for a server that
   # shows the token to the model as text.
   no_think_suffix: true
+
+# Local semantic category classifier, separate from the generative chat model.
+# EmbeddingGemma runs via Lemonade FLM on the AMD NPU. Scores are uncalibrated.
+# Experimental discovery only: no pm command reads this block. It is read by
+# `python -m core.discovery_embedding_classifier`. The endpoint must be a
+# local loopback address.
+classification:
+  endpoint: "http://127.0.0.1:13305/v1/embeddings"
+  model: "embed-gemma-300m-FLM"
+  task: "clustering"
+  taxonomy_version: "pm-broad-v1"
+  batch_size: 8
+  timeout: 240
 
 # ----------------------------------------------------------------------------
 #  1b. Local servers `pm setup` probes, and which model size fits this machine
@@ -157,6 +161,7 @@ jira:
 #    pm brief          since that audience was last briefed; first run uses
 #                      report_days
 #    pm daily          the same --days window as movement
+#    pm me             from the start of its window
 #    pm release-notes  on or after --since; with only --version, the newest
 #                      max_per_issue comments
 #    pm triage         still reads comments when this block is off, so a
@@ -171,9 +176,10 @@ comments:
   report_days: 7
   section_chars: 6000
 
-# Pages (Confluence, and SharePoint when it is enabled). The window follows
-# the command: since the last report, since you last briefed that audience,
-# or an explicit --since / --sprint. Caps only. enabled: false skips both.
+# Confluence pages. The window follows the command: since the last report,
+# since you last briefed that audience, or an explicit --since / --sprint.
+# Caps only. enabled: false skips Confluence pages. SharePoint uses its own
+# enabled, lookback_days, and max_results (section 4).
 pages:
   enabled: true
   scope: space              # space: every changed page; labelled: only confluence_labels
@@ -274,8 +280,8 @@ review:
 #  too-big-for-a-sprint is off unless you list it. It fails when story points
 #  are above max_points. An item with no estimate does not also fail it.
 #
-#  Definition of Done is a printed checklist on `pm report` (the Increment
-#  section) and a reminder on `pm ready`. A line may set `label:` and then
+#  Definition of Done is a printed checklist on `pm ready` and in the
+#  `pm metrics --sprint` review. A line may set `label:` and then
 #  `pm ready` warns when a Done item lacks that label. Lines without a label
 #  are reminders only. Leave the block commented out to print nothing.
 # definition_of_done:
@@ -290,14 +296,16 @@ ready:
     - has-estimate
     - linked-to-parent
     - sane-dates
-    # has-component is left out on purpose — advisory only by default.
+    # has-component is left out on purpose. It reports only when
+    # lint.required_fields includes component; list it here to make it block.
     # too-big-for-a-sprint is off unless you add it to this list.
 
 # ----------------------------------------------------------------------------
-#  5d. Daily Scrum (used by `pm daily`)
+#  5d. Moved window for `pm today`
 # ----------------------------------------------------------------------------
 daily:
-  # Default "moved since" window in days. Override at run time with --days.
+  # How many days back `pm today` counts as "moved". `pm daily` does not
+  # read this: it uses --days (default 1).
   lookback_days: 1
 
 # ----------------------------------------------------------------------------
@@ -320,14 +328,15 @@ membership:
   field: ""
   # Issue type(s) that act as the workstream anchor.
   epic_types: [Epic]
-  # Children with no Component of their own inherit their parent's workstream.
+  # Children inherit their parent's workstream (see child_component_wins).
   inherit_from_parent: true
   # Set true if a child that names its own Component should be judged on that
   # alone, instead of also counting under its parent's workstream. Left false so
   # that mis-tagged work is visible somewhere rather than nowhere.
   child_component_wins: false
-  # Safety valve for very large workstreams: how many directly tagged issues to
-  # expand sub-tasks for in one query.
+  # Safety valve for very large workstreams. Above this many directly tagged
+  # issues, their sub-tasks are not expanded and a note is printed.
+  # 0 means no limit.
   max_parent_keys: 500
 
 # ----------------------------------------------------------------------------
@@ -338,7 +347,8 @@ membership:
 #
 #  Options:
 #    status              any | open | done | in-progress | todo
-#    sprint              any | open | future | none
+#    sprint              any | open | future | none | a sprint id number
+#    (status, sprint, and assignee also take any value added under queries:)
 #    assignee            any | me | unassigned | assigned
 #    types               list of issue type names to include
 #    exclude_types       list of issue type names to leave out
@@ -355,7 +365,7 @@ scopes:
   lint:          {status: open}                 # epics + everything beneath
   review:        {status: open}
   ready:         {sprint: open, status: open}
-  daily_moved:   {updated_within_days: 1}       # --days overrides this
+  daily_moved:   {updated_within_days: 1}       # pm daily --days (default 1) always sets this
   daily_wip:     {status: in-progress}
   refine_history: {status: done, types: [Story]}   # examples `pm refine` learns from
 
@@ -377,7 +387,7 @@ cache:
 # ----------------------------------------------------------------------------
 #  5g2. Blocked — the statuses and labels that mean blocked in this workflow
 # ----------------------------------------------------------------------------
-#  Matched exactly, so a status named Unblocked does not count. `pm workstreams
+#  Whole names, ignoring case, so a status named Unblocked does not count. `pm workstreams
 #  check` warns when a status here is not a status on the project.
 blocked:
   statuses: [Blocked]
@@ -391,7 +401,7 @@ today:
   max_needs_you: 5
   max_moved: 8
   max_aging: 3
-  untouched_days: 3                # in-sprint and quieter than this → NEEDS YOU
+  untouched_days: 3                # in-sprint and untouched this many days or more → NEEDS YOU
 
 # ----------------------------------------------------------------------------
 #  5i. Shared state — decisions and the inbox, so the PM and the BA see the
@@ -427,7 +437,7 @@ metrics:
 
 # ----------------------------------------------------------------------------
 #  5l. Publish — Confluence and/or Teams. Enable one, the other, or both.
-#      `pm report --publish` and `pm publish FILE` use the write path
+#      `pm report --publish`, `pm brief --publish`, and `pm publish FILE` use the write path
 #      (preview, confirm, log). Nothing here runs on a schedule.
 # ----------------------------------------------------------------------------
 publish:
@@ -489,7 +499,8 @@ products:
 #  used. A workstream folder is looked for inside its product folder first.
 #  Pages in the product folder that are not under a workstream folder are
 #  listed under the product.
-#    confluence_labels  which labels to gather from that space or folder
+#    confluence_labels  labels to gather when pages.scope is labelled;
+#                       pm brief also reads the risk label here
 #    sharepoint_query   search term for its documents
 #    scopes             per-workstream overrides of the section above
 #
@@ -568,7 +579,7 @@ workstreams:
 #      workstream: SDX
 
 # ----------------------------------------------------------------------------
-#  5m. Prompts, queries and conventions
+#  6d. Prompts, queries and conventions
 # ----------------------------------------------------------------------------
 #  The words sent to the model, and the JQL and CQL sent to Jira and
 #  Confluence, have named defaults in the code. Override one here when your
@@ -578,7 +589,7 @@ workstreams:
 #  prompts:
 #    report.section:
 #      append: |
-#        8. Name a Jira Component only if the Material names it.
+#        6. Name a Jira Component only if the Material names it.
 #    # values.headings renames a section. The seven roles stay put.
 #    # refine.titles:
 #    #   file: prompts/refine-titles.txt
@@ -632,8 +643,8 @@ workstreams:
 #    registers.descendants registers.children
 
 # Who this install writes for when a command is run without --audience.
-# `role`, when set, wins over audiences.default. A missing role means pm,
-# which is what a file written before role existed already does.
+# `role`, when set, wins over audiences.default. A missing role means
+# audiences.default, which is pm unless changed.
 #   role: pm
 #   role: leadership
 #   role: partner
@@ -656,7 +667,7 @@ audiences:
   leadership:
     name: "Leadership"
     at_risk_due_days: 14
-    max_docs_per_product: 5
+    max_docs_per_product: 5    # not used yet: the leadership report lists no documents
   partner:
     name: "Partners"
     epic_labels: [partner-visible]
@@ -667,12 +678,17 @@ audiences:
     show_target_dates: false
 
 # ----------------------------------------------------------------------------
-#  7. Output (used by `pm report`)
+#  7. Output — where every command writes its files
 # ----------------------------------------------------------------------------
 output:
   directory: "~/.pm-tools/out"
+  # The weekly report file. {date} and {audience} may be used. Without
+  # {audience}, a non-pm report adds _<audience> to the name.
   file: "weekly_report_{date}.md"
+  # Who the weekly section prompt addresses ({audience} in report.section).
+  # Not the --audience report shape.
   audience: "stakeholders"
   # Remembers last week's items so the report can show what changed.
   # Resolved under directory. Created after the first run; keep it between runs.
+  # A non-pm report keeps its own file, with _<audience> added.
   state_file: "report_state.json"

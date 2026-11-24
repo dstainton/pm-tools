@@ -1,6 +1,6 @@
 # Historical benchmark format and review protocol
 
-**Status:** Existing evaluation format retained for compatibility. The [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md) design supersedes deterministic candidate selection as the main source-discovery approach. No private APS source content should be committed or labelled as reviewed without actual review.
+**Status:** Existing evaluation format retained for compatibility. The schema and `core.discovery_benchmark` evaluator are still current; only the deterministic candidate selector is historical. The [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md) design supersedes deterministic candidate selection as the main source-discovery approach. No private APS source content should be committed or labelled as reviewed without actual review.
 
 ## Files
 
@@ -18,7 +18,7 @@ Add reference cases where labels correctly improve document retrieval and others
 
 The first runner is deterministic and intentionally conservative. It checks identities/roles and exact-match normalized claim tuples for precision and recall, reference coverage and whether the returned `citation` matches the provided source. It **cannot** decide semantic entailment by itself: human review of cited spans remains a separate acceptance gate. Do not label a reference as human-reviewed unless someone actually reviewed it.
 
-Do not put credentials or private internal source extracts in a public repository. Keep actual APS benchmark text in a locally protected file or explicitly approved restricted test data store. The included example is wholly synthetic and illustrative.
+Do not put credentials or private internal source extracts in a public repository. Keep actual APS benchmark text in a locally protected file or explicitly approved restricted test data store. No example file is committed; the fixtures in `tests/test_discovery_benchmark.py` are wholly synthetic and illustrative.
 
 ## Run
 
@@ -47,7 +47,7 @@ Use the already populated local index to select up to 26 diverse source excerpts
 python -m core.discovery_benchmark_select --db "$env:USERPROFILE\.pm-tools\discovery_jira.sqlite" --project APS --output "$env:USERPROFILE\.pm-tools\benchmark\aps-candidates.json" --target 26
 ```
 
-This creates a **private, unreviewed selection manifest**, not an accepted benchmark. It samples capability definitions, APS P2P, APS Platform, Integration Toolkit, dependencies and negative/ambiguous cases, deduplicates by citation, and records exact offsets into the *current indexed body*, its digest, Jira labels when the raw issue inventory contains them, and a source quote. It does **not** infer answers or mark anyone as reviewer. Confluence content labels are not stored in the current flattened FTS schema; the manifest explicitly marks their availability as `not_indexed` instead of inventing them. Capturing them is part of the subsequent structured-source work.
+This creates a **private, unreviewed selection manifest**, not an accepted benchmark. It samples capability definitions, APS P2P, APS Platform, Integration Toolkit, dependencies and negative/ambiguous cases, deduplicates by citation, and records exact offsets into the *current indexed body*, its digest, Jira labels when the raw issue inventory contains them, and a source quote. It does **not** infer answers or mark anyone as reviewer. Each case also records `split: "unassigned"`, its sampling `bucket`, `review_status: "pending_human_annotation"`, and a source `normalization_status` (`structured` or `legacy_flattened`). Structured Jira sources add `jira_components`, `jira_issue_type`, and `jira_parent`. Confluence labels come from the structured store: `label_status` is `available` or `not_available` for a reindexed page, and `not_indexed` for a legacy flattened observation. A Jira raw payload that cannot be parsed is `unreadable`. No label is invented.
 
 The selection is deterministic but heuristic, and its excerpts inherit limitations of the currently flattened index. Verify each source against the original document when annotating. A short source or an index with fewer matching documents yields fewer than 26 cases without artificial padding. The tool refuses to overwrite an existing review pack. Keep this JSON private and off the public repository; the existing `core.discovery_benchmark` evaluator deliberately rejects its illustrative, unreviewed cases.
 
@@ -58,7 +58,7 @@ Human reviewers subsequently choose source spans, add exact annotations, assign 
 
 The selector now reserves roughly one-third of the target for Jira issues and two-thirds for Confluence content, ranking the two sources independently and filling unused quota only within the same source. It prioritizes substantive responsibilities, purpose, dependency and boundary language over repeated keywords and applies a penalty to archived, questionnaire and assessment material. It reports both requested quotas and achieved source counts; it never invents Jira examples to fill a shortfall.
 
-**Label limitation:** Jira labels can be recovered as structured metadata from the local raw issue inventory. The current Confluence index merges page labels into flattened text, so exact Confluence label attribution cannot be reconstructed safely from the existing index. The selector reports `not_indexed`. Preserving Confluence labels separately requires a later source-normalization update and reindex from already authorized content; this revision does not recrawl Confluence or guess labels.
+**Label limitation (at the time of this revision):** Jira labels can be recovered as structured metadata from the local raw issue inventory. Before structured normalization, the Confluence index merged page labels into flattened text, so the selector reported `not_indexed`. Structured evidence normalization, described below, now stores Confluence labels separately; legacy flattened observations still report `not_indexed` until reindexed.
 
 The previous private candidate pack remains a valid historical sample, but should not be used as the balanced benchmark. Generate a **new output filename** because the selector refuses to overwrite an existing pack:
 

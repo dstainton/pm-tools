@@ -10,6 +10,22 @@ def render():
         "Defaults live in the code. The config file holds overrides only.",
         "`pm doctor --prompts` and `pm doctor --queries` show what is in effect.",
         "",
+        "## How to override",
+        "",
+        "Under `prompts:`, an entry takes `text` (the whole prompt), `file` "
+        "(a path relative to the config file), `append` (text added at the "
+        "entry's insertion point, or at the end), `values` (named values, and "
+        "`headings` to rename report sections), and `based_on` (the built-in "
+        "version you started from; `pm doctor` warns when the built-in has "
+        "moved on). Set `text` or `file`, not both.",
+        "",
+        "Under `queries:`, an entry is `{text: ...}` or a plain string. A new "
+        "`status.*`, `sprint.*`, or `assignee.*` value adds a scope option. "
+        "`*.any` means no filter and cannot be overridden.",
+        "",
+        "An override must keep each name listed under \"Must keep\", and may "
+        "use only the listed placeholders.",
+        "",
         "## Prompts",
         "",
     ]
@@ -22,6 +38,9 @@ def render():
         names = sorted(prompts._known(entry))
         if names:
             lines.append(f"Placeholders: {', '.join(names)}.")
+        if entry["required"]:
+            lines.append("Must keep: " + ", ".join(
+                f"{{{name}}}" for name in entry["required"]) + ".")
         if entry["contract"]:
             lines.append("Must still contain: " + ", ".join(entry["contract"]) + ".")
         lines.append("")
@@ -37,6 +56,14 @@ def render():
         lines.append(entry["explain"])
         lines.append("")
         lines.append(f"Used by: {entry['used_by']}.")
+        names = sorted(set(queries._PLACEHOLDER.findall(entry["text"])))
+        if names:
+            lines.append(f"Placeholders: {', '.join(names)}.")
+        keep = [name for name in entry["required"]
+                if queries._KINDS.get(name) != "vocab"]
+        if keep:
+            lines.append("Must keep: " + ", ".join(
+                f"{{{name}}}" for name in keep) + ".")
         lines.append("")
         lines.append("```")
         lines.append(entry["text"])

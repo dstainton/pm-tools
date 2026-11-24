@@ -11,11 +11,11 @@ pm schedule add warm --at 06:30
 pm schedule add report --at 07:30
 ```
 
-`pm warm --audience pm,leadership` also drafts the leadership product summaries. `work` belongs in that list when the install uses the nameless report. `audiences.warm` in config is the list used when `--audience` is omitted. A nameless shape is cached separately from `pm`, because that prompt leaves people's names out.
+`pm warm --audience pm,leadership` also drafts the leadership product summaries. `work` belongs in that list when the install uses the nameless report. `audiences.warm` in config is the list used when `--audience` is omitted, and a scheduled `warm` always uses it, so set it to the profiles you report on, for example `[pm, leadership]`. A nameless shape is cached separately from `pm`, because that prompt leaves people's names out.
 
 ## Scripts
 
-Read commands accept `--json` where a script needs structure (`pm lint --json`, `pm metrics --json`, `pm today --json`, `pm show KEY --json`). `pm schedule` registers read-only commands and refuses anything that writes.
+Some read commands accept `--json` where a script needs structure. `pm lint --json` and `pm metrics --json` write a JSON file and print its path. `pm report --json` writes a JSON file beside the Markdown report. `pm show KEY --json` prints JSON. `pm today --json` prints progress lines and the screen around its JSON, so a script should read `today.json` instead. `pm schedule` registers read-only commands and refuses anything that writes.
 
 Exit status: `pm lint --fail-on error` and `pm ready --fail-under` exit non-zero when the gate fails. `pm coverage` exits non-zero when work is unclaimed. Other commands exit non-zero when they cannot do what you asked.
 
@@ -28,4 +28,4 @@ A cloud flow cannot start a program on your laptop. Two patterns work:
 
 ## MCP
 
-`pm mcp` speaks newline-delimited JSON on stdin. It is off until you pass `--yes-i-understand`. The tools are the read-only commands in `commands/schedule.py` (`SAFE`). `pm do`, `pm refine`, and the other write commands are not tools. Copilot is not local: a tool result leaves the machine. The local-model promise is unchanged for every other command.
+`pm mcp` speaks newline-delimited JSON on stdin. It is off until you pass `--yes-i-understand`. `tools/list` names the read-only commands in `commands/schedule.py` (`SAFE`), except `brief`. `tools/call` does not run the command yet: it returns a note to run it with `--json`. `pm do`, `pm refine`, and the other write commands are not tools. Copilot is not local: a tool result leaves the machine. The local-model promise is unchanged for every other command.
