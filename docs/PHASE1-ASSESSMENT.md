@@ -1,6 +1,6 @@
 # Phase 1 design: Whole-project backlog assessment
 
-**Status:** Implementation slices 1A–1D merged; final Phase 1 closure PR under review.
+**Status:** Completed 2026-10-14. Slices 1A–1D and the closure PR (#43) are merged, with follow-up fixes for status dispositions (#44) and readable status names (#45).
 
 **Authority:** [North Star](../NORTH_STAR.md) and [Roadmap](../ROADMAP.md). Phase 1 functionality is implemented as `pm assess`; no Jira writes or model calls.
 
@@ -22,7 +22,7 @@ A product manager can assess an inherited Jira project even when issues lack com
 - Counts for completed work may differ from historical snapshots, and open and completed populations are never combined.
 - Review groups indicate investigation order, not product priority; issue inactivity is not proof that work is obsolete.
 - No automatic snapshot history, model inference, Jira changes, or Phase 2 classification has been added.
-- Final completion requires the full supported CI matrix and owner review of the closure PR.
+- The closure PR passed the supported CI matrix and was merged by the owner.
 
 ## Proposed report model
 

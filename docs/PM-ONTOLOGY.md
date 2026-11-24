@@ -1,6 +1,6 @@
 # PM knowledge ontology v0.1
 
-**Status:** Phase 2A proposal for owner review. No graph infrastructure, identity promotion or source writes.
+**Status:** Working ontology v0.1, merged with #100 (filed then as "Phase 2A"; it now supports roadmap 2C). It is revised through benchmark review, not by model output. No graph infrastructure, identity promotion or source writes.
 
 ## Identity versus roles
 

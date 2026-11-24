@@ -1,4 +1,8 @@
-# Phase 2A: Configured discovery
+# Discover (experimental)
+
+`pm discover` is experimental. The "Phase 2A/2B/2C" headings below are the original discovery design's labels, kept for history; the current sequence is in the [Roadmap](../ROADMAP.md) and [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md).
+
+## Configured discovery (original Phase 2A)
 
 Run `pm discover` to inspect local product and workstream configuration without calling Jira, Confluence, SharePoint, or a model.
 
@@ -17,7 +21,7 @@ A workstream's Jira component, label, or custom field is a membership rule, **no
 
 This first slice reads **configuration only**. It does not test configured Confluence references or assert that sources are fresh or accessible; it does not classify issues or update configuration. Retrieval, synthesis, confirmation, and classification are separately proposed in [the Phase 2 design](PHASE2-DISCOVERY.md).
 
-## Phase 2B: Optional source evidence
+## Optional source evidence (original Phase 2B)
 
 `pm discover --enrich` explicitly requests a **bounded, read-only** source check. It retrieves up to eight Jira Epics for each selected workstream with a configured membership anchor and attempts to read each product/workstream's explicitly configured Confluence page ID. The results are examples, not complete membership coverage or verified responsibilities. The command does not invoke a model or infer purpose, responsibilities, or boundaries. Retrieval errors are reported as unavailable, never as empty evidence.
 
@@ -28,7 +32,7 @@ pm discover --enrich --export
 
 The Markdown export shows available page titles, IDs, update timestamps, short evidence excerpts, sampled Epic identifiers and summaries, and source failures. Source content is untrusted data. Workstream-purpose clarification and human confirmation are future, separately reviewed steps. This first evidence increment does not search for arbitrary Confluence pages by name, follow attachments, or crawl SharePoint.
 
-## Phase 2B: Clarification queue
+## Clarification queue (original Phase 2B)
 
 Use `pm discover --questions` to print up to five targeted questions about missing product goals and unconfirmed workstream responsibilities or exclusions. Combine with `--enrich` for Jira Epic and configured Confluence references, and with `--export` for a reviewable Markdown queue:
 
@@ -38,7 +42,7 @@ pm discover --enrich --questions --export
 
 Questions are deterministic and **not answered automatically**. They do not infer responsibilities from component names or Epic titles, or update configuration. The queue is a bounded set of prompts, not an exhaustive review or model-generated profile.
 
-## Phase 2B: Evidence-grounded candidate profiles
+## Evidence-grounded candidate profiles (original Phase 2B)
 
 Run `pm discover --enrich --propose --export` to explicitly invoke the configured model on bounded source evidence. This can take several model calls. It drafts **unconfirmed** candidate product goals and workstream purpose, responsibilities, or exclusions.
 
@@ -54,7 +58,7 @@ The inventory does **not** fetch or rank every page body yet, and makes no infer
 
 The longer-term goal is to accept Confluence space or starting-page URLs and Jira project URLs, extract identifiers and allowed scope, inventory the accessible data, propose product/workstream mappings and membership configuration, then ask for human confirmation before saving configuration. URL parsing, connection authorization, and configuration generation are **not** included in this inventory increment.
 
-## Phase 2C Jira inventory and refresh (opt-in)
+## Jira inventory and refresh, opt-in (original Phase 2C)
 
 Run `pm discover --jira-inventory --export` to inventory all accessible issues in configured Jira projects, including closed issues and custom issue types. Jira results are persisted in a local SQLite database at the configured local state directory (`discovery_jira.sqlite`), with transactional pagination checkpoints. A large crawl may take several executions: continue running the same command until coverage is complete. No model is required.
 

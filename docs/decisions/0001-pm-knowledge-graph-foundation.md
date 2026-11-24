@@ -1,14 +1,14 @@
 # ADR 0001: Shared PM knowledge graph foundation
 
-**Status:** Proposed, pending explicit owner acceptance in review
+**Status:** Accepted as the strategic architecture direction only. The graph technology stack is not selected.
 
-**Date:** 2026-10-16
+**Date:** 2026-10-16 (proposed); 2026-11-24 (accepted)
 
 ## Context
 
 Recent APS discovery experiments found complete Jira/Confluence evidence but poor semantic results: false product names, zero supported claims for core capabilities and misattributed purposes. Jira components, labels, workstreams and products were treated as interchangeable. Large inference prompts did not resolve those modelling and retrieval defects. The owner wants the knowledge base to support future product management workflows, not just initial discovery.
 
-## Proposed decision
+## Decision
 
 Adopt a **local-first, evidence-first, temporal property-graph and GraphRAG architecture** as the intended common knowledge foundation for pm-tools. Reuse existing collectors, raw evidence, FTS and local models. Preserve original structure, Jira/Confluence labels as separately typed metadata, and exact cited spans; extract source-level claims before assembling product profiles and graph relationships; separate inferred, conflicting, historical and accepted claims.
 
@@ -26,4 +26,4 @@ Improved reuse for product discovery, dependencies, roadmap, risk, decisions and
 
 ## Acceptance
 
-Owner review of this PR can accept the strategic architecture direction. The specific technology stack requires a later reviewed decision after the benchmark.
+The owner merged this record with #99 on 2026-10-17 and confirmed the strategic direction on 2026-11-24. Acceptance covers the local-first, evidence-first knowledge foundation described above. It does not select Neo4j, Graphiti, LlamaIndex, or any other graph technology, and it authorizes no installation or migration. Discovery now follows [Classifier-first Discovery](../CLASSIFIER-DISCOVERY.md) toward that foundation. The specific technology stack requires a later reviewed decision after the benchmark.

@@ -1,6 +1,6 @@
 # Classifier-first discovery architecture
 
-**Decision:** Owner-selected direction, 2026-10-17. **Status:** Design documentation; implementation requires a separately scoped task. This supersedes deterministic relevance filtering and benchmark candidate sampling as the main discovery path.
+**Decision:** Owner-selected direction, 2026-10-17. **Status:** Design documentation with an initial broad-classification prototype (#105, #106), described below. Each further implementation step requires a separately scoped task. This supersedes deterministic relevance filtering and benchmark candidate sampling as the main discovery path.
 
 ## Goal and boundaries
 
