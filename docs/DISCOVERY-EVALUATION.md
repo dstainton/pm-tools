@@ -1,6 +1,6 @@
 # Discovery and knowledge-graph evaluation
 
-**Status:** Updated for owner-selected hierarchical classifier-first discovery, 2026-10-17. Targets remain proposed until accepted. Targets require owner acceptance.
+**Status:** Updated for owner-selected hierarchical classifier-first discovery, 2026-10-17. The quality-gate targets remain proposals until the owner accepts them.
 
 ## Purpose
 
@@ -46,8 +46,8 @@ A zero-claim response where evidence unambiguously supports claims is a **recall
 
 **First authorized implementation slice after approval:** ontology, benchmark format and evaluation runner only. Graph technology selection and extraction implementation follow their gates.
 
-## Phase 2A implementation artifacts
+## Ontology and benchmark artifacts (#100, filed as "Phase 2A")
 
 The initial ontology and benchmark implementation are at [PM Ontology](PM-ONTOLOGY.md) and [Benchmark Format](BENCHMARK-FORMAT.md). The evaluator is `python -m core.discovery_benchmark evaluate --reference ... --predictions ...`; it validates reviewer status and provenance, reports exact-match entity/claim precision and recall, and counts missing predictions as false negatives. It is **not** an LLM judge and cannot establish semantic entailment or retrieval quality on its own.
 
-No sensitive APS corpus or purportedly human-reviewed annotations is committed in this phase. Reference annotation and owner acceptance are the remaining Phase 2A gates before selecting or installing graph infrastructure.
+No sensitive APS corpus or purportedly human-reviewed annotations is committed in this phase. Human reference annotation and owner acceptance of the targets above remain gates before selecting or installing graph infrastructure (roadmap 2C and 2D).

@@ -39,7 +39,7 @@ The tool supports local-model workflows and user-specific Jira fields, a separat
 
 ## Proposed knowledge graph target, not the current architecture
 
-See [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](DISCOVERY-EVALUATION.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md). The intended shared knowledge infrastructure will preserve structured evidence, extract source-level claims, reconcile identities/time/contradictions and support GraphRAG for future PM commands. Neo4j GraphRAG is a candidate, not an installed or accepted service.
+See [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](DISCOVERY-EVALUATION.md) and accepted [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md) (strategic direction only). The intended shared knowledge infrastructure will preserve structured evidence, extract source-level claims, reconcile identities/time/contradictions and support GraphRAG for future PM commands. Neo4j GraphRAG is a candidate, not an installed or accepted service.
 
 The offline index now keeps the Jira issue body to the description, with labels, components, issue type and parent stored separately in `discovery_source_structure`. It still flattens Confluence section boundaries, and Confluence observations indexed before structured normalization keep labels mixed into the text until reindexed. Current entity discovery also mistakes generic Jira components for product identities. Those are known experimental limitations, not desired invariants. Retain existing stable collectors and CLI contracts while the redesign is planned. The current product/relationship graph is not an accepted source of truth.
 

@@ -1,10 +1,10 @@
 # Offline discovery: experimental implementation and limitations
 
-**Status (2026-10-16):** The currently implemented commands below are supported as *diagnostic and unconfirmed evidence exploration*, not validated product discovery. Do not rely on their candidate profiles, relationship types or inferred ownership for decisions or configuration changes. See [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md), [Evaluation](DISCOVERY-EVALUATION.md), [Roadmap](../ROADMAP.md) and proposed [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md).
+**Status (2026-10-16):** The currently implemented commands below are supported as *diagnostic and unconfirmed evidence exploration*, not validated product discovery. Do not rely on their candidate profiles, relationship types or inferred ownership for decisions or configuration changes. See [PM Knowledge Graph](PM-KNOWLEDGE-GRAPH.md), [Evaluation](DISCOVERY-EVALUATION.md), [Roadmap](../ROADMAP.md) and accepted [ADR 0001](decisions/0001-pm-knowledge-graph-foundation.md) (strategic direction only).
 
-The APS run produced 37 candidates including generic Jira components and malformed Confluence field values; important services returned zero claims despite explicit capability descriptions, while other false candidates received model claims. The pipeline also loses source structure during normalization. Large input context and a validated citation ID do not establish correctness. PR #98 is unmerged and failing CI; it is not the accepted redesign.
+The APS run produced 37 candidates including generic Jira components and malformed Confluence field values; important services returned zero claims despite explicit capability descriptions, while other false candidates received model claims. At the time, the pipeline also lost source structure during normalization; structured normalization (#103) now keeps Jira fields and Confluence labels separate, but legacy Confluence observations still need a scoped reindex. Large input context and a validated citation ID do not establish correctness. PR #98 is unmerged and failing CI; it is not the accepted redesign.
 
-The preferred next work is to establish an ontology and benchmark, preserve structured source evidence, then qualify GraphRAG technology and local inference on fixed reference cases. Existing collector and indexing instructions remain below for reference.
+The ontology, benchmark format and structured evidence store now exist (#100 to #103). Discovery continues under [Classifier-first Discovery](CLASSIFIER-DISCOVERY.md); GraphRAG technology and local inference are qualified later on fixed reference cases. Existing collector and indexing instructions remain below for reference.
 
 ---
 

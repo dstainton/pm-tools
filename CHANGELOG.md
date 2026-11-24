@@ -59,6 +59,8 @@
   it yet.
 - Governance documents: `NORTH_STAR.md`, `ROADMAP.md`, `AGENTS.md`,
   `docs/ARCHITECTURE.md`, decision records, and the CLI progress rules.
+  Phase 1 is recorded as complete, Phase 2 as active by owner-assigned
+  slice, and ADR 0001 as accepted for the strategic direction only.
 - `docs/CUSTOMISING.md` explains how to override a prompt or query, and
   lists each query's placeholders. The guides, settings comments, and
   help text were corrected against the current commands.

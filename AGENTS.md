@@ -33,7 +33,14 @@ Stop and ask the owner when work would change the North Star, activate a future 
 
 ## Knowledge graph work discipline
 
-Read [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md) and the proposed graph [decision](docs/decisions/0001-pm-knowledge-graph-foundation.md) before touching any discovery, inference or graph code. Do not continue patching the experimental classifier without an explicitly approved architecture/evaluation task. Do not merge PR #98 on the basis of the previous design or passing syntax/unit tests alone. Distinguish a strategic direction from permission to choose Neo4j, Graphiti, a hosted service or an inference model.
+Read [Classifier-first Discovery](docs/CLASSIFIER-DISCOVERY.md), [PM Knowledge Graph](docs/PM-KNOWLEDGE-GRAPH.md), [Discovery Evaluation](docs/DISCOVERY-EVALUATION.md) and the accepted graph [decision](docs/decisions/0001-pm-knowledge-graph-foundation.md) (strategic direction only) before touching any discovery, inference or graph code.
+
+Two experimental classifiers exist; neither may be extended without an explicitly approved architecture or evaluation task:
+
+- The model-based concept, relationship and profile reviews in `core/discovery_local_model.py`, `core/discovery_profile_model.py` and related discovery inference. This is the line of work PR #98 patches. Do not keep patching it, and do not merge PR #98 on the basis of the previous design or passing syntax/unit tests alone.
+- The EmbeddingGemma broad-taxonomy prototype in `core/discovery_embedding_classifier.py`. It follows Classifier-first Discovery; changes to its taxonomy, scoring or routing need the evaluation evidence that design requires.
+
+Distinguish a strategic direction from permission to choose Neo4j, Graphiti, a hosted service or an inference model.
 
 Require benchmark evidence for semantic changes, including false identities, unsupported claims, missing positives, negation, temporal conflicts and incorrect directional edges. Preserve source structure and field separation, source permissions, and local-first behaviour.
 
