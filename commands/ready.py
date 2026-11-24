@@ -7,10 +7,11 @@ That list is a working agreement, not a Scrum rule.
 
   pm ready            Fast gate — deterministic checks only.
   pm ready --deep     Also run the model reviews (title clarity, AC quality)
-                      and treat those as blocking too.
+                      and list them as suggestions beside the verdict.
 
 How the verdict works:
-  * Every DoR criterion maps to one or more lint rules (or a model review).
+  * Every DoR criterion maps to one or more lint rules.
+  * Model reviews never change the verdict; they are suggestions to read.
   * A ticket is READY only if none of its BLOCKING criteria are triggered.
   * Non-blocking criteria still show up as advisories but don't fail the gate.
 
@@ -94,20 +95,15 @@ def evaluate_issue(issue, lint_cfg, blocking, deep_findings,
         entry = {"criterion": criterion, "reason": hit_msg}
         (failed if criterion in blocking else advisory).append(entry)
 
-    # Fold in model reviews when --deep was used.
+    # Model reviews are judgement, not a rule: shown, never part of the verdict.
+    suggestions = []
     if deep_findings is not None:
-        if "titles" in deep_findings and "clear-title" in blocking:
-            failed.append({"criterion": "clear-title (model)",
-                           "reason": deep_findings["titles"]})
-        elif "titles" in deep_findings:
-            advisory.append({"criterion": "clear-title (model)",
-                             "reason": deep_findings["titles"]})
-        if "criteria" in deep_findings and "has-acceptance-criteria" in blocking:
-            failed.append({"criterion": "acceptance-criteria (model)",
-                           "reason": deep_findings["criteria"]})
-        elif "criteria" in deep_findings:
-            advisory.append({"criterion": "acceptance-criteria (model)",
-                             "reason": deep_findings["criteria"]})
+        if "titles" in deep_findings:
+            suggestions.append({"criterion": "clear-title (model)",
+                                "reason": deep_findings["titles"]})
+        if "criteria" in deep_findings:
+            suggestions.append({"criterion": "acceptance-criteria (model)",
+                                "reason": deep_findings["criteria"]})
 
     return {
         "key": issue["key"],
@@ -117,6 +113,7 @@ def evaluate_issue(issue, lint_cfg, blocking, deep_findings,
         "ready": len(failed) == 0,
         "failed": failed,
         "advisory": advisory,
+        "suggestions": suggestions,
     }
 
 
@@ -225,6 +222,18 @@ def build_markdown(cfg, results, deep, reminders=None, gaps=None):
                             + ", ".join(a["criterion"] for a in v["advisory"])
                             + ")_")
                 lines.append(f"- **{render.markdown_link(v['key'], v.get('url'))}**: {title}{note}")
+            lines.append("")
+
+        suggested = [v for v in verdicts if v.get("suggestions")]
+        if suggested:
+            lines.append("### Model suggestions (not part of the verdict)")
+            lines.append("")
+            lines.append("| Issue | Suggestion |")
+            lines.append("|-------|------------|")
+            for v in suggested:
+                text = "; ".join(f"{s['criterion']}: {s['reason']}"
+                                 for s in v["suggestions"]).replace("|", "\\|")
+                lines.append(f"| {render.markdown_link(v['key'], v.get('url'))} | {text} |")
             lines.append("")
 
     reminders = list(reminders or [])

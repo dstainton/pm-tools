@@ -147,7 +147,7 @@ What they need:
 A session:
 
 1. `pm lint --workstream SDX` lists the gaps. The result is exact. It does not ask the model.
-2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model. With the default blocking criteria, a model flag on the title or the criteria fails the item, so read the reason before acting on it.
+2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model and lists what it flags as suggestions beside the verdict. A suggestion never makes an item fail.
 3. `pm refine --workstream SDX` writes a worksheet of draft titles, criteria, and estimates. Delete a field to leave it unchanged. `pm refine --apply --workstream SDX` writes what remains, after a preview.
 4. `pm review` (deprecated, to be removed) asks which titles are vague and which criteria are thin. Read it before acting on it.
 5. `pm note "..."` and `pm inbox` catch a request and turn it into a ticket when it is ready.

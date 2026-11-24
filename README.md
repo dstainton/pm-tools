@@ -394,7 +394,7 @@ pm schedule add warm --at 07:00
 |---|---|
 | `pm assess` | Scans all open issues in the Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. By default it reads the projects your workstreams use, then `jira.project`; `--project APS,OPS` chooses them. Completed and excluded issues are counted separately, and an incomplete inventory is reported explicitly. |
 | `pm lint` | Checks every ticket against simple rules: estimate, parent, dates, acceptance criteria, stalled work. |
-| `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also asks the AI model. |
+| `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also lists the AI model's suggestions on titles and criteria; they never change the pass or fail. |
 | `pm refine` | Drafts missing titles, acceptance criteria, and estimates into a file you edit. `--apply` sends what you kept to Jira. |
 | `pm review` | Deprecated, and will be removed. It still asks the AI model which titles are unclear and which acceptance criteria are incomplete. With `--apply` it is `pm refine --apply`. |
 | `pm coverage` | Open tickets no workstream owns, tickets two workstreams both claim, and Components nobody uses. |

@@ -647,7 +647,8 @@ def build_parser():
                          help="Planning view: ready work, refinement gaps, "
                               "decisions, dependencies, and recent throughput")
     p_ready.add_argument("--deep", action="store_true",
-                         help="Also run the model reviews as blocking checks")
+                         help="Also run the model reviews and list them as "
+                              "suggestions; they never change the verdict")
     p_ready.add_argument("--fail-under", type=float, default=None,
                          metavar="N",
                          help="Exit non-zero when fewer than N percent of "

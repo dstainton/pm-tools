@@ -299,6 +299,8 @@ ready:
     # has-component is left out on purpose. It reports only when
     # lint.required_fields includes component; list it here to make it block.
     # too-big-for-a-sprint is off unless you add it to this list.
+    # These are rule checks. `pm ready --deep` model reviews are listed as
+    # suggestions and never block.
 
 # ----------------------------------------------------------------------------
 #  5d. Moved window for `pm today` and `pm daily`
