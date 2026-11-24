@@ -106,6 +106,18 @@ def _worksheet_path(cfg, ws, args):
         getattr(args, "out", None))
 
 
+def _latest_worksheet(cfg, ws, args):
+    """Newest saved worksheet for this workstream, so --apply works on a later day."""
+    today = _worksheet_path(cfg, ws, args)
+    folder = os.path.dirname(today) or "."
+    pattern = re.compile(r"refine_" + re.escape(ws["abbrev"]) + r"_\d{4}-\d{2}-\d{2}\.md$")
+    try:
+        names = sorted(n for n in os.listdir(folder) if pattern.match(n))
+    except OSError:
+        names = []
+    return os.path.join(folder, names[-1]) if names else None
+
+
 def build_worksheet(cfg, ws, rows, titles, criteria, estimate):
     lines = [
         f"# Refine {ws['abbrev']} {dt.date.today().isoformat()}",
@@ -228,11 +240,18 @@ def run(cfg, args):
     apply = getattr(args, "apply", False)
     selected = cfg.get("_workstreams") or []
     if apply:
-        for ws in selected:
-            path = _worksheet_path(cfg, ws, args)
-            if not os.path.exists(path):
-                sys.exit(f"No worksheet at {path}. Run `pm refine -w "
-                         f"{ws['abbrev']}` first, edit the file, then --apply.")
+        found = [(ws, _latest_worksheet(cfg, ws, args)) for ws in selected]
+        missing = [ws["abbrev"] for ws, path in found if not path]
+        if len(missing) == len(found):
+            sys.exit("No refine worksheet for " + ", ".join(missing) + ". Run "
+                     "`pm refine -w " + missing[0] + "` first, edit the file, "
+                     "then --apply.")
+        for abbrev in missing:
+            print(f"{abbrev}: no worksheet; skipped.")
+        for ws, path in found:
+            if not path:
+                continue
+            print(f"{ws['abbrev']}: applying {path}")
             with open(path, encoding="utf-8") as fh:
                 planned = parse_worksheet(fh.read())
             jql = workstreams.scope_jql(cfg, ws, "ready")

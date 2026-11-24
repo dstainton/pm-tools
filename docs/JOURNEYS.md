@@ -77,7 +77,7 @@ A week, with the commands that exist today:
 6. End of the week, or end of the Sprint. `pm report` is the full weekly file. `pm report --sprint --audience leadership` is the open Sprint for leadership. `pm publish` sends a file to Confluence or Teams after you confirm.
 7. When someone asks how delivery is going. `pm metrics` is the full table. `pm metrics --audience leadership` is the headline. `pm release-notes --since 2026-08-01` is what finished.
 
-On `pm report`, a named window (`--since`, `--sprint`) does not move the memory of the last run. The next plain `pm report` still starts from the last time you ran it for that audience. `pm brief` remembers every run.
+A named window (`--since`, `--sprint`) does not move the memory of the last run. The next plain `pm report` or `pm brief` still starts from the last time you ran it for that audience.
 
 ## Leadership
 
@@ -147,7 +147,7 @@ What they need:
 A session:
 
 1. `pm lint --workstream SDX` lists the gaps. The result is exact. It does not ask the model.
-2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model. With the default blocking criteria, a model flag on the title or the criteria fails the item, so read the reason before acting on it.
+2. `pm ready --workstream SDX` is pass or fail against the working agreement. `pm ready --deep` also asks the model and lists what it flags as suggestions beside the verdict. A suggestion never makes an item fail.
 3. `pm refine --workstream SDX` writes a worksheet of draft titles, criteria, and estimates. Delete a field to leave it unchanged. `pm refine --apply --workstream SDX` writes what remains, after a preview.
 4. `pm review` (deprecated, to be removed) asks which titles are vague and which criteria are thin. Read it before acting on it.
 5. `pm note "..."` and `pm inbox` catch a request and turn it into a ticket when it is ready.

@@ -584,7 +584,7 @@ def build_parser():
                          help="How deep the prep goes (default: the level saved "
                               "for this meeting, else role)")
     p_brief.add_argument("--since", metavar="YYYY-MM-DD",
-                         help="Start of the window. This run still updates last-met memory.")
+                         help="Start of the window. Does not move last-met memory.")
     p_brief.add_argument("--sprint", nargs="?", const="open", default=None,
                          help="This Sprint (open), a number (138), or last")
     p_brief.set_defaults(func=brief.run, needs_config=True)
@@ -647,7 +647,8 @@ def build_parser():
                          help="Planning view: ready work, refinement gaps, "
                               "decisions, dependencies, and recent throughput")
     p_ready.add_argument("--deep", action="store_true",
-                         help="Also run the model reviews as blocking checks")
+                         help="Also run the model reviews and list them as "
+                              "suggestions; they never change the verdict")
     p_ready.add_argument("--fail-under", type=float, default=None,
                          metavar="N",
                          help="Exit non-zero when fewer than N percent of "
@@ -657,9 +658,9 @@ def build_parser():
     p_daily = sub.add_parser("daily", parents=[help_opts, common],
                              help="Daily Scrum movement, comments from that "
                                   "window, and work in progress")
-    p_daily.add_argument("--days", type=int, default=1,
+    p_daily.add_argument("--days", type=int, default=None,
                          help="How many days back to count as 'moved' "
-                              "(default: 1)")
+                              "(default: daily.lookback_days, else 1)")
     p_daily.add_argument("--by", choices=["assignee", "workstream"],
                          default="assignee",
                          help="Group in-progress work by assignee (default) "
@@ -932,7 +933,9 @@ def main():
     if getattr(args, "workstream", None):
         scope_bits.append(", ".join(w["abbrev"] for w in selected))
     if scope_bits:
-        print(f"(scope: {' / '.join(scope_bits)})\n")
+        # Keep stdout to the JSON alone when a command prints JSON.
+        print(f"(scope: {' / '.join(scope_bits)})\n",
+              file=sys.stderr if getattr(args, "json", False) else sys.stdout)
 
     with progress.running():
         args.func(cfg, args)

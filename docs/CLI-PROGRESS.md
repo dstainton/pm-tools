@@ -37,8 +37,8 @@ For each new command and when changing an existing slow command, add tests demon
 
 Reviewers must verify progress behaviour, not merely successful final output. Existing inconsistent commands should be audited and corrected in bounded follow-up work rather than through a speculative whole-repository refactor.
 
-## Known gaps
+## Resolved gaps
 
 `pm assess` stage progress (status discovery, issue retrieval, ownership, completed and excluded counts, analysis, and report writing) was added in #41.
 
-`pm today --json` still prints progress lines and the normal screen around its JSON, so its output is not machine-readable. Scripts should read `today.json` until that is fixed.
+`pm today --json` sends progress to standard error and prints only JSON on standard output.

@@ -167,14 +167,14 @@ def resolve_root(cfg, reg):
     return _normalise_root(cfg, raw)
 
 
-def _entry_cql(reg, root_id):
+def _entry_cql(cfg, reg, root_id):
     query_id = "registers.children" if reg.get("depth") == "children" else "registers.descendants"
-    return queries.render(None, query_id, page_id=str(root_id))
+    return queries.render(cfg, query_id, page_id=str(root_id))
 
 
 def list_entries(cfg, reg, root_id):
     """Every entry id, title and version, without the body."""
-    cql = _entry_cql(reg, root_id)
+    cql = _entry_cql(cfg, reg, root_id)
     rows = []
     for raw in sources.fetch_confluence_results(cfg, cql, since="1970-01-01", limit=200):
         version = raw.get("version") or {}
@@ -249,7 +249,7 @@ def gather_one(cfg, reg, window, previous):
     snap = memory.get(f"{reg['type']}:{root['page_id']}") or {}
     listed = list_entries(cfg, reg, root["page_id"])
     by_id = {row["page_id"]: row for row in listed}
-    cql = f"({_entry_cql(reg, root['page_id'])})"
+    cql = f"({_entry_cql(cfg, reg, root['page_id'])})"
     opts = pages.page_settings(cfg)
     base = (cfg.get("confluence") or {}).get("base_url") or ""
     changed = []

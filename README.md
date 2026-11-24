@@ -394,7 +394,7 @@ pm schedule add warm --at 07:00
 |---|---|
 | `pm assess` | Scans all open issues in the Jira project, even outside workstreams. Prints a brief summary and writes a Markdown report to the output folder. By default it reads the projects your workstreams use, then `jira.project`; `--project APS,OPS` chooses them. Completed and excluded issues are counted separately, and an incomplete inventory is reported explicitly. |
 | `pm lint` | Checks every ticket against simple rules: estimate, parent, dates, acceptance criteria, stalled work. |
-| `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also asks the AI model. |
+| `pm ready` | Pass or fail per ticket against your team's ready rules. `--plan` groups that by Epic for planning. `--deep` also lists the AI model's suggestions on titles and criteria; they never change the pass or fail. |
 | `pm refine` | Drafts missing titles, acceptance criteria, and estimates into a file you edit. `--apply` sends what you kept to Jira. |
 | `pm review` | Deprecated, and will be removed. It still asks the AI model which titles are unclear and which acceptance criteria are incomplete. With `--apply` it is `pm refine --apply`. |
 | `pm coverage` | Open tickets no workstream owns, tickets two workstreams both claim, and Components nobody uses. |
@@ -423,12 +423,12 @@ pm schedule add warm --at 07:00
 | `pm doctor` | Checks everything and says how to fix problems. |
 | `pm products` | Lists, adds, removes, or checks products. |
 | `pm workstreams` | Lists, adds, removes, or checks workstreams. |
-| `pm schedule` | Records read-only commands to run at set times: `--at 08:30` on weekdays, or `--weekly fri@16:00`. It writes a `schedule.cron` snippet to install with `crontab`. On Windows, a source checkout also registers a Task Scheduler entry. |
+| `pm schedule` | Records read-only commands to run at set times: `--at 08:30` on weekdays, or `--weekly fri@16:00`. Elsewhere it writes a `schedule.cron` snippet to install with `crontab`. On Windows it registers a Task Scheduler entry under `pm\`, and says why if that fails. `pm schedule remove` deletes that entry too. |
 | `pm warm` | Prepares AI answers ahead of time. |
 | `pm update` | Installs the latest version, adds any new settings to your file, and lists what changed. |
 | `pm setup --review` | Steps through new settings, changed defaults, and old names, one at a time. |
 | `pm init` | Creates a blank settings file, if you would rather fill it in by hand. |
-| `pm mcp` | Exposes read-only command names to an MCP client. Off unless you pass `--yes-i-understand`. See [docs/AUTOMATION.md](docs/AUTOMATION.md). |
+| `pm mcp` | Lets an MCP client run the read-only commands and read what they print. Off unless you pass `--yes-i-understand`. See [docs/AUTOMATION.md](docs/AUTOMATION.md). |
 | `pm help` | `pm help all` lists every command, `pm help roles` explains the role sets, and `pm help COMMAND` shows one command. |
 
 Files are Markdown. The screen gets text instead: headings, lined-up tables, and a link on every Jira issue, Confluence page, and SharePoint file. The name is the link. PowerShell, CMD, Windows Terminal, VS Code, and most Mac and Linux terminals open it from that name, with no address printed beside it. A pipe and `--plain` show the address after the name, like `APS-10 <https://…/browse/APS-10>`. A table wider than the window becomes one labelled line per cell. `FORCE_HYPERLINK=1` or `0` overrides the guess about clickable links.

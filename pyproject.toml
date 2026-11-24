@@ -42,6 +42,7 @@ packages = ["core", "commands"]
 
 [tool.setuptools.package-data]
 "*" = ["config.yaml"]
+commands = ["register-pm-task.ps1"]
 
 [tool.setuptools.data-files]
 "share/pm-tools" = ["config.yaml"]

@@ -209,7 +209,7 @@ ROLE_COMMANDS = {
     "developer": ("daily", "me", "show", "ready", "release-notes"),
     "service-designer": ("report", "brief", "show", "release-notes", "me"),
     "analyst": ("ready", "refine", "lint", "show", "inbox", "report", "me"),
-    "leadership": ("report", "brief", "metrics"),
+    "leadership": ("report", "brief", "metrics", "release-notes"),
     "partner": ("report", "brief"),
 }
 
@@ -224,7 +224,10 @@ ROLE_BLURB = {
 
 _ROLE_DOCS = "https://github.com/dstainton/pm-tools/tree/main/docs/roles"
 
-_ALL_INTENTS = INTENTS + (
+_ALL_INTENTS = (
+    INTENTS[0],
+    (INTENTS[1][0], INTENTS[1][1] + ("review",)),
+) + INTENTS[2:] + (
     ("Setup", ("setup", "doctor", "products", "workstreams", "schedule",
                "warm", "update", "init", "mcp", "publish", "coverage", "help")),
 )
@@ -336,35 +339,39 @@ def discovery_page(role=None, subs=None):
         lines.append("What should I type?")
     lines.append("")
 
-    def intent_of(command):
-        for title, members in INTENTS:
-            if command in members:
-                return title
-        return "Other"
+    groups = [(title, [name for name in ordered if name in members])
+              for title, members in INTENTS]
+    grouped = {name for _title, names in groups for name in names}
+    groups.append(("Other", [name for name in ordered if name not in grouped]))
+    # Each heading once, led by the group holding the role's first command.
+    groups = sorted((g for g in groups if g[1]), key=lambda g: ordered.index(g[1][0]))
 
-    current = None
-    for name in ordered:
-        title = intent_of(name)
-        if title != current:
-            lines.append(title)
-            lines.append("")
-            current = title
-        summary = _entry(name)["summary"]
-        parser = (subs or {}).get(name)
-        if parser is not None and not summary:
-            summary = _blurb(parser, name)
-        lines.append(f"  pm {name}")
-        if summary:
-            lines.append(f"      {summary}")
-        for example in _entry(name)["examples"]:
-            if example != f"pm {name}":
-                lines.append(f"      {example}")
-                break
+    for title, names in groups:
+        if not names:
+            continue
+        lines.append(title)
         lines.append("")
+        for name in names:
+            _discovery_entry(lines, name, subs)
     lines.append("Run: pm help all")
     lines.append("Run: pm <command> -h")
     lines.append("Run: pm help roles")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _discovery_entry(lines, name, subs):
+    summary = _entry(name)["summary"]
+    parser = (subs or {}).get(name)
+    if parser is not None and not summary:
+        summary = _blurb(parser, name)
+    lines.append(f"  pm {name}")
+    if summary:
+        lines.append(f"      {summary}")
+    for example in _entry(name)["examples"]:
+        if example != f"pm {name}":
+            lines.append(f"      {example}")
+            break
+    lines.append("")
 
 
 def all_page(subs):

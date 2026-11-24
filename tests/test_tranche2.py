@@ -137,6 +137,40 @@ class ReadySizeTests(unittest.TestCase):
         self.assertIsNone(ready.size_failure(self._issue(8), 8))
 
 
+class ReadyModelSuggestionTests(ReadySizeTests):
+    LINT = {"story_types": ["story"], "require_estimate": True,
+            "min_title_words": 3, "vague_title_terms": [],
+            "require_acceptance_criteria": False}
+
+    def test_model_findings_never_fail_an_item(self):
+        verdict = ready.evaluate_issue(
+            self._issue(3), self.LINT,
+            blocking={"clear-title", "has-acceptance-criteria"},
+            deep_findings={"titles": "Says what, not why.",
+                           "criteria": "No measurable outcome."},
+            max_points=8)
+        self.assertTrue(verdict["ready"])
+        self.assertEqual(verdict["failed"], [])
+        self.assertEqual([s["criterion"] for s in verdict["suggestions"]],
+                         ["clear-title (model)", "acceptance-criteria (model)"])
+
+    def test_suggestions_are_shown_apart_from_the_verdict(self):
+        verdict = ready.evaluate_issue(
+            self._issue(3), self.LINT, blocking={"clear-title"},
+            deep_findings={"titles": "Says what, not why."}, max_points=8)
+        ws = {"abbrev": "SDX", "name": "Secure Data Exchange"}
+        text = ready.build_markdown({}, [(ws, [verdict])], deep=True)
+        self.assertIn("### Model suggestions (not part of the verdict)", text)
+        self.assertIn("clear-title (model): Says what, not why.", text)
+        self.assertNotIn("### 🔴 Not ready", text)
+        self.assertIn("| SDX | 1 | 0 | 100% |", text)
+
+    def test_fast_mode_has_no_suggestions(self):
+        verdict = ready.evaluate_issue(self._issue(3), self.LINT, blocking=set(),
+                                       deep_findings=None, max_points=8)
+        self.assertEqual(verdict["suggestions"], [])
+
+
 class ChecklistTests(unittest.TestCase):
     def test_product_list_wins_and_strings_stay_reminders(self):
         cfg = {"definition_of_done": ["Shared reminder"]}

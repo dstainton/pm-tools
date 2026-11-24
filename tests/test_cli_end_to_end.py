@@ -11,6 +11,7 @@ their own.
 """
 
 import datetime as dt
+import json
 import os
 import re
 import shutil
@@ -790,6 +791,21 @@ class TodayTests(CliTestCase):
         puts = [c for c in self.jira.calls if c[0] == "PUT"]
         self.assertEqual(len(puts), before)
 
+    def test_today_json_prints_only_json_on_stdout(self):
+        proc = subprocess.run(
+            [sys.executable, PM, "today", "--json", "-w", "SDX", "--config",
+             os.path.join(self.dir, "config.yaml")],
+            cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertTrue(payload["actions"])
+        self.assertEqual(payload["actions"][0]["n"], 1)
+        self.assertIn("Gathering today's picture", proc.stderr)
+        self.assertIn("(scope: SDX)", proc.stderr)
+        self.assertNotIn("NEEDS YOU", proc.stdout + proc.stderr)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))
+
     def test_do_without_confirm_refuses_to_write(self):
         self.run_pm("today")
         out = self.run_pm("do", "1", expect=1)
@@ -878,12 +894,15 @@ class TriageTests(CliTestCase):
 
 
 class RefineTests(CliTestCase):
-    def test_refine_writes_a_worksheet_with_drafts(self):
+    def setUp(self):
+        super().setUp()
         # `pm refine --apply` rewrites the summary on the shared fake. A clear
         # title is no longer a lint finding, so put the short title back.
         for issue in self.jira.server.RequestHandlerClass.backlog:
             if issue["key"] == "APS-11":
                 issue["summary"] = "Fix stuff"
+
+    def test_refine_writes_a_worksheet_with_drafts(self):
         out = self.run_pm("refine", "-w", "SDX")
         self.assertIn("Drafts in refine_SDX_", out)
         text = self.read_output(r"refine_SDX_.*\.md")
@@ -900,6 +919,30 @@ class RefineTests(CliTestCase):
         self.assertEqual(
             (puts[-1][2].get("fields") or {}).get("summary"),
             "Fix retry handling in the exchange client")
+
+    def test_bare_apply_skips_workstreams_without_a_worksheet(self):
+        self.run_pm("refine", "-w", "SDX")
+        out = self.run_pm("refine", "--apply", "--yes")
+        self.assertIn("Sent.", out)
+        self.assertIn("no worksheet; skipped.", out)
+        self.assertNotIn("No worksheet at", out)
+
+    def test_apply_uses_an_earlier_days_worksheet(self):
+        self.run_pm("refine", "-w", "SDX")
+        today = self.read_output(r"refine_SDX_.*\.md")
+        for name in os.listdir(self.dir):
+            if re.match(r"refine_SDX_.*\.md", name):
+                os.remove(os.path.join(self.dir, name))
+        with open(os.path.join(self.dir, "refine_SDX_2026-01-05.md"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(today)
+        out = self.run_pm("refine", "--apply", "-w", "SDX", "--yes")
+        self.assertIn("refine_SDX_2026-01-05.md", out)
+        self.assertIn("Sent.", out)
+
+    def test_apply_with_no_worksheet_explains_itself(self):
+        out = self.run_pm("refine", "--apply", "-w", "SDX", expect=1)
+        self.assertIn("No refine worksheet for SDX", out)
 
     def test_review_alias_prints_a_deprecation_note(self):
         out = self.run_pm("review", "titles", "-w", "SDX")
@@ -983,6 +1026,18 @@ class BriefTests(CliTestCase):
         second = self.run_pm("brief", "--for", "standup", "-w", "SDX")
         self.assertIn("since ", second)
 
+    def test_named_window_does_not_move_brief_memory(self):
+        memory = os.path.join(self.dir, "briefs", "review.json")
+        out = self.run_pm("brief", "--for", "review", "--since", "2026-01-05", "-w", "SDX")
+        self.assertIn("does not move the memory of when you last met review", out)
+        self.assertFalse(os.path.exists(memory))
+        self.run_pm("brief", "--for", "review", "-w", "SDX")
+        with open(memory, encoding="utf-8") as fh:
+            saved = fh.read()
+        self.run_pm("brief", "--for", "review", "--since", "2026-01-05", "-w", "SDX")
+        with open(memory, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), saved)
+
     def test_debrief_extracts_and_apply_dry_run_creates_nothing(self):
         notes = os.path.join(self.dir, "notes.md")
         with open(notes, "w", encoding="utf-8") as fh:
@@ -1049,3 +1104,48 @@ class FakeJiraTimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class McpServerTests(CliTestCase):
+    def _session(self, *messages):
+        proc = subprocess.run(
+            [sys.executable, PM, "mcp", "--yes-i-understand", "--config",
+             os.path.join(self.dir, "config.yaml")],
+            input="\n".join(json.dumps(m) for m in messages) + "\n",
+            cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=300)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+
+    def test_tools_call_runs_the_command(self):
+        replies = self._session(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "today", "arguments": {"workstream": "SDX"}}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+             "params": {"name": "lint", "arguments": {"workstream": "SDX"}}},
+        )
+        self.assertEqual([r["id"] for r in replies], [1, 2, 3])
+        today = replies[1]["result"]
+        self.assertFalse(today.get("isError"), today)
+        self.assertIn("actions", json.loads(today["content"][0]["text"]))
+        lint = replies[2]["result"]
+        self.assertFalse(lint.get("isError"), lint)
+        self.assertIn("APS-", lint["content"][0]["text"])
+
+    def test_tools_call_refuses_unknown_arguments_and_writes(self):
+        replies = self._session(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "today", "arguments": {"since": "2026-01-01"}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "refine", "arguments": {}}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+             "params": {"name": "lint", "arguments": {"workstream": "--fix"}}},
+        )
+        self.assertTrue(replies[0]["result"]["isError"])
+        self.assertIn("does not take since", replies[0]["result"]["content"][0]["text"])
+        self.assertTrue(replies[1]["result"]["isError"])
+        self.assertTrue(replies[2]["result"]["isError"])
+        puts = [c for c in self.jira.calls if c[0] in ("PUT", "POST") and "/search" not in c[1]]
+        self.assertEqual(puts, [])

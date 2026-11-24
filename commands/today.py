@@ -9,6 +9,7 @@ actions are written to `today.state_file` (default `~/.pm-tools/today.json`) so
 writes to Jira, and appends a line to the write log.
 """
 
+import contextlib
 import datetime as dt
 import json
 import os
@@ -656,6 +657,30 @@ def render_screen(bundle, actions, aging, today=None, cfg=None,
 
 
 def run_today(cfg, args):
+    if getattr(args, "json", False):
+        # Progress and warnings go to stderr so stdout is only the JSON.
+        with contextlib.redirect_stdout(sys.stderr):
+            actions = _gather_and_save(cfg, args)[1]
+        print(json.dumps({"actions": actions}, indent=2, default=str))
+        return
+    bundle, actions, aging = _gather_and_save(cfg, args)
+    dependencies = None
+    if getattr(args, "all", False):
+        from core import dependencies as dependency_core
+        try:
+            rows = dependency_core.collect(cfg, bundle.get("open_items") or [], limit=15)
+            known = {item.get("key") for item in bundle.get("open_items") or [] if item.get("key")}
+            dependencies = dependency_core.lines_for(rows, known)
+        except Exception:                              # noqa: BLE001
+            dependencies = []
+    print(render_screen(bundle, actions, aging, cfg=cfg,
+                        links=terminal_links() and not getattr(args, "plain", False),
+                        width=terminal_width(),
+                        dependencies=dependencies))
+    print(f"\nActions saved to {bundle['opts']['state_file']}.")
+
+
+def _gather_and_save(cfg, args):
     print("Gathering today's picture ...")
     bundle = gather(cfg)
     sprint_end = _open_sprint_end(bundle["sprints"])
@@ -673,22 +698,7 @@ def run_today(cfg, args):
         "actions": actions,
     }
     save_actions(bundle["opts"]["state_file"], payload)
-    if getattr(args, "json", False):
-        print(json.dumps({"actions": actions}, indent=2, default=str))
-    dependencies = None
-    if getattr(args, "all", False):
-        from core import dependencies as dependency_core
-        try:
-            rows = dependency_core.collect(cfg, bundle.get("open_items") or [], limit=15)
-            known = {item.get("key") for item in bundle.get("open_items") or [] if item.get("key")}
-            dependencies = dependency_core.lines_for(rows, known)
-        except Exception:                              # noqa: BLE001
-            dependencies = []
-    print(render_screen(bundle, actions, aging, cfg=cfg,
-                        links=terminal_links() and not getattr(args, "plain", False),
-                        width=terminal_width(),
-                        dependencies=dependencies))
-    print(f"\nActions saved to {bundle['opts']['state_file']}.")
+    return bundle, actions, aging
 
 
 def run_do(cfg, args):

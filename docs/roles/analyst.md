@@ -17,9 +17,9 @@ pm refine --workstream SDX
 pass or fail against the team's working agreement. `pm ready --plan` groups
 what is ready and what still needs refinement by Epic, with the reason, and
 sets the ready points beside recent throughput. That throughput is context,
-not a Sprint commitment. `pm ready --deep` also asks the model. With the
-default blocking criteria, a model flag on the title or the criteria fails
-the item, so read the reason before you act on it.
+not a Sprint commitment. `pm ready --deep` also asks the model and lists
+what it flags as suggestions beside the verdict. A suggestion never makes
+an item fail; read it before you act on it.
 
 `pm refine` writes a worksheet. Delete a field to leave it unchanged.
 Apply what you kept:

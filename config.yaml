@@ -160,7 +160,7 @@ jira:
 #    pm report         since the last report; the first run uses report_days
 #    pm brief          since that audience was last briefed; first run uses
 #                      report_days
-#    pm daily          the same --days window as movement
+#    pm daily          the same window as movement (daily.lookback_days or --days)
 #    pm me             from the start of its window
 #    pm release-notes  on or after --since; with only --version, the newest
 #                      max_per_issue comments
@@ -299,13 +299,15 @@ ready:
     # has-component is left out on purpose. It reports only when
     # lint.required_fields includes component; list it here to make it block.
     # too-big-for-a-sprint is off unless you add it to this list.
+    # These are rule checks. `pm ready --deep` model reviews are listed as
+    # suggestions and never block.
 
 # ----------------------------------------------------------------------------
-#  5d. Moved window for `pm today`
+#  5d. Moved window for `pm today` and `pm daily`
 # ----------------------------------------------------------------------------
 daily:
-  # How many days back `pm today` counts as "moved". `pm daily` does not
-  # read this: it uses --days (default 1).
+  # How many days back `pm today` and `pm daily` count as "moved".
+  # `pm daily --days N` overrides it for one run.
   lookback_days: 1
 
 # ----------------------------------------------------------------------------
@@ -365,7 +367,7 @@ scopes:
   lint:          {status: open}                 # epics + everything beneath
   review:        {status: open}
   ready:         {sprint: open, status: open}
-  daily_moved:   {updated_within_days: 1}       # pm daily --days (default 1) always sets this
+  daily_moved:   {updated_within_days: 1}       # pm daily sets this from daily.lookback_days or --days
   daily_wip:     {status: in-progress}
   refine_history: {status: done, types: [Story]}   # examples `pm refine` learns from
 
@@ -667,7 +669,6 @@ audiences:
   leadership:
     name: "Leadership"
     at_risk_due_days: 14
-    max_docs_per_product: 5    # not used yet: the leadership report lists no documents
   partner:
     name: "Partners"
     epic_labels: [partner-visible]

@@ -17,8 +17,8 @@ trustworthy. Run it a few minutes before the Daily Scrum.
 Scope it like any command:  pm daily --workstream SDX
 
 What counts as "moved" and "in progress" comes from the `daily_moved` and
-`daily_wip` scopes in config — plain options, no JQL. --days overrides the
-movement window for one run.
+`daily_wip` scopes in config — plain options, no JQL. The movement window
+is `daily.lookback_days` (default 1); --days overrides it for one run.
 """
 
 import datetime as dt
@@ -132,8 +132,19 @@ def build_markdown(cfg, results, days, group_by):
     return "\n".join(lines)
 
 
+def lookback(cfg, args):
+    """--days for this run, else `daily.lookback_days`, else 1."""
+    days = getattr(args, "days", None)
+    if days is None:
+        days = (cfg.get("daily") or {}).get("lookback_days") or 1
+    days = int(days)
+    if days < 1:
+        raise SystemExit("--days must be 1 or more.")
+    return days
+
+
 def run(cfg, args):
-    days = getattr(args, "days", 1)
+    days = lookback(cfg, args)
     group_by = getattr(args, "by", "assignee")
 
     results = []

@@ -15,7 +15,7 @@ pm schedule add report --at 07:30
 
 ## Scripts
 
-Some read commands accept `--json` where a script needs structure. `pm lint --json` and `pm metrics --json` write a JSON file and print its path. `pm report --json` writes a JSON file beside the Markdown report. `pm show KEY --json` prints JSON. `pm today --json` prints progress lines and the screen around its JSON, so a script should read `today.json` instead. `pm schedule` registers read-only commands and refuses anything that writes.
+Some read commands accept `--json` where a script needs structure. `pm lint --json` and `pm metrics --json` write a JSON file and print its path. `pm report --json` writes a JSON file beside the Markdown report. `pm show KEY --json` prints JSON. `pm today --json` prints only the numbered actions as JSON on standard output; progress goes to standard error, and the list is still saved to `today.json`. `pm schedule` registers read-only commands and refuses anything that writes.
 
 Exit status: `pm lint --fail-on error` and `pm ready --fail-under` exit non-zero when the gate fails. `pm coverage` exits non-zero when work is unclaimed. Other commands exit non-zero when they cannot do what you asked.
 
@@ -28,4 +28,4 @@ A cloud flow cannot start a program on your laptop. Two patterns work:
 
 ## MCP
 
-`pm mcp` speaks newline-delimited JSON on stdin. It is off until you pass `--yes-i-understand`. `tools/list` names the read-only commands in `commands/schedule.py` (`SAFE`), except `brief`. `tools/call` does not run the command yet: it returns a note to run it with `--json`. `pm do`, `pm refine`, and the other write commands are not tools. Copilot is not local: a tool result leaves the machine. The local-model promise is unchanged for every other command.
+`pm mcp` speaks newline-delimited JSON on stdin. It is off until you pass `--yes-i-understand`. `tools/list` names the read-only commands in `commands/schedule.py` (`SAFE`), except `brief`. `tools/call` runs that command with the same settings file and returns what it prints: JSON for `today`, plain text for the rest. Each tool accepts only the scope options its command takes (`workstream`, `product`, `sprint`, `since`, `days`). A tool that writes a file or memory does so as it would on a timer; `report` moves the last-report memory unless `since` or `sprint` is given. `pm do`, `pm refine`, and the other write commands are not tools. Copilot is not local: a tool result leaves the machine. The local-model promise is unchanged for every other command.

@@ -1204,7 +1204,7 @@ def fetch_confluence_results(cfg, cql, since=None, limit=None):
         since = (dt.date.today() - dt.timedelta(days=block.get("lookback_days") or 7)).isoformat()
     elif hasattr(since, "isoformat"):
         since = since.isoformat()
-    full_cql = queries.render(None, "confluence.window", cql=cql, since=str(since)[:10])
+    full_cql = queries.render(cfg, "confluence.window", cql=cql, since=str(since)[:10])
     full_cql = full_cql + " order by lastmodified desc"
     cap = int(limit if limit is not None else block.get("max_results") or 25)
 
@@ -1342,8 +1342,11 @@ def fetch_remote_links(cfg, key):
     return page_core.cache_fetch(cfg, "remotelink", (key,), fetch)
 
 
-def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None):
-    """Return (items, next_index) for a Confluence CQL query."""
+def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None, full_cfg=None):
+    """Return (items, next_index) for a Confluence CQL query.
+
+    `cfg` is the `confluence:` block; `full_cfg` carries query overrides.
+    """
     if not cql:
         return [], start_index
 
@@ -1353,7 +1356,7 @@ def fetch_confluence(cfg, cql, tag_prefix, start_index, since=None):
                  - dt.timedelta(days=cfg["lookback_days"])).isoformat()
     elif hasattr(since, "isoformat"):
         since = since.isoformat()
-    full_cql = queries.render(None, "confluence.window", cql=cql, since=since)
+    full_cql = queries.render(full_cfg, "confluence.window", cql=cql, since=since)
 
     url = f"{cfg['base_url'].rstrip('/')}/rest/api/content/search"
     resp = send("GET",
