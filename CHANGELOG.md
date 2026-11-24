@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- `pm ready --deep` no longer fails an item on the model's view of its
+  title or acceptance criteria. Those reviews are listed under "Model
+  suggestions (not part of the verdict)", so the pass or fail, and
+  `--fail-under`, rest on the team's rules alone.
+- `pm today --json` prints only the actions JSON on standard output.
+  Progress, warnings, and the scope line go to standard error.
+- `pm mcp` runs the read-only command a client calls and returns its
+  output. Each tool takes only the scope options its command accepts.
+- `pm brief --since` and `--sprint` no longer move the memory of when you
+  last met that audience, the same as `pm report`.
+- `pm daily` uses `daily.lookback_days` when `--days` is not given.
+- `pm refine --apply` with no `--workstream` applies every worksheet it
+  finds and skips workstreams without one, instead of stopping. It also
+  reads the newest worksheet, so a draft from an earlier day still applies.
+- Overrides of `release_notes.since`, `release_notes.version`,
+  `confluence.window`, `registers.descendants`, and `registers.children`
+  under `queries:` now take effect.
+- `pm schedule` on Windows works from an installed copy: the Task
+  Scheduler script now ships with the package. A failed registration says
+  why, arguments with spaces stay quoted, and `pm schedule remove` deletes
+  the entry.
+- `install.ps1` checks the new install with `pm help all`.
+- `pm` and `pm help` show each heading once per role. `pm help all` lists
+  `pm review` with the backlog commands, and the leadership list includes
+  `pm release-notes`.
+- `audiences.leadership.max_docs_per_product` is retired. No report read
+  it; `pm update` lists it with the other settings this version ignores.
 - `pm metrics` shows story points and the fiscal year and quarter. The
   year-end defaults to 31 March (`metrics.year_end: "03-31"`). The fiscal
   year is the year of the next year-end, written F27 for fiscal 2027.
