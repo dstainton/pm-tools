@@ -151,3 +151,30 @@ class HelpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HelpGroupingTests(unittest.TestCase):
+    def test_each_role_page_shows_each_heading_once(self):
+        from core import helptext
+        for role in helptext.ROLE_COMMANDS:
+            page = helptext.discovery_page(role)
+            headings = [line for line in page.splitlines()
+                        if line and not line.startswith(" ")
+                        and not line.startswith(("usage:", "Run:"))
+                        and line != helptext.ROLE_BLURB[role]]
+            self.assertEqual(len(headings), len(set(headings)), (role, headings))
+            for name in helptext.ROLE_COMMANDS[role]:
+                self.assertIn(f"  pm {name}\n", page)
+
+    def test_review_is_listed_with_the_backlog_commands(self):
+        import pm
+        from core import helptext
+        page = helptext.all_page(pm.build_parser()._pm_subs)
+        shape = page.index("Shape the backlog")
+        report = page.index("\nReport\n")
+        self.assertTrue(shape < page.index("  pm review\n") < report)
+        self.assertNotIn("\nOther\n", page)
+
+    def test_leadership_sees_release_notes(self):
+        from core import helptext
+        self.assertIn("release-notes", helptext.ROLE_COMMANDS["leadership"])
