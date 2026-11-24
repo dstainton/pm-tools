@@ -15,7 +15,7 @@ pm schedule add report --at 07:30
 
 ## Scripts
 
-Some read commands accept `--json` where a script needs structure. `pm lint --json` and `pm metrics --json` write a JSON file and print its path. `pm report --json` writes a JSON file beside the Markdown report. `pm show KEY --json` prints JSON. `pm today --json` prints progress lines and the screen around its JSON, so a script should read `today.json` instead. `pm schedule` registers read-only commands and refuses anything that writes.
+Some read commands accept `--json` where a script needs structure. `pm lint --json` and `pm metrics --json` write a JSON file and print its path. `pm report --json` writes a JSON file beside the Markdown report. `pm show KEY --json` prints JSON. `pm today --json` prints only the numbered actions as JSON on standard output; progress goes to standard error, and the list is still saved to `today.json`. `pm schedule` registers read-only commands and refuses anything that writes.
 
 Exit status: `pm lint --fail-on error` and `pm ready --fail-under` exit non-zero when the gate fails. `pm coverage` exits non-zero when work is unclaimed. Other commands exit non-zero when they cannot do what you asked.
 

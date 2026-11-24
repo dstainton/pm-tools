@@ -11,6 +11,7 @@ their own.
 """
 
 import datetime as dt
+import json
 import os
 import re
 import shutil
@@ -789,6 +790,20 @@ class TodayTests(CliTestCase):
         self.assertIn("/rest/api/3/issue/", preview)
         puts = [c for c in self.jira.calls if c[0] == "PUT"]
         self.assertEqual(len(puts), before)
+
+    def test_today_json_prints_only_json_on_stdout(self):
+        proc = subprocess.run(
+            [sys.executable, PM, "today", "--json", "--config",
+             os.path.join(self.dir, "config.yaml")],
+            cwd=self.dir, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertTrue(payload["actions"])
+        self.assertEqual(payload["actions"][0]["n"], 1)
+        self.assertIn("Gathering today's picture", proc.stderr)
+        self.assertNotIn("NEEDS YOU", proc.stdout + proc.stderr)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, "today.json")))
 
     def test_do_without_confirm_refuses_to_write(self):
         self.run_pm("today")
